@@ -598,11 +598,12 @@ class Dispatcher:
         is kept in the request's slots only: it never joins his texts (a price he types is not a public word), except a
         maker's website, which the story reader needs as his own words."""
         conv = self.conv
+        ctx = None
         try:
             ctx = self._ctx(now, list(req["texts"]))
             got = skill_hook(skill, "intake_read")(req, msg.text, ctx)
-        except Exception:  # noqa: BLE001 - unreadable content: the model path decides
-            return None
+        except Exception:  # noqa: BLE001 - a private answer must never fall through to the general interpreter
+            got = {"again": req["question"]}
         if got.get("abort"):
             conv.requests.mark(req["request_id"], "cancelled", now)
             conv._reply(DROPPED)

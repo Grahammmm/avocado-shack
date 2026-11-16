@@ -234,7 +234,9 @@ def _lead(text):
     m = re.match(r"(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(?=\s|$|[a-z])", text)
     if m:
         number = float(m.group(1).replace(",", "") + (m.group(2) or ""))
-        return (int(number) if number == int(number) else number), text[m.end():].strip()
+        if not 0 <= number <= MAX_NUMBER:  # includes non-finite values, before any integer conversion
+            return None
+        return (int(number) if number.is_integer() else number), text[m.end():].strip()
     tokens = [t for t in re.split(r"[\s-]+", text) if t]
     for size in (2, 1):
         if len(tokens) >= size:
@@ -284,7 +286,7 @@ def _parse_money(text):
     elif m := re.fullmatch(r"(.+?) cents?", t):
         got = _whole(m.group(1))
         cents = got if got is not None and 0 < got <= 99 else None
-    return None if not cents else "%d.%02d" % divmod(cents, 100)
+    return None if cents is None else "%d.%02d" % divmod(cents, 100)
 
 
 SOLD_FILLER = frozenset({"sold", "per", "by", "the", "a", "an", "each"})

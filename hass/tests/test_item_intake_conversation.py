@@ -27,7 +27,7 @@ import unittest
 from datetime import date
 from unittest import mock
 
-from hass import conversation, media
+from hass import conversation, media, voice
 from hass.skills import item_intake as ii
 from hass.skills import testkit
 from hass.tests import test_item_add_dispatch as base
@@ -193,6 +193,71 @@ class Interview(unittest.TestCase):
         self.assertIsNone(chat.live())
         self.assertEqual((chat.drafts(), chat.commits()), ([], 0))
         self.assertEqual(len(chat.asked), 1)  # the model read only the first message
+
+    def test_oversized_counts_stay_in_the_private_interview(self):
+        for key in ("qty", "low_stock"):
+            with self.subTest(key=key):
+                chat = self.chat()
+                chat.say("", JAR)
+                chat.say("Wildflower honey")
+                chat.say("don't know")
+                while chat.live()["asked_slot"] != ii.PREFIX + key:
+                    chat.say("skip")
+                texts = list(chat.live()["texts"])
+                for answer in ("9" * 400, "1000001"):
+                    said = self.answer(chat, answer, key)
+                    self.assertIn("I didn't catch an exact number", said)
+                    self.assertEqual(chat.live()["texts"], texts)
+                    self.assertNotIn(key, chat.live()["slots"].get("intake", {}))
+                next_key = "sold_by" if key == "qty" else "customer_note"
+                said = self.answer(chat, "9" * 400, next_key)
+                self.assertIn("I couldn't read that", said)
+                self.assertIsNone(chat.live()["slots"]["intake"][key])
+                self.assertEqual(chat.live()["texts"], texts)
+                self.assertEqual((chat.asked, chat.drafts(), chat.commits()), ([], [], 0))
+                self.doCleanups()
+
+    def test_an_intake_parser_exception_reasks_without_the_general_interpreter(self):
+        chat = self.chat()
+        chat.say("", JAR)
+        chat.say("Wildflower honey")
+        chat.say("don't know")
+        before = chat.live()
+        with mock.patch.object(base.ia, "intake_read", side_effect=ValueError("unreadable")):
+            said = self.answer(chat, "private unreadable answer", "qty")
+        self.assertEqual(said, voice.plain(before["question"]))
+        self.assertEqual(chat.live()["asks"], before["asks"] + 1)
+        self.assertEqual(chat.live()["texts"], before["texts"])
+        self.assertEqual(chat.live()["slots"], before["slots"])
+        self.assertEqual((chat.asked, chat.drafts(), chat.commits()), ([], [], 0))
+
+    def test_zero_cost_is_kept_in_the_private_record(self):
+        for answer in ("$0.00", "0 dollars"):
+            with self.subTest(answer=answer):
+                self.assertEqual(ii.read("cost", answer, {}, today=date(2026, 11, 16))[:2],
+                                 ("ok", {"cost": "0.00"}))
+                chat = self.chat()
+                chat.say("", JAR)
+                chat.say("Wildflower honey")
+                chat.say("don't know")
+                while chat.live()["asked_slot"] != ii.PREFIX + "cost":
+                    chat.say("skip")
+                self.answer(chat, answer, "ingredients")
+                self.assertEqual(chat.live()["slots"]["intake"]["cost"], "0.00")
+                while (live := chat.live()) and (live["asked_slot"] or "").startswith(ii.PREFIX):
+                    chat.say("skip")
+                d, said = chat.say("in stock")
+                self.assertEqual(d, "proposed", said)
+                self.assertIn("You paid: $0.00 for each one.", "\n".join(said))
+                self.assertNotIn("$0.00", self.public_part(said))
+                self.assertEqual(chat.asked, [])
+                draft, = chat.drafts()
+                chat.say(f"yes {draft['code']}")
+                row = json.loads((chat.conv.sdir / ii.STORE).read_text("utf-8").splitlines()[0])
+                self.assertEqual(row["answers"]["cost"], "0.00")
+                self.assertNotIn("cost", row["skipped"])
+                self.assertEqual(chat.commits(), 1)
+                self.doCleanups()
 
     # -- the first question is sent before the photo is fetched, checked or stored ---------------------------------------
     def test_the_first_question_is_sent_before_the_slow_photo_work(self):
