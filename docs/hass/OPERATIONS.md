@@ -30,6 +30,27 @@ detached runtime worktree, `runtimeCommit` updated, services restarted (HASS-SYN
 - **G, full stop:** `systemctl --user stop hass-worker hass-receiver`, then on the Mac `launchctl bootout` of the forwarder
   (runbook step 23).
 
+## Cloud reads through Codex (HASS-CLOUD-CODEX-1)
+
+The interpreter, the intake answer reader and the photo label reader can use OpenAI through G's ChatGPT/Codex sign-in in
+Hermes. Hass has no key and makes no cloud connection: each call runs `hass/cloud_codex_hermes.py` under the Hermes Python
+(found through the `hermes` launcher), which asks Hermes for the credential. The `interpreter` block in host.json:
+
+```json
+"interpreter": {"api": "codex", "model": "gpt-6.1-sol", "effort": "low", "timeout": 12,
+                "fallback": {"url": "http://127.0.0.1:8010", "model": "<local model>", "api": "openai", "timeout": 60}}
+```
+
+- `fallback` is required: the local block Hass used before (its own `api` is `ollama` or `openai`). `url` and `keyFile` are
+  refused next to `api: "codex"`. `timeout` is 5 to 20 s (default 12), `effort` is `low` or `medium`.
+- Any failed cloud call is answered by the fallback once. A cloud call costs at most `timeout` + 3 s before the fallback starts.
+- Each failure logs `ALERTS hass-cloud: <code>` in the `hass-worker` journal, at most once per code per hour. `auth`: G must
+  sign in to Codex in Hermes again. `rate`: the shared ChatGPT plan is busy (fleet hours); Hass runs on the fallback meanwhile.
+  Other codes: `model`, `timeout`, `api`, `hermes` (Hermes not found or failed to start), `usage`.
+- Clover till messages are still matched before the interpreter, so till prices and counts never reach the cloud.
+- Check (one tiny fixed prompt): `python3 -B hass/cloud_codex.py check --host <host.json>` prints
+  `{"result": "ok", "model": ..., "ms": ...}` or `{"result": "<code>"}`.
+
 ## Alerts (H19 recommendation)
 
 The timer runs `health.py` every 5 min. When the set of problems changes it appends one line to `~/agent-work/modes/ALERTS.log`:

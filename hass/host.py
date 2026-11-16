@@ -19,7 +19,7 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import answer_reader, bridge, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
+from hass import answer_reader, bridge, cloud_codex, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
 from hass import nl_prep, preview, receiver, relay, sandbox, stagelog  # noqa: E402
 from hass.content_model import load_content  # noqa: E402
 from hass.ops import load_registry  # noqa: E402
@@ -72,7 +72,8 @@ def _ip(value):
 def _interpreter_ok(itp, nested=False) -> bool:
     """host.json `interpreter`: url + model, optional timeout (1-120) and think (Ollama only), and (HASS-INTERP-OPENAI-1) `api`
     ("ollama" default, "openai") and, with api openai only, `fallback`: the same keys for the Ollama model asked once when the
-    first answer fails. url is loopback http."""
+    first answer fails. url is loopback http. HASS-CLOUD-CODEX-1: api "codex" is hass.cloud_codex.block_ok (no url)."""
+    if not nested and isinstance(itp, dict) and itp.get("api") == "codex": return cloud_codex.block_ok(itp, lambda fb: _interpreter_ok(fb, True))
     allowed = {"url", "model", "timeout", "think"} | (set() if nested else {"api", "fallback"})
     if not (isinstance(itp, dict) and {"url", "model"} <= set(itp) <= allowed): return False
     api = itp.get("api", "ollama")
@@ -379,11 +380,13 @@ def interpreter_builder(cfg, worktree):
         itp, hinter = cfg["interpreter"], nl_prep.make_hinter(content)  # HASS-NL-1
 
         def one(c, api):
+            if api == "codex": return interpreter_local.LocalInterpreter(None, c["model"], prompt, timeout=c.get("timeout", 12), hinter=hinter,
+                                                                         api=api, transport=cloud_codex.CodexTransport(c.get("effort", "low")))
             return interpreter_local.LocalInterpreter(c["url"], c["model"], prompt, timeout=c.get("timeout", 30),
                                                       think=c.get("think"), hinter=hinter, api=api)
         main = one(itp, itp.get("api", "ollama"))
         if "fallback" not in itp: return main  # HASS-INTERP-OPENAI-1: no fallback block, no second call
-        return interpreter_local.FallbackInterpreter(main, one(itp["fallback"], "ollama"), lambda r: conversation._checked(r) is r)
+        return interpreter_local.FallbackInterpreter(main, one(itp["fallback"], itp["fallback"].get("api", "ollama")), lambda r: conversation._checked(r) is r)
     return build
 
 
@@ -437,7 +440,8 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
         conv.editor.reconcile()
     if conv.settings.get("itemIntake") is True:  # HASS-INTAKE-2: the same local model service reads one odd intake answer (first try only)
         itp = cfg["interpreter"]
-        try: conv.answer_reader = answer_reader.AnswerReader(itp["url"], itp["model"], timeout=itp.get("timeout", 30), api=itp.get("api", "ollama"), think=itp.get("think"))
+        try: conv.answer_reader = (cloud_codex.reader(answer_reader.AnswerReader, itp, think=itp["fallback"].get("think")) if itp.get("api") == "codex" else
+                                   answer_reader.AnswerReader(itp["url"], itp["model"], timeout=itp.get("timeout", 30), api=itp.get("api", "ollama"), think=itp.get("think")))
         except (KeyError, ValueError): conv.answer_reader = None  # none set up: an odd answer is asked again, never guessed
     if cfg.get("clover") is not None:  # HASS-CLOVER-2: the owner's till questions, read from the private cache only (no token here)
         from hass.clover.chat import TillDesk
