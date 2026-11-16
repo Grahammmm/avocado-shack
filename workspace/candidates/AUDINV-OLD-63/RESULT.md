@@ -66,7 +66,7 @@ exit: 0
 
 ```json
 {
-  "bases_sha256": "e2cf88a1a3b6f1b918f8a7858c1d8c80c645100eda95e68686bdef0b3d572896",
+  "bases_sha256": "ea7cd99f48918b2515d516244ca8077caefc2e34041273dfd029be5a6f2e1d62",
   "coverage": {
     "assistant_state": "FIXTURE_PROVEN",
     "content": "FIXTURE_PROVEN",
@@ -105,6 +105,18 @@ $ /home/user/agent-work/bin/memcap -- python3 workspace/candidates/AUDINV-OLD-63
 artifact-check: PASS (6 local tests; 8 coverage rows; routine/live remain UNVERIFIED/HOLD)
 exit: 0
 ```
+
+## Main-merge revalidation
+
+The builder receipts above remain historical. The PR repair merged main
+`18eafb31833211e6ad324d647656648df750ff53`, including #898's correction of the
+stale `ROUTER-15` assertion in `hass/tests/test_demo_rehearsal.py`. The original
+PR head reproduced CI's `KeyError: 'known_gap'`; the merged demo module passed
+all 21 tests. Comparing all 1,332 BASES source digests found only that test file
+changed. Its pin and this report's BASES digest were refreshed; the original
+inspection revision, candidate code, fixtures, source citations and live holds
+remain unchanged. Current restore acceptance is recorded in the PR repair
+handoff, separately from the builder receipts above.
 
 ## Handoff and limits
 
