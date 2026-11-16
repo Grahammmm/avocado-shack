@@ -296,12 +296,41 @@ class ContractTests(unittest.TestCase):
             for name, gone in (("blank label", {"WILD", "HONEY"}), ("one word removed", {"HONEY"})):
                 with self.subTest(name):
                     self.assertFallback(Stub(edit_of(data, change=cover(gone))), "text", data=data)
-        self.assertTrue(photo_polish.text_removed([("WILD", 0.8), ("HONEY", -1.0)], set()))
-        self.assertFalse(photo_polish.text_removed([("WILD", 0.8), ("HONEY", -1.0)], {"HONEY"}))  # read on the edit
-        self.assertTrue(photo_polish.text_removed([("HONEY", 0.42)], set()))  # faint likeness, never read: gone
-        self.assertFalse(photo_polish.text_removed([("RAW", 0.42), ("HONEY", 0.6)], set()))  # short word / looks the same
-        self.assertTrue(photo_polish.text_removed([("HONEY", None)], {"TEA"}))  # cannot be judged and not read: gone
-        self.assertFalse(photo_polish.text_removed([("HONEY", None), ("RAW", None)], {"HONE"}))  # read (OCR slip)
+        H = (10, 10, 50, 12)  # where a photo word occurrence maps to on the edit; FAR is somewhere else on the label
+        FAR = (10, 60, 50, 12)
+        self.assertTrue(photo_polish.text_removed([("WILD", 0.8, H), ("HONEY", -1.0, H)], []))
+        self.assertTrue(photo_polish.text_removed([("WILD", 0.8, H), ("HONEY", -1.0, H)], [("HONEY", H)]))  # blank spot
+        self.assertTrue(photo_polish.text_removed([("HONEY", 0.42, H)], []))  # faint likeness, never read: gone
+        self.assertFalse(photo_polish.text_removed([("HONEY", 0.42, H)], [("HONEY", (12, 11, 48, 12))]))  # read there
+        self.assertTrue(photo_polish.text_removed([("HONEY", 0.42, H)], [("HONEY", FAR)]))  # read, but elsewhere
+        self.assertFalse(photo_polish.text_removed([("RAW", 0.42, H), ("HONEY", 0.6, H)], []))  # short word / same
+        self.assertTrue(photo_polish.text_removed([("HONEY", None, H)], [("TEA", H)]))  # cannot be judged, not read
+        self.assertFalse(photo_polish.text_removed([("HONEY", None, H), ("RAW", None, H)], [("HONE", H)]))  # OCR slip
+        self.assertTrue(photo_polish.text_removed([("HONEY", None, None)], [("HONEY", H)]))  # off the product: unproven
+
+    def test_one_of_a_repeated_word_removed_is_rejected(self):
+        """A word printed twice: erasing one occurrence is caught even though the edit still reads the word elsewhere.
+        Each occurrence must be kept at its own spot (one edit read vouches for one occurrence, nearby only)."""
+        def boxes(im):
+            x0, y0, x1, y1 = label_box(im)
+            w, h = x1 - x0, y1 - y0
+            return [("HONEY", (round(x0 + a * w), round(y0 + .38 * h), round((b - a) * w), round(.24 * h)))
+                    for _word, a, b in LABEL_WORDS]
+
+        def erase_first(im):
+            from PIL import ImageDraw
+            left, top, width, height = boxes(im)[0][1]
+            ImageDraw.Draw(im).rectangle((left - 3, top - 3, left + width + 3, top + height + 3), fill=(246, 238, 214))
+            return im
+        data = labelled(photo("jar-white-sheet"))
+        reads = lambda original: boxes(Image.open(io.BytesIO(original)).convert("RGB"))  # noqa: E731
+        edit_reads = lambda framed, scale=2: boxes(Image.open(io.BytesIO(framed)).convert("RGB"))  # noqa: E731
+        with mock.patch.object(photo_polish, "photo_words", reads), mock.patch.object(photo_polish, "words", edit_reads):
+            self.assertTrue(photo_polish.gate(data, edit_of(data))["ok"])  # both kept
+            result = photo_polish.gate(data, edit_of(data, change=erase_first))
+        self.assertEqual(result["code"], "text")
+        self.assertTrue(result["metrics"]["text_removed"])
+        self.assertLess(result["metrics"]["kept"][0][1], photo_polish.WORD_MIN)
 
     def test_a_plausible_new_word_must_be_read_on_the_photo(self):
         known = {"HONE", "ILDFLOWER", "RIDGE", "ROAS"}  # what tesseract reads on Mike's photo, slips included

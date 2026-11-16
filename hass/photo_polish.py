@@ -277,8 +277,9 @@ def gate(original, edited) -> dict:
     """Is ``edited`` the same product as Mike's photo ``original``? {"ok", "code", "jpeg" (the edited picture as the
     catalog square, ``frame``), "metrics"}. The label is read with tesseract on both pictures: every word the edit
     shows must be in the photo at that spot (``text_changed``) and every word the photo shows on the product must still
-    be in the edit at that spot (``text_removed``). When either picture cannot be read (no tesseract, it fails or times
-    out) the edit is not verified and is rejected (code ``ocr``): the fallback is published. Every measure is taken
+    be in the edit at that spot (``text_removed``; each occurrence of a repeated word at its own spot). When either
+    picture cannot be read (no tesseract, it fails or times out) the edit is not verified and is rejected (code
+    ``ocr``): the fallback is published. Every measure is taken
     before deciding, so a rejection still reports all of them."""
     fail = lambda code, **m: {"ok": False, "code": code, "jpeg": None, "metrics": m}  # noqa: E731
     if len(edited) > MAX_OUTPUT_BYTES:
@@ -307,9 +308,10 @@ def gate(original, edited) -> dict:
     else:
         m["words"] = word_scores(original, made["jpeg"], mapping, found)
         m["photo_words"] = sorted({w for w, _box in read})
-        m["kept"] = kept_scores(original, made["jpeg"], mapping, read)
+        kept = kept_scores(original, made["jpeg"], mapping, read)
+        m["kept"] = [(w, s) for w, s, _where in kept]
         m["text_changed"] = text_changed(m["words"], set(m["photo_words"]))
-        m["text_removed"] = text_removed(m["kept"], {w for w, _box in found})
+        m["text_removed"] = text_removed(kept, found)
     colour_off = (m["hue_shift"] is not None and m["hue_shift"] > HUE_SHIFT_MAX) or m["chroma"] > CHROMA_MAX
     code = ("match" if m["match"] < MATCH_MIN else "colour" if colour_off else "ocr" if m.get("ocr")
             else "text" if m["text_changed"] or m["text_removed"] else "ok")
@@ -541,11 +543,12 @@ def kept_scores(original, framed, mapping, read):
     for word, (left, top, width, height) in read:
         mid_x, mid_y = left + width / 2, top + height / 2
         if not (rx * fw <= mid_x <= (rx + rw) * fw and ry * fh <= mid_y <= (ry + rh) * fh):
-            out.append((word, None))
+            out.append((word, None, None))
             continue
         at = (bx0 + (left - rx * fw) / sx, by0 + (top - ry * fh) / sy)  # the word's top-left on the edited picture
+        where = (at[0], at[1], width / sx, height / sy)  # this occurrence's box on the edited picture
         out.append((word, _spot(photo, (left, top, width, height), grey, at, (1 / sx, 1 / sy),
-                                slide=WORD_SEARCH * height / max(1, width))))
+                                slide=WORD_SEARCH * height / max(1, width)), where))
     return out
 
 
@@ -618,18 +621,35 @@ def text_changed(scores, known=None) -> bool:
     return False
 
 
-def text_removed(kept, edit_words) -> bool:
-    """True when a word Mike's photo shows is gone from the edit. A word read on the edit too is kept. Otherwise it
-    must still look like that spot of the edited picture: not under WORD_MIN (flat paper there scores -1), and a 4+
-    letter word not under WORD_SURE (a blanked label still has faint patch edges). A 4+ letter word that cannot be
-    judged there (off the place ``match`` found, or too small) and is not read on the edit counts as gone: preservation
-    is not established, so the fallback is used (a word on the room behind the product costs only the polish)."""
-    for word, s in kept:
-        if len(word) < 3 or _known(word, edit_words):
+def _near(where, box) -> bool:
+    """Does the edit word ``box`` (left, top, width, height) sit where this photo word occurrence maps to
+    (``where``, same form, on the edited picture)? Centres within one word height up or down, and within half the
+    word's width plus one height sideways."""
+    (l1, t1, w1, h1), (l2, t2, w2, h2) = where, box
+    return abs((t1 + h1 / 2) - (t2 + h2 / 2)) <= h1 and abs((l1 + w1 / 2) - (l2 + w2 / 2)) <= w1 / 2 + h1
+
+
+def text_removed(kept, edit_found) -> bool:
+    """True when a word occurrence Mike's photo shows is gone from the edit. Each occurrence is checked at its own
+    spot (``kept``: (word, score, where) from ``kept_scores``; ``edit_found``: [(word, box)] read on the edit).
+    A spot that is clearly blank (under WORD_MIN; flat paper there scores -1) is gone, whatever else the edit reads:
+    the same word elsewhere on the label never vouches for it. Otherwise a 4+ letter word that only looks a little
+    like its spot (under WORD_SURE) or cannot be judged there is kept only if the edit reads the same word at that
+    occurrence's place (each edit word vouches for one occurrence); when that is not established it counts as gone
+    and the fallback is used (a word on the room behind the product costs only the polish)."""
+    unused = list(edit_found) if edit_found else []
+    for item in kept:
+        word, s = item[0], item[1]
+        where = item[2] if len(item) > 2 else None
+        if len(word) < 3:
             continue
-        if s is None:
-            if len(word) >= 4:
-                return True
-        elif s < WORD_MIN or (s < WORD_SURE and len(word) >= 4):
+        if s is not None and s < WORD_MIN:
             return True
+        if len(word) < 4 or (s is not None and s >= WORD_SURE):
+            continue
+        twin = next((i for i, (w, box) in enumerate(unused) if where is not None and _known(w, {word})
+                     and _near(where, box)), None)
+        if twin is None:
+            return True
+        unused.pop(twin)
     return False

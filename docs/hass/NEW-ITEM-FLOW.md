@@ -69,7 +69,7 @@ that came first: short answers, then the rules. Mike's side is in [the phone gui
   thread asks Hermes (its `openai-codex` image plugin, ChatGPT/Codex sign-in; Hass holds no key) to edit the photo with
   `gpt-image-2` at quality high onto the house ivory background, with a 90 s limit. A model-free fidelity gate (the product found
   again in Mike's photo, same colour, label words unchanged both ways: no word on the edit that is not on the photo at
-  that spot, and no word read on the photo missing from the edit) decides. The gate reads labels with the host's
+  that spot, and no word occurrence read on the photo missing from its own spot on the edit) decides. The gate reads labels with the host's
   `tesseract`; if it is missing, fails or times out, the edit is unverified and the house render is published
   (`polish-ocr`). A passing picture is placed and scaled to the
   catalog's 800 x 800 square (JPEG, no metadata; nothing is cut out, so label print on cream paper is kept) and published

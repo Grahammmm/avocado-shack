@@ -26,11 +26,12 @@ reason to prefer either one. High stays the default because G chose the high tie
   correlation of at least 0.55).
 - Colour: the mean hue may move at most 30 degrees, and the chromaticity at most 0.08.
 - Label words read by tesseract, both ways. Each word read on the edit must look like the same spot of Mike's photo
-  (correlation of at least 0.35); a 4+ letter word scoring under 0.45 must also be read on the photo itself. Each word
-  read on the photo must still be on the edit: read there too, or its spot on the edit must look like it (at least
-  0.35, and 0.45 for a 4+ letter word). A 4+ letter photo word that cannot be judged on the edit and is not read
-  there counts as removed. Real edits scored 0.441 to 0.835 on this check (the 0.441, `ILDFLOWER` on the medium jar,
-  is kept because the edit reads `WILDFLOWER`).
+  (correlation of at least 0.35); a 4+ letter word scoring under 0.45 must also be read on the photo itself. Each
+  occurrence of a word read on the photo is checked at its own spot on the edit. A spot under 0.35 (blank) is removed,
+  even if the edit still reads the same word somewhere else (a word printed twice with one copy erased). A 4+ letter
+  word scoring under 0.45 there, or one that cannot be judged there, is kept only if the edit reads the same word at
+  that place, and each edit read vouches for one occurrence. Real edits scored 0.441 to 0.835 on this check (the
+  0.441, `ILDFLOWER` on the medium jar, is kept because the edit reads `WILDFLOWER` at that place).
 - If tesseract is missing, fails (nonzero exit, no TSV) or times out on either picture, the edit is unverified and
   rejected (`ocr`); the house render is published.
 
