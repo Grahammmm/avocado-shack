@@ -246,6 +246,31 @@ class ResolveForWritesTests(unittest.TestCase):
         self.assertEqual(m.suggest("", self.till), ())
         self.assertEqual(m.suggest("old honey", self.till), ())     # hidden items are not suggested
 
+    def test_plural_and_singular_each_word(self):
+        names = ["Hass avocado", "Mixed berry", "Heirloom tomatoes", "Gift boxes", "White peach", "Olive oil"]
+        till = [item(id=str(n), name=name) for n, name in enumerate(names)]
+        for q, want in (("avocados", "Hass avocado"), ("hass avocados", "Hass avocado"), ("berries", "Mixed berry"), ("tomato", "Heirloom tomatoes"),
+                        ("box", "Gift boxes"), ("peaches", "White peach"), ("oils", "Olive oil")):
+            with self.subTest(q=q):
+                self.assertEqual([i.name for i in m.suggest(q, till)], [want])
+        self.assertEqual(m.suggest("green avocados", till), ())      # every word is still required
+
+    def test_cap_order_hidden_and_limits(self):
+        till = [item(id=str(n), name=f"Avocado {c}") for n, c in enumerate("gfedcba")] + [item(id="h", name="Avocados hidden", hidden=True)]
+        got = m.suggest("avocados", till)
+        self.assertEqual([i.name for i in got], [f"Avocado {c}" for c in "abcde"])
+        self.assertEqual(len(m.suggest("avocados", till, 2)), 2)
+        self.assertEqual(m.suggest("avocados", till, 0), ())
+        self.assertEqual(m.suggest("avocados", till, -1), ())
+        self.assertEqual(got, m.suggest("avocados", till))
+
+    def test_plural_is_never_a_write_target(self):
+        till = [item(id="A", name="Hass avocado", sku="HASS-1")]
+        with self.assertRaises(m.NotExact) as ctx:
+            m.resolve_exact("avocados", till)
+        self.assertEqual([i.name for i in ctx.exception.candidates], ["Hass avocado"])
+        self.assertEqual(m.resolve_exact("hass avocado", till).id, "A")
+
 
 if __name__ == "__main__":
     unittest.main()
