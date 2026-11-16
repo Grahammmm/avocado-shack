@@ -67,13 +67,16 @@ class CapTests(CapTestCase):
 
     def test_commands_approval_undo_and_memory_still_work_over_the_cap(self):
         hours, _ = self.propose("hours")
-        self.propose("desc")
+        waiting, _ = self.propose("desc")
         self.limited()
         self.assertEqual(self.say(f"yes {hours['code']}"), "approved")
         self.assertEqual(self.commits(), 1)
         self.replies()
         self.assertEqual(self.say("undo"), "proposed")
-        self.assertTrue(self.replies()[0].startswith("To undo that, I'd change it back:"))
+        [reply] = self.replies()
+        self.assertTrue(reply.startswith(
+            f"{waiting['summary']} is still waiting for your yes. Reply no {waiting['code']} to drop it.\n\n"
+            "To undo that, I'd change it back:"), reply)
         self.assertEqual(self.say("remember parking: back lot"), "memory-saved")
         self.assertEqual(self.say("history"), "history")
         self.assertEqual(self.say("no"), "no-target")  # two drafts wait (desc and the undo): Hass asks which
