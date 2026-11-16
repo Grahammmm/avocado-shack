@@ -248,3 +248,25 @@ class CloverClient:
         if status in RETRY_STATUS:
             raise CloverUnavailable(f"clover unavailable ({status})", status)
         raise CloverError(f"clover answered {status}", status)
+
+
+class CloverWriteClient(CloverClient):
+    """Separate service write client; the existing read-only client remains read-only."""
+
+    def write(self, method, path, payload):
+        """One attempt only: an ambiguous write must be recovered by read-back, never retried."""
+        allowed = (method == "POST" and re.fullmatch(rf"/items(?:/{ID})?|/category_items", path)
+                   or method == "PUT" and re.fullmatch(rf"/item_stocks/{ID}", path))
+        if not allowed:
+            raise CloverRefused("write path not allowed")
+        request = self.build("GET", "/items", {})
+        request.headers["Content-Type"] = "application/json"
+        request = Request(method, request.url.removesuffix("/items") + path, request.headers,
+                          json.dumps(payload, allow_nan=False).encode())
+        with self._lock:
+            self._pace()
+            failure, response = self._send(request)
+        status = failure or response.status
+        if failure is None and status in (200, 201, 204):
+            return self._json(response) if response.body else {}
+        self._raise(status, 1)

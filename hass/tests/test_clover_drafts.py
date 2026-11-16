@@ -72,18 +72,18 @@ class PriceTests(unittest.TestCase):
         dr = d.build_set_price(till()["FAKEITEM00005"], 349, CFG)
         self.assertIn("Price: $3.99 -> $3.49 per lb (-12.5%)", dr.render("x"))
 
-    def test_a_big_move_needs_a_second_yes_up_or_down(self):
+    def test_a_big_move_keeps_warning_but_one_yes_up_or_down(self):
         oil = till()["FAKEITEM00001"]
         for cents in (1563, 1700, 900, 100):          # +25.04%, +36%, -28%, -92%
             with self.subTest(cents=cents):
                 dr = d.build_set_price(oil, cents, CFG)
-                self.assertTrue(dr.second_confirmation)
-                self.assertIn("ask once more", dr.render("x"))
+                self.assertFalse(dr.second_confirmation)
+                self.assertNotIn("ask once more", dr.render("x"))
                 self.assertRegex(dr.warnings[0], r"that is a \d+(\.\d)?% (increase|decrease)")
         for cents in (1562, 1250 - 312, 1251):        # +24.96%, -24.96%, +0.08%
             self.assertFalse(d.build_set_price(oil, cents, CFG).second_confirmation)
         strict = cfgmod.from_settings({"environment": "sandbox", "merchantId": "FAKEMERCH0001", "tokenFile": "/x", "priceConfirmPct": 5})
-        self.assertTrue(d.build_set_price(oil, 1350, strict).second_confirmation)
+        self.assertFalse(d.build_set_price(oil, 1350, strict).second_confirmation)
 
     def test_refusals(self):
         got = till()
@@ -440,8 +440,8 @@ class ConfigTests(unittest.TestCase):
         prod = cfgmod.from_settings({**self.BASE, "environment": "production", "liveApproved": False})
         self.assertEqual((prod.environment, prod.live_approved, prod.writes_allowed), ("production", False, False))
         self.assertFalse(cfgmod.from_settings({**self.BASE, "environment": "production"}).writes_allowed)
-        self.assertTrue(cfgmod.from_settings({**self.BASE, "environment": "production", "liveApproved": True}).writes_allowed)
-        self.assertTrue(cfgmod.from_settings(self.BASE).writes_allowed)
+        self.assertFalse(cfgmod.from_settings({**self.BASE, "environment": "production", "liveApproved": True}).writes_allowed)
+        self.assertFalse(cfgmod.from_settings(self.BASE).writes_allowed)
         with self.assertRaises(cfgmod.ConfigProblem) as ctx:
             cfgmod.from_settings({**self.BASE, "environment": "production", "liveApproved": "no"})
         self.assertEqual(list(ctx.exception.fields), ["liveApproved"])

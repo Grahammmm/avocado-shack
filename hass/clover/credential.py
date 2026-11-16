@@ -158,3 +158,12 @@ def _read(path, uid):
     if not TOKEN_RE.fullmatch(text):
         return "format", None
     return None, text
+
+
+def load_write_token(config):
+    """Service-only: the separate write file obeys exactly the read file's private-file rules."""
+    if not config.writes_allowed or os.path.realpath(config.write_token_file) == os.path.realpath(config.token_file):
+        raise CredentialError("missing")
+    if os.path.exists(config.token_file) and os.path.exists(config.write_token_file) and os.path.samefile(config.token_file, config.write_token_file):
+        raise CredentialError("not-regular")
+    return load_token(config.write_token_file)
