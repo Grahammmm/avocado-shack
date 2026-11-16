@@ -19,3 +19,15 @@ existing `ci-metrics-cache` receipts (read-only; the cache is not part of this p
 
 Fixture boundary: `fixtures.json` is synthetic; nothing reads secrets, a database, a runner or the network.
 Receipt caveat: `jobs.json` is a sample, so unsampled runs have no elapsed data; the 2026-11-14 PST run list was non-final when captured.
+
+Fail-closed coverage: schema v1 has no affirmative runner/CPU/disk observations bound to
+head, run, attempt and overlapping elapsed intervals. Its `missing_coverage` strings are
+descriptions, not evidence. Required metrics therefore remain missing and reports stay
+HOLD even with two sufficiently sampled widths and omitted, null or allegedly available
+coverage labels. A future evidence schema and attribution join are needed before this
+checker can certify a retuning candidate; this fix does not invent host observations.
+
+Run IDs and attempts must be positive integers (not booleans); heads must be lowercase
+hexadecimal commit identities of 4–40 characters, allowing the existing abbreviated receipts.
+Creation timestamps are parsed as real UTC calendar/clock values before window filtering,
+including out-of-window records. Invalid inputs are refused rather than silently dropped.

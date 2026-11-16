@@ -11,7 +11,7 @@
   "agent-work/reports/ci-metrics-cache/jobs.json": "e106324b6ffa091f7211c2b7c15c4382e77a76e8f300cf209006db0dc2069c41"
  },
  "package_sources": {
-  "candidate.py": "1556009f5876db0bc2225c708a047159d49287ecd2ac148b4e56e6e4688f7927",
+  "candidate.py": "b1937eea1949810e4d587995584739e0577fef7b5a70e10daf5d30f8b7746acb",
   "fixtures.json": "6e8b8a18e152d5855deb3174c1fb4ce446a9e32afedc4b96080fae26f194bad9",
   "SOURCES.json": "1477589d3569d6db53c3c5fc494bb0fcfa9fea3448dc18cbc85951a384f192a4",
   "avocado-contention-retuning-20261114.md": "a47bbcf13a91789e1dd470185ac094a9bf81ef38cb60c935e310bff7a5b9ddc7"

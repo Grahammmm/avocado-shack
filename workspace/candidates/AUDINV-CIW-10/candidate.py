@@ -27,12 +27,16 @@ class Bad(Exception):
 
 
 def ts(s):
-    if not isinstance(s, str) or not TS_RE.match(s):
+    if not isinstance(s, str) or not TS_RE.fullmatch(s):
         raise Bad("invalid timestamp %r" % (s,))
-    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+    try:
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+    except ValueError as e:
+        raise Bad("invalid timestamp %r" % (s,)) from e
 
 
 def in_window(s):
+    ts(s)  # validate the calendar and clock before comparing, even outside the window
     return W0 <= s < W1  # lexical compare is exact for fixed-width UTC stamps
 
 
@@ -84,6 +88,10 @@ def derive(src):
     """Pure function of SOURCES.json -> report facts. Configured width is never read as measured concurrency."""
     runs = {}
     for r in src["runs"]:
+        if any(type(r[k]) is not int or r[k] <= 0 for k in ("id", "attempt")):
+            raise Bad("run id and attempt must be positive integers")
+        if not isinstance(r["head"], str) or not re.fullmatch(r"[0-9a-f]{4,40}", r["head"]):
+            raise Bad("run head must be a 4-40 character hexadecimal commit identity")
         if not in_window(r["created"]):
             continue
         k = (r["id"], r["attempt"])
@@ -115,7 +123,14 @@ def derive(src):
         widths.setdefault(r["observed_width"], []).append(r["shard_elapsed_max_s"])
     per_width = {str(w): {"n": len(v), "p50_s": pct(v, .5), "p90_s": pct(v, .9)} for w, v in sorted(widths.items())}
     host = src["missing_coverage"]
-    missing = sorted(k for k, v in host.items() if isinstance(v, str) and v.startswith("UNKNOWN"))
+    if not isinstance(host, dict):
+        raise Bad("missing_coverage must be an object")
+    # Schema v1 has elapsed-job receipts, but no runner/CPU/disk observations
+    # that can be joined by head+run+attempt and interval. Descriptive labels
+    # (including absence of UNKNOWN labels) cannot certify affirmative evidence.
+    # Keep HOLD until a future evidence schema actually supports that join.
+    missing = sorted({"runner_identity", "host_cpu_disk_metrics", "repository_variable_value"}
+                     | {k for k, v in host.items() if not isinstance(v, str) or not v.strip() or v.startswith("UNKNOWN")})
     return {"window": [W0, W1], "runs_in_window": len(runs), "runs_with_sampled_jobs": len({(j["run"], j["attempt"]) for j in jobs}),
             "full_tier_runs_with_shard_jobs": len(rows), "per_observed_width": per_width, "run_rows": rows,
             "distinct_heads": len({r["head"] for r in rows}), "missing_metrics": missing,
@@ -272,6 +287,65 @@ class T(unittest.TestCase):
         dup["runs"].append(dict(dup["runs"][0]))
         with self.assertRaises(Bad):
             derive(dup)
+
+    def test_elapsed_only_contrast_cannot_assert_coverage(self):
+        src = load_json("SOURCES.json")
+        fixture = self.fx["width4_sequential"]
+        run, jobs = fixture["runs"][0], fixture["jobs"]
+        src["runs"], src["jobs"] = [], []
+        for width in (2, 4):
+            for sample in range(MIN_N):
+                rid = width * 10 + sample
+                src["runs"].append(dict(run, id=rid))
+                src["jobs"].extend(dict(j, run=rid) for j in jobs[:width])
+        for coverage in ({}, {k: None for k in ("runner_identity", "host_cpu_disk_metrics", "repository_variable_value")},
+                         {k: "available" for k in ("runner_identity", "host_cpu_disk_metrics", "repository_variable_value")}):
+            with self.subTest(coverage=coverage):
+                src["missing_coverage"] = coverage
+                d = derive(src)
+                self.assertEqual({w: s["n"] for w, s in d["per_observed_width"].items()}, {"2": 5, "4": 5})
+                self.assertEqual(d["verdict"]["verdict"], "HOLD")
+                self.assertIsNone(d["verdict"]["recommendation"])
+                self.assertIn("runner_identity", d["missing_metrics"])
+                self.assertIn("host_cpu_disk_metrics", d["missing_metrics"])
+                self.assertEqual(check(render(src), src), "HOLD")
+
+    def test_malformed_run_creation_and_identity_refused(self):
+        for field, values in {
+            "created": ["2026-11-14T99:99:99Z", "2026-11-31T01:00:00Z", "2026-02-30T00:00:00Z", None, 1],
+            "head": ["", " ", "not-a-head", None, 1],
+            "id": [0, -1, True, "1", None],
+            "attempt": [0, -1, True, "1", None],
+        }.items():
+            for value in values:
+                with self.subTest(field=field, value=value):
+                    src = json.loads(json.dumps(self.fx["width4_sequential"]))
+                    src["runs"][0][field] = value
+                    with self.assertRaises(Bad):
+                        derive(src)
+        for value in ("2026-11-14T99:99:99Z", "2026-02-30T00:00:00Z"):
+            with self.subTest(timestamp=value), self.assertRaises(Bad):
+                in_window(value)
+
+    def test_check_cli_refuses_malformed_creation_with_matching_report(self):
+        import pathlib
+        import subprocess
+        import tempfile
+        src = load_json("SOURCES.json")
+        text = render(src)
+        # created is not rendered: the old lexical filter accepts this stamp
+        # and derives the exact same report, so mismatch rejection cannot mask it.
+        src["runs"][0]["created"] = "2026-11-14T99:99:99Z"
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / "candidate.py").write_bytes(pathlib.Path(__file__).read_bytes())
+            (root / "sources.json").write_text(json.dumps(src), encoding="utf-8")
+            (root / "report.md").write_text(text, encoding="utf-8")
+            result = subprocess.run([sys.executable, str(root / "candidate.py"), "--check", "report.md", "--sources", "sources.json"],
+                                    capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("REFUSED: invalid timestamp", result.stderr)
+        self.assertEqual(result.stdout, "")
 
     def test_schema_path_escape_symlink_and_side_effect_boundary(self):
         opened = []
