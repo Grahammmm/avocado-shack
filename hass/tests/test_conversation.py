@@ -138,7 +138,7 @@ class FlowTests(ConversationTestCase):
         self.assertIn("timed out", self.replies()[0])
         self.assertEqual(self.commits(), 0)
 
-    def assert_late_approvals_refused(self, old, closed_text):
+    def assert_late_approvals_refused(self, old, closed_text, earlier):
         """After `old` closed, the same request repeats it: neither `yes <old code>` nor a bare `yes` applies it."""
         new, reply = self.propose("hours")
         self.assertEqual(new["draft_hash"], old["draft_hash"])  # same ops on the same base: the A2 draft repeats
@@ -147,7 +147,7 @@ class FlowTests(ConversationTestCase):
         self.assertEqual(self.say(f"yes {old['code']}"), "no-target")
         self.assertEqual(self.replies(), [closed_text])
         self.assertEqual(self.say("yes"), "no-target")
-        self.assertEqual(self.replies(), [f"That is the same change that was cancelled earlier, so I want to be sure. Reply yes {new['code']} if you still want it."])
+        self.assertEqual(self.replies(), [f"That is the same change that {earlier} earlier, so I want to be sure. Reply yes {new['code']} if you still want it."])
         self.assertEqual((self.drafts()[-1]["state"], self.commits(), self.editor.applies), ("proposed", 0, 0))
         self.assertEqual(self.say(f"yes {new['code']}"), "approved")
         self.assertEqual((self.drafts()[-1]["state"], self.commits(), self.editor.applies), ("applied", 1, 1))
@@ -156,12 +156,12 @@ class FlowTests(ConversationTestCase):
         old, _reply = self.propose("hours")
         self.assertEqual(self.say("no"), "rejected")
         self.replies()
-        self.assert_late_approvals_refused(old, "That one was cancelled, so nothing changed.")
+        self.assert_late_approvals_refused(old, "That one was cancelled, so nothing changed.", "you cancelled")
 
     def test_expired_code_is_never_reused_by_a_repeat(self):
         old, _reply = self.propose("hours")
         self.now = T0 + timedelta(seconds=601)
-        self.assert_late_approvals_refused(old, "That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it.")
+        self.assert_late_approvals_refused(old, "That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it.", "timed out")
 
     def test_ambiguous_yes_and_revision(self):
         one, _r = self.propose("hours")
