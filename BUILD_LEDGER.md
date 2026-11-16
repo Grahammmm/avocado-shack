@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## AV2007-13 — phone-row conflict and current-main refresh (November 16, 2026)
+
+Merged main `2a793749a6b26c33292c3cc77151fbe60152c52a` into PR #878 without rebasing, resolving the sole owner-battery conflict by retaining the three non-hike question rows and main's phone-format row unchanged. Independently verified the complete byte-for-byte union: 27 unique rows, from parents with 25 and 24 rows. Main advanced during verification; merged `485576daa257dca1f2becdc9c87ac80639583d35` too, cleanly, retaining its front/maker literal-word safeguards. No additional production, oracle or workflow changes. Original-head run `43925448922` completed successfully at `f7853a17bb031f5c9532d9320ec21614fa1fa20a`; failed logs were empty and no review RETURN or inline findings were present.
+
+Fresh local proof: 134 focused question/candidate/phone/request/commands/intake/item-add/demo/front/maker tests passed after the final merge, plus all 27 owner-battery rows. Another 227 adjacent conversation/NL/shelf/hike/dispatch/phone-wording/ordinal tests passed. The first adjacent run hit only the known lexical-versus-resolved scratch-path inequality; the unchanged tests passed under a canonical private TMPDIR. Both pinned Pillow checks passed using an immutable task-local copy of installed Pillow 12.0.0. Python compile, diff whitespace checks and the existing CI planner passed; full-suite/site execution remains CI's responsibility. No installs, servers, live data, publication, force pushes or PR lifecycle changes. Exact-head CI is checked separately, not claimed green from local proof. Rollback: revert these main-sync merges only if withdrawing inherited changes is intended.
+
 ## AV2007-13 — additive main-merge conflict repair (November 16, 2026)
 
 Merged origin/main `e3bdfb8b` into PR #878 without rebasing. Resolved the ledger and owner-battery conflicts by retaining both branches' additions unchanged: the non-hike question rows and main's repeat-draft/weekday-mismatch rows. The conversation implementation auto-merged main's repeat-outcome and weekday-conflict checks with this PR's question-binding behavior; no new production, test-oracle or workflow changes were needed. No review RETURN findings were present. Run `43905263971` at the previous exact head still had pending hass shards and no reported failed jobs; its failed logs were unavailable while running.
