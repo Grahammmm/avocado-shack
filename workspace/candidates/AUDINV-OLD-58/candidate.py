@@ -92,29 +92,33 @@ const input=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
 const allowed=(url,method)=>{try{const u=new URL(url);return ['GET','HEAD'].includes(method)&&u.origin===input.base&&u.hostname==='127.0.0.1'}catch{return false}};
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH});
- const receipt={browser:browser.version(),rows:[],blocked:[],cases:{}};
+ const receipt={browser:browser.version(),rows:[],blocked:[],cases:{},image_load_controls:{}};
  try{
   for(const [viewport,size] of Object.entries({phone:{width:390,height:844},desktop:{width:1280,height:900}})){
    const page=await browser.newPage({viewport:size});
+   // Track image requests before navigation; a later fetch is not image evidence.
+   const images=new Map();
+   page.on('request',r=>{if(r.resourceType()==='image')images.set(r.url(),r)});
    await page.route('**/*',r=>allowed(r.request().url(),r.request().method())?r.continue():(receipt.blocked.push({url:r.request().url(),method:r.request().method()}),r.abort()));
    await page.goto(input.base,{waitUntil:'networkidle'});
    for(const expected of input.records){
     const card=page.locator(`article[data-product-id="${expected.id}"]`);
     const inspect=async()=>{
      const got=await card.evaluate(async el=>{
-      const img=el.querySelector('img');let status=null,bytes=[];
-      try{await img.decode()}catch{}
-      try{const response=await fetch(img.currentSrc);status=response.status;bytes=Array.from(new Uint8Array(await response.arrayBuffer()))}catch{}
+      const img=el.querySelector('img');let decoded=false;
+      try{await img.decode();decoded=true}catch{}
       return {name:el.querySelector('h2').textContent,description:el.querySelector('.food-description').textContent,
        maker:el.querySelector('.maker-name').textContent,place:el.querySelector('.origin-label').textContent,
        story:el.querySelector('.maker-story').textContent,src:img.getAttribute('src'),current:img.currentSrc,
-       width:img.naturalWidth,height:img.naturalHeight,status,bytes};
+       width:img.naturalWidth,height:img.naturalHeight,decoded};
      });
-     got.sha256=crypto.createHash('sha256').update(Buffer.from(got.bytes)).digest('hex');delete got.bytes;
+     got.status=null;got.sha256=null;
+     const request=images.get(got.current);
+     try{const response=await request?.response();if(response){got.status=response.status();got.sha256=crypto.createHash('sha256').update(await response.body()).digest('hex')}}catch{}
      const checks={name:got.name===expected.name,description:got.description===expected.description,
       maker:got.maker===expected.maker,place:got.place===`Based in ${expected.place}`,story:got.story===expected.story,
       src:got.src===expected.src&&got.current===input.base+'/'+expected.src,response:got.status===200,
-      decoded:got.width>0&&got.height>0,identity:got.sha256===expected.sha256};
+      decoded:got.decoded&&got.width>0&&got.height>0,identity:got.sha256===expected.sha256};
      return {id:expected.id,viewport,got,checks,ok:Object.values(checks).every(x=>x===true)};
     };
     receipt.rows.push(await inspect());
@@ -128,8 +132,14 @@ const allowed=(url,method)=>{try{const u=new URL(url);return ['GET','HEAD'].incl
       await card.locator(selector).evaluate((e,{property,old})=>{e[property]=old},{property,old});
      }
      // A valid, decoded 200 image at the intended path is still wrong when its bytes differ.
-     await page.route('**/synthetic-b.png',r=>r.fulfill({status:200,contentType:'image/png',body:Buffer.from(input.wrong_png,'hex')}));
-     const wrong=await inspect();receipt.cases[viewport+':wrong_bytes']=wrong.got.status===200&&wrong.got.width>0&&!wrong.checks.identity;
+     // Only the image gets wrong bytes; an independent fetch still gets correct bytes.
+     await page.route('**/synthetic-b.png',r=>r.request().resourceType()==='image'?r.fulfill({status:200,contentType:'image/png',body:Buffer.from(input.wrong_png,'hex')}):r.fallback());
+     await page.reload({waitUntil:'networkidle'});
+     const wrong=await inspect();
+     const fetched=await card.locator('img').evaluate(async img=>Array.from(new Uint8Array(await (await fetch(img.currentSrc)).arrayBuffer())));
+     const fetched_sha256=crypto.createHash('sha256').update(Buffer.from(fetched)).digest('hex');
+     receipt.image_load_controls[viewport]={...wrong,fetched_sha256};
+     receipt.cases[viewport+':wrong_bytes']=!wrong.ok&&wrong.got.status===200&&wrong.checks.decoded&&!wrong.checks.identity&&wrong.got.sha256===crypto.createHash('sha256').update(Buffer.from(input.wrong_png,'hex')).digest('hex')&&fetched_sha256===expected.sha256;
      await page.unroute('**/synthetic-b.png');
     }
    }
@@ -255,12 +265,24 @@ def qualified(receipt):
     expected = {(r, v) for r in ('synthetic-a', 'synthetic-b') for v in ('phone', 'desktop')}
     cases = {v + ':' + case for v in ('phone', 'desktop') for case in fixtures()['cases'] if case != 'positive'}
     return (receipt.get('run_state') == 'completed' and len(rows) == 4 and {(r['id'], r['viewport']) for r in rows} == expected
-            and all(row_valid(r) for r in rows)
+            and all(row_valid(r) for r in rows) and image_controls_valid(receipt)
             and set(receipt['cases']) == cases and all(v is True for v in receipt['cases'].values())
             and len(receipt['blocked']) == 6 and receipt['writer_unchanged'] is True and receipt['empty_database'] is True
             and set(receipt['baseline_wrong_second_record']) == {'phone', 'desktop'}
             and set(receipt['baseline']) == {r + ':' + v for r, v in expected}
             and all(set(c) == {'productShown', 'description', 'imageShown', 'noPageErrors', 'noPosts'} and all(v is True for v in c.values()) for c in [*receipt['baseline'].values(), *receipt['baseline_wrong_second_record'].values()]))
+
+
+def image_controls_valid(receipt):
+    controls = receipt.get('image_load_controls', {})
+    correct = digest(png(fixtures()['records'][1]['rgb']))
+    return set(controls) == {'phone', 'desktop'} and all(
+        r['id'] == 'synthetic-b' and r['viewport'] == v and r['ok'] is False
+        and r['checks']['identity'] is False and r['checks']['decoded'] is True
+        and r['got']['decoded'] is True and r['got']['status'] == 200
+        and r['got']['width'] == r['got']['height'] == 2
+        and r['got']['sha256'] == digest(png([0, 0, 0])) and r['fetched_sha256'] == correct
+        for v, r in controls.items())
 
 
 def row_valid(row):
@@ -270,7 +292,7 @@ def row_valid(row):
             and all(v is True for v in row['checks'].values())
             and all(got[k] == expected[k] for k in ('name', 'description', 'maker', 'story', 'src'))
             and got['place'] == 'Based in ' + expected['place'] and got['status'] == 200
-            and got['width'] == 2 and got['height'] == 2 and got['sha256'] == digest(png(expected['rgb']))
+            and got['decoded'] is True and got['width'] == 2 and got['height'] == 2 and got['sha256'] == digest(png(expected['rgb']))
             and re.fullmatch(r'http://127\.0\.0\.1:[1-9][0-9]*/' + re.escape(expected['src']), got['current']) is not None)
 
 
@@ -339,6 +361,10 @@ class CandidateTests(unittest.TestCase):
     def test_second_record_wrong_maker_text_or_broken_image_fails(self):
         self.require_browser()
         self.assertTrue(all(self.receipt['cases'].values()))
+        for row in self.receipt['image_load_controls'].values():
+            self.assertTrue(row['checks']['decoded'])
+            self.assertFalse(row['checks']['identity'])
+            self.assertNotEqual(row['got']['sha256'], row['fetched_sha256'])
 
     def test_external_post_symlink_and_asset_escape_are_refused(self):
         preview, _ = source_map()

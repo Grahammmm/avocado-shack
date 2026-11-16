@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "base": "b83d3615a2ff8802c5b82339b7802e6e62c8d97d",
-  "captured_at": "2026-11-15T23:20:57.355961+00:00",
+  "captured_at": "2026-11-16T00:54:58.637536+00:00",
   "digests": {
     "hass/__init__.py": "e75032048a53d5032a5c5fd9b1f0158a704e36a9eb27ebcf3992c45e0269bb5e",
     "hass/content_model.py": "61e0ac69b09f75bfc87a68928b0d59d20ef45712cdbbf7bcfd4baedf9dd1c192",
@@ -23,9 +23,10 @@
           "place": "Based in Fixture Town A",
           "story": "Grown for the synthetic browser trial A.",
           "src": "assets/products/synthetic-a.png",
-          "current": "http://127.0.0.1:42021/assets/products/synthetic-a.png",
+          "current": "http://127.0.0.1:31997/assets/products/synthetic-a.png",
           "width": 2,
           "height": 2,
+          "decoded": true,
           "status": 200,
           "sha256": "c83a11ef877d346e794ea7d36c0d41921243c0498a25e4badc13975fa1d4291b"
         },
@@ -52,9 +53,10 @@
           "place": "Based in Fixture Town B",
           "story": "Grown for the synthetic browser trial B.",
           "src": "assets/products/synthetic-b.png",
-          "current": "http://127.0.0.1:42021/assets/products/synthetic-b.png",
+          "current": "http://127.0.0.1:31997/assets/products/synthetic-b.png",
           "width": 2,
           "height": 2,
+          "decoded": true,
           "status": 200,
           "sha256": "2230a7cdaee208f76f0907ada8f3f918f08586cdd2ea33bad82735eed1b22e57"
         },
@@ -81,9 +83,10 @@
           "place": "Based in Fixture Town A",
           "story": "Grown for the synthetic browser trial A.",
           "src": "assets/products/synthetic-a.png",
-          "current": "http://127.0.0.1:42021/assets/products/synthetic-a.png",
+          "current": "http://127.0.0.1:31997/assets/products/synthetic-a.png",
           "width": 2,
           "height": 2,
+          "decoded": true,
           "status": 200,
           "sha256": "c83a11ef877d346e794ea7d36c0d41921243c0498a25e4badc13975fa1d4291b"
         },
@@ -110,9 +113,10 @@
           "place": "Based in Fixture Town B",
           "story": "Grown for the synthetic browser trial B.",
           "src": "assets/products/synthetic-b.png",
-          "current": "http://127.0.0.1:42021/assets/products/synthetic-b.png",
+          "current": "http://127.0.0.1:31997/assets/products/synthetic-b.png",
           "width": 2,
           "height": 2,
+          "decoded": true,
           "status": 200,
           "sha256": "2230a7cdaee208f76f0907ada8f3f918f08586cdd2ea33bad82735eed1b22e57"
         },
@@ -136,7 +140,7 @@
         "method": "GET"
       },
       {
-        "url": "http://127.0.0.1:42021/api/community/subscriptions",
+        "url": "http://127.0.0.1:31997/api/community/subscriptions",
         "method": "POST"
       },
       {
@@ -148,7 +152,7 @@
         "method": "GET"
       },
       {
-        "url": "http://127.0.0.1:42021/api/community/subscriptions",
+        "url": "http://127.0.0.1:31997/api/community/subscriptions",
         "method": "POST"
       },
       {
@@ -174,7 +178,70 @@
       "desktop:post": true,
       "desktop:other_loopback_port": true
     },
-    "run_state": "completed",
+    "image_load_controls": {
+      "phone": {
+        "id": "synthetic-b",
+        "viewport": "phone",
+        "got": {
+          "name": "Synthetic bean",
+          "description": "Synthetic green bean",
+          "maker": "Fixture Orchard B",
+          "place": "Based in Fixture Town B",
+          "story": "Grown for the synthetic browser trial B.",
+          "src": "assets/products/synthetic-b.png",
+          "current": "http://127.0.0.1:31997/assets/products/synthetic-b.png",
+          "width": 2,
+          "height": 2,
+          "decoded": true,
+          "status": 200,
+          "sha256": "7899d6ced52159786ff083934df42788da01a30b7ed9bb7756d7f3f5a94ef685"
+        },
+        "checks": {
+          "name": true,
+          "description": true,
+          "maker": true,
+          "place": true,
+          "story": true,
+          "src": true,
+          "response": true,
+          "decoded": true,
+          "identity": false
+        },
+        "ok": false,
+        "fetched_sha256": "2230a7cdaee208f76f0907ada8f3f918f08586cdd2ea33bad82735eed1b22e57"
+      },
+      "desktop": {
+        "id": "synthetic-b",
+        "viewport": "desktop",
+        "got": {
+          "name": "Synthetic bean",
+          "description": "Synthetic green bean",
+          "maker": "Fixture Orchard B",
+          "place": "Based in Fixture Town B",
+          "story": "Grown for the synthetic browser trial B.",
+          "src": "assets/products/synthetic-b.png",
+          "current": "http://127.0.0.1:31997/assets/products/synthetic-b.png",
+          "width": 2,
+          "height": 2,
+          "decoded": true,
+          "status": 200,
+          "sha256": "7899d6ced52159786ff083934df42788da01a30b7ed9bb7756d7f3f5a94ef685"
+        },
+        "checks": {
+          "name": true,
+          "description": true,
+          "maker": true,
+          "place": true,
+          "story": true,
+          "src": true,
+          "response": true,
+          "decoded": true,
+          "identity": false
+        },
+        "ok": false,
+        "fetched_sha256": "2230a7cdaee208f76f0907ada8f3f918f08586cdd2ea33bad82735eed1b22e57"
+      }
+    },
     "baseline": {
       "synthetic-a:phone": {
         "productShown": true,
@@ -221,9 +288,19 @@
         "noPosts": true
       }
     },
-    "empty_database": true,
+    "run_state": "completed",
     "writer_unchanged": true,
-    "status": "PASS"
+    "empty_database": true,
+    "status": "PASS",
+    "acquisition": {
+      "mode": "serverless Chromium with real Previewer overlay; no server started",
+      "historical_server_baseline_captured_at": "2026-11-15T23:20:57.355961+00:00",
+      "historical_fields": [
+        "baseline",
+        "baseline_wrong_second_record",
+        "empty_database"
+      ]
+    }
   },
   "missing": [
     "physical phone",
