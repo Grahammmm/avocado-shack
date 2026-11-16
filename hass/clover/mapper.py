@@ -291,9 +291,26 @@ def resolve_exact(query, items):
                    suggest(query, items))
 
 
+def _forms(word):
+    """The word and its plausible singular/plural forms (suggestions only; never used for exact matching)."""
+    forms = {word}
+    if len(word) > 3 and word.endswith("ies"):
+        forms.add(word[:-3] + "y")
+    if len(word) > 3 and word.endswith("es"):
+        forms.add(word[:-2])
+    if len(word) > 2 and word.endswith("s"):
+        forms.add(word[:-1])
+    if word.endswith("y"):
+        forms.add(word[:-1] + "ies")
+    forms.update((word + "s", word + "es"))
+    return forms
+
+
 def suggest(query, items, limit=5):
-    """Read-only 'Did you mean' help: visible items whose name holds every word of the query. Never used to pick a write target."""
-    words = norm_name(query).split()
-    if not words:
+    """Read-only 'Did you mean' help: visible items whose name holds every word of the query, in its singular or plural form.
+    Never used to pick a write target."""
+    words = [_forms(w) for w in norm_name(query).split()]
+    if not words or limit <= 0:
         return ()
-    return tuple(sorted((i for i in items if not i.hidden and all(w in norm_name(i.name) for w in words)), key=lambda i: i.name)[:limit])
+    return tuple(sorted((i for i in items if not i.hidden and all(any(f in norm_name(i.name) for f in fs) for fs in words)),
+                        key=lambda i: i.name)[:limit])
