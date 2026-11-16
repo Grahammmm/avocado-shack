@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## AV2007-13 — demo rehearsal CI alignment (November 15, 2026)
+
+Reproduced PR #878's shard-2 failure at b89b8ef13e084949769f7cfdcbaab8d9184981f4 (run 43800326355, job 133080174474): the till-isolation test indexed the removed `ROUTER-15` known-gap marker. Merged origin/main 18eafb31833211e6ad324d647656648df750ff53, bringing in #898's existing assertion correction without conflicts; this PR's question-binding changes remain intact. No additional production or test changes were needed.
+
+Fresh local proof: all 21 demo rehearsal tests, 285 focused question/candidate/conversation/request/dispatch/hike/shelf/wording tests and all 20 owner-battery fixture rows passed. Python compile and diff whitespace checks passed. No review RETURN findings were present. Exact-head CI is checked separately; local proof is not an all-green CI claim. No workflow changes, installs, servers, live data or publication. Rollback: revert this main-sync merge only if withdrawing its inherited fix is intended.
+
 ## AV2007-13 — candidate cancellation fixture alignment (November 15, 2026)
 
 Reproduced PR #878's exact shard-3 failure: the candidate safety fixture still expected `no-target` for bare `no` after this PR intentionally made it `cancelled`. Updated only that fixture to require the exact dropped-question reply, no interpreter call and no remaining open request. The subsequent numeric answer must still reach the interpreter without drafting or writing. Merged current main (b83d3615a2ff8802c5b82339b7802e6e62c8d97d) without conflicts, preserving its Clover matching changes.
