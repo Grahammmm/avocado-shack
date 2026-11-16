@@ -24,7 +24,7 @@ def listing(lines):
 class WrittenRanges(unittest.TestCase):
     def test_every_word_separator_includes_interior_day(self):
         for sep in (" to ", " through ", " thru ", " till ", " until ", " TO ", " Through ", "  to  ", "\tUntil "):
-            for a, b in (("Monday", "Friday"), ("Mon", "Fri"), ("monday", "FRI")):
+            for a, b in (("Monday", "Friday"), ("Mon", "Fri"), ("monday", "FRI"), ("Tues", "Thurs"), ("Tues", "Thur")):
                 line = f"{a}{sep}{b} 9am–6pm"
                 with self.subTest(line=line):
                     self.assertEqual(hours([line], "wednesday"), "The site says: " + line)

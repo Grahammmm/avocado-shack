@@ -32,6 +32,7 @@ from typing import NamedTuple
 
 from hass import claims, interpret_check, itemstd
 from hass.content_model import CONTENT_DIR, FORBIDDEN_TEXT, TEXT_LIMITS, _https
+from hass.nl_prep import WORD_NUMBERS
 from hass.ops import catalog
 from hass.skills.model import Skill, Slot, Trigger, Undo
 
@@ -40,7 +41,10 @@ MAX_NAMES = 5  # product names listed in one reply before "and N more"
 PRICE_REPLY = interpret_check.PRICE_REPLY
 PLAIN_TEXT_REPLY = interpret_check.PLAIN_TEXT_REPLY
 PRICE_RE = re.compile(r"\$|\bper\s+(?:lb|lbs|pound|pounds|oz|ounce|ounces|kg|dozen|jar|bottle|bag)\b|"
-                      r"\b\d+(?:\.\d+)?\s*(?:dollars|bucks|usd)\b", re.IGNORECASE)
+                      r"\b\d+(?:\.\d+)?\s*(?:dollars|bucks|usd)\b|"
+                      r"\b(?:\d+(?:[.,]\d+)?\s*|(?:a|an|" + "|".join(re.escape(w) for w in sorted(WORD_NUMBERS, key=len, reverse=True)) + r")\s+)"
+                      r"(?:dollars?|bucks?|cents?)\b|\d\s?\u00a2|"
+                      r"\b\d+(?:\.\d+)?\s+(?:a|the)\s+(?:pound|lb|dozen|ounce|oz|jar|bottle|bag)\b", re.IGNORECASE)
 FIELD_WORDS = {"name": "name", "place": "town", "story": "about text", "url": "website link"}
 
 
