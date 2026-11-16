@@ -86,7 +86,7 @@ class OfflineRehearsal(unittest.TestCase):
         self.assertNotEqual(by_id["s15-whats-sold-out"].disposition, "till-read")
         self.assertEqual(by_id["s15-whats-sold-out"].disposition, "answer")
         self.assertEqual(by_id["s15-whats-sold-out"].status, "PASS")
-        self.assertNotIn("known_gap", by_id["s15-whats-sold-out"].row)
+        self.assertNotIn("known_gap", by_id["s15-whats-sold-out"].row)  # AV2007-03 fixed ROUTER-15: the row PASSes now
         world, rows = demo.load_fixture()
         shop = demo.Shop(world)
         try:
