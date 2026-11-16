@@ -349,9 +349,45 @@ def _holiday_hints(text, today: date) -> list:
     return rows
 
 
+_MONTH_FULL = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+PAIR_GAP_RE = re.compile(r"[\s,]*(?:(?:the|on)[\s,]+)*")  # all that may sit between a weekday and the date beside it
+
+
+def weekday_mismatch_question(row) -> str:
+    """AV2007-10: the one code-owned question for a paired row marked ``weekday_mismatch`` ('You said Friday, but November 14 is a Saturday.')."""
+    d = date.fromisoformat(row["date"])
+    return f"You said {row['said_weekday']}, but {_MONTH_FULL[d.month - 1]} {d.day} is a {WEEKDAY_NAMES[d.weekday()]}. Which day?"
+
+
+def _pair_weekdays(t, rows, wspans, dspans):
+    """AV2007-10: a weekday written right beside ONE explicit date is that date's weekday. Same day: the weekday row folds into the
+    date row. Different day: the date row is marked ``weekday_mismatch`` with both readings of the weekday. Anything else stays apart."""
+    for ws, we, wrow, wd in wspans:
+        near = [x for x in dspans if (x[0] >= we and PAIR_GAP_RE.fullmatch(t[we:x[0]])) or (x[1] <= ws and PAIR_GAP_RE.fullmatch(t[x[1]:ws]))]
+        if len(near) != 1: continue
+        ds, de, drow = near[0]
+        if sum(1 for o in wspans if (ds >= o[1] and PAIR_GAP_RE.fullmatch(t[o[1]:ds])) or (de <= o[0] and PAIR_GAP_RE.fullmatch(t[de:o[0]]))) != 1: continue
+        if wrow is not None: rows.remove(wrow)
+        if date.fromisoformat(drow["date"]).weekday() == wd: continue
+        readings = [] if wrow is None else [wrow[k] for k in ("date", "next", "last") if wrow.get(k)] + list(wrow.get("unclear", ()))
+        drow.update({"weekday_mismatch": True, "said_weekday": WEEKDAY_NAMES[wd], "weekday_dates": list(dict.fromkeys(readings))})
+
+
+def weekday_mismatches(text, today: date) -> list:
+    """AV2007-10: every paired row of ``text`` whose weekday disagrees with its date (not cut to MAX_LIST), else []."""
+    return [r for r in all_date_rows(text, today)[0] if r.get("weekday_mismatch")]
+
+
 def date_hints(text, today: date):
     """(rows, [(said weekday, weekday number)]): every day the message names, in Pacific time (``today`` is the Pacific day)."""
+    rows, hits = all_date_rows(text, today)
+    return rows[:MAX_LIST], hits
+
+
+
+def all_date_rows(text, today: date):
     t, rows, hits = fold(text), [], []
+    wspans, dspans = [], []
     day = lambda d: d.isoformat()  # noqa: E731
     for m in RELATIVE_RE.finditer(t):
         word = m.group(1)
@@ -363,6 +399,7 @@ def date_hints(text, today: date):
         hits.append((name, wd))
         nxt, last = _next_weekday(today, wd), _shift(today, -(((today.weekday() - wd) % 7) or 7))
         said = f"{mod} {name}" if mod and mod != "on" else name
+        n0 = len(rows)
         if mod == "next" or wd == today.weekday() and mod != "last":
             first, second = (nxt, None if nxt is None else _shift(nxt, 7)) if mod == "next" and wd != today.weekday() else (today, _shift(today, 7))
             if first is not None and second is not None:  # both readings or no row: never a lone date for an ambiguous day
@@ -371,6 +408,7 @@ def date_hints(text, today: date):
             if last is not None: rows.append({"said": said, "date": day(last), "weekday": WEEKDAY_NAMES[wd]})
         elif nxt is not None and last is not None:
             rows.append({"said": said, "next": day(nxt), "last": day(last), "weekday": WEEKDAY_NAMES[wd], "note": "next = the coming one; last = the one just past"})
+        wspans.append((m.start(), m.end(), rows[n0] if len(rows) > n0 else None, wd))
     for m in ORDINAL_RE.finditer(t):
         n = int(m.group(1))
         if not 1 <= n <= 31: continue
@@ -381,19 +419,21 @@ def date_hints(text, today: date):
             if c is not None and c >= today: d = c; break
         if d is not None and not MONTH_DAY_RE.search(t[max(0, m.start() - 12):m.end()]) and not DAY_MONTH_RE.search(t[m.start():m.end() + 14]):
             rows.append({"said": m.group(0), "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
+            dspans.append((m.start(), m.end(), rows[-1]))
     for m in MONTH_DAY_RE.finditer(t):
         found = _named_date(t, m, MONTHS[m.group(1)], int(m.group(2)), today)
-        if found: rows.append(_date_row(*found))
+        if found: rows.append(_date_row(*found)); dspans.append((m.start(), m.start() + len(found[0]), rows[-1]))
     for m in DAY_MONTH_RE.finditer(t):
         found = _named_date(t, m, MONTHS[m.group(2)], int(m.group(1)), today)
-        if found: rows.append(_date_row(*found))
+        if found: rows.append(_date_row(*found)); dspans.append((m.start(), m.start() + len(found[0]), rows[-1]))
     for m in SLASH_RE.finditer(t):
         if m.group(3) is None: found = _named_date(t, m, int(m.group(1)), int(m.group(2)), today, year=False)
         else: found = _slash_year(m)
-        if found: rows.append(_date_row(*found))
+        if found: rows.append(_date_row(*found)); dspans.append((m.start(), m.start() + len(found[0]), rows[-1]))
     for m in ISO_RE.finditer(t):
         d = _safe_date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        if d is not None and 2000 <= d.year <= 2099: rows.append(_date_row(m.group(0), d))
+        if d is not None and 2000 <= d.year <= 2099: rows.append(_date_row(m.group(0), d)); dspans.append((m.start(), m.end(), rows[-1]))
+    _pair_weekdays(t, rows, wspans, dspans)
     for m in IN_RE.finditer(t):
         n = int(m.group(1)) if m.group(1).isdigit() else WORD_NUMBERS[m.group(1)]
         d = _shift(today, n * (7 if m.group(2) == "week" else 1))
@@ -401,7 +441,7 @@ def date_hints(text, today: date):
     rows.extend(_holiday_hints(t, today))
     if re.search(r"\b(next week|this weekend|next month|couple (?:of )?(?:days|weeks)|few (?:days|weeks)|sometime|soon)\b", t):
         rows.append({"said": "a loose time", "date": None, "note": "not one day: ask which day"})
-    return rows[:MAX_LIST], hits
+    return [r for r in rows if r.get("weekday_mismatch")] + [r for r in rows if not r.get("weekday_mismatch")], hits  # a contradiction is never cut by MAX_LIST
 
 
 def time_hints(text) -> list:
