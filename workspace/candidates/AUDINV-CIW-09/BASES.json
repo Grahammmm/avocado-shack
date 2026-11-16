@@ -1,0 +1,4 @@
+{"schema_version":1,"inspected_main":"1b0f5b877230e36c060a17777fa285d436bd7d43","spec_inspected_main":"b83d3615a2ff8802c5b82339b7802e6e62c8d97d","candidate":true,"installed":false,"no_apply_boundary":"read-only report; changes no workflow, timeout, weight, pin, queue or registry","reused_read_only_sources":{".github/workflows/check.yml":"cc91cfaaaf826c693ab0f1d06ae1af18129bc917f44fb6d05df5fd74273471dd",
+"hass/tests/ci_shards.py":"9d8baf662e49a83af4821d760796902fe8c2e83d504846d937080d44d9521c38",
+"hass/tests/ci_weights.json (read for digest only, never as observed data)":"b33db436c96975819414a4d98b7f7701771b251fc4ec1d04e400304930db31d7"},
+"candidate_sources":{"candidate.py":"45219381f38085d3c3c923292476fd4dec737f85d9a6d2f1c134d741c72030c1"}}
