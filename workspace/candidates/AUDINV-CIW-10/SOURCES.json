@@ -1,0 +1,2594 @@
+{
+ "inputs": [
+  {
+   "bytes": 30555,
+   "captured": "2026-11-15T06:10:00Z",
+   "name": "runs-avocado-shack-2026-11-13.json",
+   "sha256": "215d68b6d1b757f41c34151490158fc92c8e61f5235a084bbf1c4eabcc6647e4"
+  },
+  {
+   "bytes": 24717,
+   "captured": "2026-11-15T06:10:00Z",
+   "name": "runs-avocado-shack-2026-11-14.json",
+   "sha256": "7df05f1e04f09beb191ec87edf0a0812b7e035f471ceece34c80fa876f968837"
+  },
+  {
+   "bytes": 1500714,
+   "captured": "UNKNOWN (cache file mtime only)",
+   "name": "jobs.json",
+   "sha256": "e106324b6ffa091f7211c2b7c15c4382e77a76e8f300cf209006db0dc2069c41"
+  }
+ ],
+ "jobs": [
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T00:47:52Z",
+   "conclusion": "success",
+   "created": "2026-11-14T00:46:07Z",
+   "name": "site community",
+   "run": 43536379911,
+   "started": "2026-11-14T00:46:09Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T00:52:27Z",
+   "conclusion": "success",
+   "created": "2026-11-14T00:46:07Z",
+   "name": "site static",
+   "run": 43536379911,
+   "started": "2026-11-14T00:46:09Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T00:46:26Z",
+   "conclusion": "success",
+   "created": "2026-11-14T00:46:07Z",
+   "name": "quick",
+   "run": 43536379911,
+   "started": "2026-11-14T00:46:09Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:01:24Z",
+   "conclusion": "success",
+   "created": "2026-11-14T00:46:27Z",
+   "name": "hass shard 1",
+   "run": 43536379911,
+   "started": "2026-11-14T00:52:28Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:00:51Z",
+   "conclusion": "success",
+   "created": "2026-11-14T00:46:27Z",
+   "name": "hass shard 0",
+   "run": 43536379911,
+   "started": "2026-11-14T00:47:53Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:01:49Z",
+   "conclusion": "success",
+   "created": "2026-11-14T00:46:27Z",
+   "name": "hass shard 2",
+   "run": 43536379911,
+   "started": "2026-11-14T00:46:28Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:04:40Z",
+   "conclusion": "success",
+   "created": "2026-11-14T00:46:27Z",
+   "name": "hass shard 3",
+   "run": 43536379911,
+   "started": "2026-11-14T00:49:39Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:08:30Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:04:40Z",
+   "name": "check",
+   "run": 43536379911,
+   "started": "2026-11-14T01:08:17Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:03:30Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:01:50Z",
+   "name": "site community",
+   "run": 43537972553,
+   "started": "2026-11-14T01:01:55Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:08:16Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:01:50Z",
+   "name": "site static",
+   "run": 43537972553,
+   "started": "2026-11-14T01:02:05Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:03:48Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:01:50Z",
+   "name": "quick",
+   "run": 43537972553,
+   "started": "2026-11-14T01:03:32Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:16:18Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:03:48Z",
+   "name": "hass shard 0",
+   "run": 43537972553,
+   "started": "2026-11-14T01:04:41Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:13:15Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:03:48Z",
+   "name": "hass shard 1",
+   "run": 43537972553,
+   "started": "2026-11-14T01:03:50Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:21:09Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:03:48Z",
+   "name": "hass shard 3",
+   "run": 43537972553,
+   "started": "2026-11-14T01:08:49Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:13:50Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:03:48Z",
+   "name": "hass shard 2",
+   "run": 43537972553,
+   "started": "2026-11-14T01:05:41Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:21:22Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:21:09Z",
+   "name": "check",
+   "run": 43537972553,
+   "started": "2026-11-14T01:21:10Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:20:58Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:14:05Z",
+   "name": "site static",
+   "run": 43539327093,
+   "started": "2026-11-14T01:14:47Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:17:51Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:14:05Z",
+   "name": "quick",
+   "run": 43539327093,
+   "started": "2026-11-14T01:17:12Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:17:42Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:14:05Z",
+   "name": "site community",
+   "run": 43539327093,
+   "started": "2026-11-14T01:16:19Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:17:51Z",
+   "conclusion": "skipped",
+   "created": "2026-11-14T01:17:51Z",
+   "name": "hass shard ${{ matrix.shard }}",
+   "run": 43539327093,
+   "started": "2026-11-14T01:17:51Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:21:11Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:20:58Z",
+   "name": "check",
+   "run": 43539327093,
+   "started": "2026-11-14T01:20:59Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:26:40Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:26:20Z",
+   "name": "quick",
+   "run": 43540587682,
+   "started": "2026-11-14T01:26:22Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:27:56Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:26:20Z",
+   "name": "site community",
+   "run": 43540587682,
+   "started": "2026-11-14T01:26:21Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:32:54Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:26:20Z",
+   "name": "site static",
+   "run": 43540587682,
+   "started": "2026-11-14T01:26:41Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:37:17Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:26:40Z",
+   "name": "hass shard 0",
+   "run": 43540587682,
+   "started": "2026-11-14T01:27:17Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:42:34Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:26:40Z",
+   "name": "hass shard 3",
+   "run": 43540587682,
+   "started": "2026-11-14T01:27:57Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:44:26Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:26:40Z",
+   "name": "hass shard 2",
+   "run": 43540587682,
+   "started": "2026-11-14T01:32:01Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:44:16Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:26:40Z",
+   "name": "hass shard 1",
+   "run": 43540587682,
+   "started": "2026-11-14T01:35:35Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:54:26Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:44:27Z",
+   "name": "check",
+   "run": 43540587682,
+   "started": "2026-11-14T01:54:10Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:33:18Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:31:47Z",
+   "name": "quick",
+   "run": 43541129095,
+   "started": "2026-11-14T01:32:55Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:43:15Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:31:47Z",
+   "name": "site static",
+   "run": 43541129095,
+   "started": "2026-11-14T01:37:02Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:41:42Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:31:47Z",
+   "name": "site community",
+   "run": 43541129095,
+   "started": "2026-11-14T01:40:10Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:54:49Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:33:18Z",
+   "name": "hass shard 0",
+   "run": 43541129095,
+   "started": "2026-11-14T01:44:08Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:54:09Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:33:18Z",
+   "name": "hass shard 1",
+   "run": 43541129095,
+   "started": "2026-11-14T01:44:17Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:00:35Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:33:18Z",
+   "name": "hass shard 3",
+   "run": 43541129095,
+   "started": "2026-11-14T01:45:36Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T01:57:48Z",
+   "conclusion": "success",
+   "created": "2026-11-14T01:33:18Z",
+   "name": "hass shard 2",
+   "run": 43541129095,
+   "started": "2026-11-14T01:44:27Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:00:53Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:00:36Z",
+   "name": "check",
+   "run": 43541129095,
+   "started": "2026-11-14T02:00:37Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:35:38Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:35:21Z",
+   "name": "quick",
+   "run": 43547142606,
+   "started": "2026-11-14T02:35:22Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:36:46Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:35:21Z",
+   "name": "site community",
+   "run": 43547142606,
+   "started": "2026-11-14T02:35:22Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:41:29Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:35:21Z",
+   "name": "site static",
+   "run": 43547142606,
+   "started": "2026-11-14T02:35:22Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:46:54Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:35:38Z",
+   "name": "hass shard 2",
+   "run": 43547142606,
+   "started": "2026-11-14T02:35:39Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:43:49Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:35:38Z",
+   "name": "hass shard 1",
+   "run": 43547142606,
+   "started": "2026-11-14T02:35:39Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:44:27Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:35:38Z",
+   "name": "hass shard 0",
+   "run": 43547142606,
+   "started": "2026-11-14T02:35:39Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:48:11Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:35:38Z",
+   "name": "hass shard 3",
+   "run": 43547142606,
+   "started": "2026-11-14T02:35:39Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:48:25Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:48:11Z",
+   "name": "check",
+   "run": 43547142606,
+   "started": "2026-11-14T02:48:13Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:51:30Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:50:05Z",
+   "name": "site community",
+   "run": 43548441786,
+   "started": "2026-11-14T02:50:06Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:56:13Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:50:05Z",
+   "name": "site static",
+   "run": 43548441786,
+   "started": "2026-11-14T02:50:06Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:50:22Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:50:05Z",
+   "name": "quick",
+   "run": 43548441786,
+   "started": "2026-11-14T02:50:06Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:02:40Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:50:22Z",
+   "name": "hass shard 0",
+   "run": 43548441786,
+   "started": "2026-11-14T02:50:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:59:19Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:50:22Z",
+   "name": "hass shard 3",
+   "run": 43548441786,
+   "started": "2026-11-14T02:50:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T02:58:48Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:50:22Z",
+   "name": "hass shard 2",
+   "run": 43548441786,
+   "started": "2026-11-14T02:50:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:02:46Z",
+   "conclusion": "success",
+   "created": "2026-11-14T02:50:22Z",
+   "name": "hass shard 1",
+   "run": 43548441786,
+   "started": "2026-11-14T02:50:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:02:59Z",
+   "conclusion": "success",
+   "created": "2026-11-14T03:02:46Z",
+   "name": "check",
+   "run": 43548441786,
+   "started": "2026-11-14T03:02:47Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:27:12Z",
+   "conclusion": "success",
+   "created": "2026-11-14T03:25:52Z",
+   "name": "quick",
+   "run": 43551595026,
+   "started": "2026-11-14T03:25:53Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:32:00Z",
+   "conclusion": "success",
+   "created": "2026-11-14T03:25:52Z",
+   "name": "site static",
+   "run": 43551595026,
+   "started": "2026-11-14T03:25:53Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:27:22Z",
+   "conclusion": "success",
+   "created": "2026-11-14T03:25:52Z",
+   "name": "site community",
+   "run": 43551595026,
+   "started": "2026-11-14T03:25:53Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:27:12Z",
+   "conclusion": "skipped",
+   "created": "2026-11-14T03:27:12Z",
+   "name": "hass shard ${{ matrix.shard }}",
+   "run": 43551595026,
+   "started": "2026-11-14T03:27:12Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:32:16Z",
+   "conclusion": "success",
+   "created": "2026-11-14T03:32:01Z",
+   "name": "check",
+   "run": 43551595026,
+   "started": "2026-11-14T03:32:02Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:39:22Z",
+   "conclusion": "success",
+   "created": "2026-11-14T03:39:05Z",
+   "name": "quick",
+   "run": 43552723684,
+   "started": "2026-11-14T03:39:07Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:45:14Z",
+   "conclusion": "success",
+   "created": "2026-11-14T03:39:05Z",
+   "name": "site static",
+   "run": 43552723684,
+   "started": "2026-11-14T03:39:07Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:40:34Z",
+   "conclusion": "success",
+   "created": "2026-11-14T03:39:05Z",
+   "name": "site community",
+   "run": 43552723684,
+   "started": "2026-11-14T03:39:07Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:51:37Z",
+   "conclusion": "failure",
+   "created": "2026-11-14T03:39:23Z",
+   "name": "hass shard 2",
+   "run": 43552723684,
+   "started": "2026-11-14T03:39:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:47:44Z",
+   "conclusion": "failure",
+   "created": "2026-11-14T03:39:23Z",
+   "name": "hass shard 0",
+   "run": 43552723684,
+   "started": "2026-11-14T03:39:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:52:48Z",
+   "conclusion": "success",
+   "created": "2026-11-14T03:39:23Z",
+   "name": "hass shard 1",
+   "run": 43552723684,
+   "started": "2026-11-14T03:39:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:51:44Z",
+   "conclusion": "failure",
+   "created": "2026-11-14T03:39:23Z",
+   "name": "hass shard 3",
+   "run": 43552723684,
+   "started": "2026-11-14T03:39:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T03:53:35Z",
+   "conclusion": "failure",
+   "created": "2026-11-14T03:52:48Z",
+   "name": "check",
+   "run": 43552723684,
+   "started": "2026-11-14T03:53:21Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:11:11Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:09:29Z",
+   "name": "site community",
+   "run": 43555213691,
+   "started": "2026-11-14T04:09:30Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:15:38Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:09:29Z",
+   "name": "site static",
+   "run": 43555213691,
+   "started": "2026-11-14T04:09:30Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:09:49Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:09:29Z",
+   "name": "quick",
+   "run": 43555213691,
+   "started": "2026-11-14T04:09:30Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:17:58Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:09:49Z",
+   "name": "hass shard 0",
+   "run": 43555213691,
+   "started": "2026-11-14T04:09:50Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:22:03Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:09:49Z",
+   "name": "hass shard 1",
+   "run": 43555213691,
+   "started": "2026-11-14T04:09:50Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:21:47Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:09:49Z",
+   "name": "hass shard 3",
+   "run": 43555213691,
+   "started": "2026-11-14T04:11:12Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:22:06Z",
+   "conclusion": "failure",
+   "created": "2026-11-14T04:09:49Z",
+   "name": "hass shard 2",
+   "run": 43555213691,
+   "started": "2026-11-14T04:10:04Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:22:21Z",
+   "conclusion": "failure",
+   "created": "2026-11-14T04:22:06Z",
+   "name": "check",
+   "run": 43555213691,
+   "started": "2026-11-14T04:22:07Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:54:38Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:47:47Z",
+   "name": "site static",
+   "run": 43558398906,
+   "started": "2026-11-14T04:48:31Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:53:19Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:47:47Z",
+   "name": "site community",
+   "run": 43558398906,
+   "started": "2026-11-14T04:51:52Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T04:52:45Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:47:47Z",
+   "name": "quick",
+   "run": 43558398906,
+   "started": "2026-11-14T04:52:28Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:05:28Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:52:45Z",
+   "name": "hass shard 3",
+   "run": 43558398906,
+   "started": "2026-11-14T04:55:03Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:05:09Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:52:45Z",
+   "name": "hass shard 2",
+   "run": 43558398906,
+   "started": "2026-11-14T04:52:56Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:04:21Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:52:45Z",
+   "name": "hass shard 0",
+   "run": 43558398906,
+   "started": "2026-11-14T04:56:22Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:08:44Z",
+   "conclusion": "success",
+   "created": "2026-11-14T04:52:45Z",
+   "name": "hass shard 1",
+   "run": 43558398906,
+   "started": "2026-11-14T04:56:43Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:12:00Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:08:44Z",
+   "name": "check",
+   "run": 43558398906,
+   "started": "2026-11-14T05:11:47Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:24:13Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:22:47Z",
+   "name": "site community",
+   "run": 43561247442,
+   "started": "2026-11-14T05:22:48Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:28:54Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:22:47Z",
+   "name": "site static",
+   "run": 43561247442,
+   "started": "2026-11-14T05:22:48Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:23:01Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:22:47Z",
+   "name": "quick",
+   "run": 43561247442,
+   "started": "2026-11-14T05:22:49Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:34:11Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:23:01Z",
+   "name": "hass shard 1",
+   "run": 43561247442,
+   "started": "2026-11-14T05:23:02Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:31:57Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:23:01Z",
+   "name": "hass shard 2",
+   "run": 43561247442,
+   "started": "2026-11-14T05:24:14Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:38:22Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:23:01Z",
+   "name": "hass shard 0",
+   "run": 43561247442,
+   "started": "2026-11-14T05:26:32Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:37:54Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:23:01Z",
+   "name": "hass shard 3",
+   "run": 43561247442,
+   "started": "2026-11-14T05:24:44Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:38:33Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:38:23Z",
+   "name": "check",
+   "run": 43561247442,
+   "started": "2026-11-14T05:38:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:30:21Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:25:24Z",
+   "name": "site community",
+   "run": 43561454856,
+   "started": "2026-11-14T05:28:56Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:30:40Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:25:24Z",
+   "name": "quick",
+   "run": 43561454856,
+   "started": "2026-11-14T05:30:23Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:35:21Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:25:24Z",
+   "name": "site static",
+   "run": 43561454856,
+   "started": "2026-11-14T05:29:12Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:38:32Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:30:40Z",
+   "name": "hass shard 1",
+   "run": 43561454856,
+   "started": "2026-11-14T05:30:41Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:43:44Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:30:40Z",
+   "name": "hass shard 3",
+   "run": 43561454856,
+   "started": "2026-11-14T05:31:28Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:43:05Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:30:40Z",
+   "name": "hass shard 0",
+   "run": 43561454856,
+   "started": "2026-11-14T05:31:58Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:44:59Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:30:40Z",
+   "name": "hass shard 2",
+   "run": 43561454856,
+   "started": "2026-11-14T05:31:52Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T05:45:14Z",
+   "conclusion": "success",
+   "created": "2026-11-14T05:45:00Z",
+   "name": "check",
+   "run": 43561454856,
+   "started": "2026-11-14T05:45:01Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T06:22:42Z",
+   "conclusion": "success",
+   "created": "2026-11-14T06:22:24Z",
+   "name": "quick",
+   "run": 43566013954,
+   "started": "2026-11-14T06:22:25Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T06:23:50Z",
+   "conclusion": "success",
+   "created": "2026-11-14T06:22:24Z",
+   "name": "site community",
+   "run": 43566013954,
+   "started": "2026-11-14T06:22:25Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T06:28:30Z",
+   "conclusion": "success",
+   "created": "2026-11-14T06:22:24Z",
+   "name": "site static",
+   "run": 43566013954,
+   "started": "2026-11-14T06:22:25Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T06:34:41Z",
+   "conclusion": "success",
+   "created": "2026-11-14T06:22:42Z",
+   "name": "hass shard 0",
+   "run": 43566013954,
+   "started": "2026-11-14T06:22:44Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T06:34:17Z",
+   "conclusion": "success",
+   "created": "2026-11-14T06:22:42Z",
+   "name": "hass shard 1",
+   "run": 43566013954,
+   "started": "2026-11-14T06:22:44Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T06:36:04Z",
+   "conclusion": "success",
+   "created": "2026-11-14T06:22:42Z",
+   "name": "hass shard 3",
+   "run": 43566013954,
+   "started": "2026-11-14T06:22:44Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T06:30:16Z",
+   "conclusion": "success",
+   "created": "2026-11-14T06:22:42Z",
+   "name": "hass shard 2",
+   "run": 43566013954,
+   "started": "2026-11-14T06:22:44Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T06:36:18Z",
+   "conclusion": "success",
+   "created": "2026-11-14T06:36:04Z",
+   "name": "check",
+   "run": 43566013954,
+   "started": "2026-11-14T06:36:05Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:03:06Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:02:49Z",
+   "name": "quick",
+   "run": 43573890602,
+   "started": "2026-11-14T08:02:50Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:08:54Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:02:49Z",
+   "name": "site static",
+   "run": 43573890602,
+   "started": "2026-11-14T08:02:50Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:04:13Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:02:49Z",
+   "name": "site community",
+   "run": 43573890602,
+   "started": "2026-11-14T08:02:50Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:14:34Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:03:06Z",
+   "name": "hass shard 2",
+   "run": 43573890602,
+   "started": "2026-11-14T08:03:07Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:11:00Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:03:06Z",
+   "name": "hass shard 3",
+   "run": 43573890602,
+   "started": "2026-11-14T08:03:07Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:14:34Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:03:06Z",
+   "name": "hass shard 1",
+   "run": 43573890602,
+   "started": "2026-11-14T08:03:07Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:17:22Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:03:06Z",
+   "name": "hass shard 0",
+   "run": 43573890602,
+   "started": "2026-11-14T08:04:04Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:17:37Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:17:22Z",
+   "name": "check",
+   "run": 43573890602,
+   "started": "2026-11-14T08:17:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:48:20Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:48:02Z",
+   "name": "quick",
+   "run": 43577516399,
+   "started": "2026-11-14T08:48:03Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:54:26Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:48:02Z",
+   "name": "site static",
+   "run": 43577516399,
+   "started": "2026-11-14T08:48:21Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:50:47Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:48:02Z",
+   "name": "site community",
+   "run": 43577516399,
+   "started": "2026-11-14T08:49:05Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:02:46Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:48:20Z",
+   "name": "hass shard 2",
+   "run": 43577516399,
+   "started": "2026-11-14T08:51:01Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:04:26Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:48:20Z",
+   "name": "hass shard 0",
+   "run": 43577516399,
+   "started": "2026-11-14T08:50:48Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:01:20Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:48:20Z",
+   "name": "hass shard 1",
+   "run": 43577516399,
+   "started": "2026-11-14T08:49:13Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T08:59:50Z",
+   "conclusion": "success",
+   "created": "2026-11-14T08:48:20Z",
+   "name": "hass shard 3",
+   "run": 43577516399,
+   "started": "2026-11-14T08:51:37Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:07:41Z",
+   "conclusion": "success",
+   "created": "2026-11-14T09:04:26Z",
+   "name": "check",
+   "run": 43577516399,
+   "started": "2026-11-14T09:07:29Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:35:23Z",
+   "conclusion": "success",
+   "created": "2026-11-14T09:35:10Z",
+   "name": "quick",
+   "run": 43580280902,
+   "started": "2026-11-14T09:35:11Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:36:35Z",
+   "conclusion": "success",
+   "created": "2026-11-14T09:35:10Z",
+   "name": "site community",
+   "run": 43580280902,
+   "started": "2026-11-14T09:35:11Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:41:16Z",
+   "conclusion": "success",
+   "created": "2026-11-14T09:35:10Z",
+   "name": "site static",
+   "run": 43580280902,
+   "started": "2026-11-14T09:35:11Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:46:43Z",
+   "conclusion": "success",
+   "created": "2026-11-14T09:35:23Z",
+   "name": "hass shard 0",
+   "run": 43580280902,
+   "started": "2026-11-14T09:35:25Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:48:11Z",
+   "conclusion": "success",
+   "created": "2026-11-14T09:35:23Z",
+   "name": "hass shard 2",
+   "run": 43580280902,
+   "started": "2026-11-14T09:35:25Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:49:08Z",
+   "conclusion": "success",
+   "created": "2026-11-14T09:35:23Z",
+   "name": "hass shard 3",
+   "run": 43580280902,
+   "started": "2026-11-14T09:35:25Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:43:13Z",
+   "conclusion": "success",
+   "created": "2026-11-14T09:35:23Z",
+   "name": "hass shard 1",
+   "run": 43580280902,
+   "started": "2026-11-14T09:35:25Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T09:49:18Z",
+   "conclusion": "success",
+   "created": "2026-11-14T09:49:09Z",
+   "name": "check",
+   "run": 43580280902,
+   "started": "2026-11-14T09:49:10Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T14:02:31Z",
+   "conclusion": "success",
+   "created": "2026-11-14T13:56:22Z",
+   "name": "site static",
+   "run": 43602252624,
+   "started": "2026-11-14T13:56:23Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T13:57:49Z",
+   "conclusion": "success",
+   "created": "2026-11-14T13:56:22Z",
+   "name": "site community",
+   "run": 43602252624,
+   "started": "2026-11-14T13:56:23Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T13:56:39Z",
+   "conclusion": "success",
+   "created": "2026-11-14T13:56:22Z",
+   "name": "quick",
+   "run": 43602252624,
+   "started": "2026-11-14T13:56:23Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T14:08:09Z",
+   "conclusion": "success",
+   "created": "2026-11-14T13:56:39Z",
+   "name": "hass shard 2",
+   "run": 43602252624,
+   "started": "2026-11-14T13:56:41Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T14:10:43Z",
+   "conclusion": "success",
+   "created": "2026-11-14T13:56:39Z",
+   "name": "hass shard 1",
+   "run": 43602252624,
+   "started": "2026-11-14T13:56:41Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T14:06:06Z",
+   "conclusion": "success",
+   "created": "2026-11-14T13:56:39Z",
+   "name": "hass shard 3",
+   "run": 43602252624,
+   "started": "2026-11-14T13:56:41Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T14:09:43Z",
+   "conclusion": "success",
+   "created": "2026-11-14T13:56:39Z",
+   "name": "hass shard 0",
+   "run": 43602252624,
+   "started": "2026-11-14T13:56:41Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T14:10:57Z",
+   "conclusion": "success",
+   "created": "2026-11-14T14:10:43Z",
+   "name": "check",
+   "run": 43602252624,
+   "started": "2026-11-14T14:10:44Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T18:40:45Z",
+   "conclusion": "success",
+   "created": "2026-11-14T18:40:28Z",
+   "name": "quick",
+   "run": 43627910752,
+   "started": "2026-11-14T18:40:30Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T18:41:55Z",
+   "conclusion": "success",
+   "created": "2026-11-14T18:40:28Z",
+   "name": "site community",
+   "run": 43627910752,
+   "started": "2026-11-14T18:40:30Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T18:46:36Z",
+   "conclusion": "success",
+   "created": "2026-11-14T18:40:28Z",
+   "name": "site static",
+   "run": 43627910752,
+   "started": "2026-11-14T18:40:30Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T18:53:51Z",
+   "conclusion": "success",
+   "created": "2026-11-14T18:40:46Z",
+   "name": "hass shard 3",
+   "run": 43627910752,
+   "started": "2026-11-14T18:40:47Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T18:50:28Z",
+   "conclusion": "success",
+   "created": "2026-11-14T18:40:46Z",
+   "name": "hass shard 0",
+   "run": 43627910752,
+   "started": "2026-11-14T18:41:56Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T18:59:59Z",
+   "conclusion": "success",
+   "created": "2026-11-14T18:40:46Z",
+   "name": "hass shard 1",
+   "run": 43627910752,
+   "started": "2026-11-14T18:46:37Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T18:58:07Z",
+   "conclusion": "success",
+   "created": "2026-11-14T18:40:46Z",
+   "name": "hass shard 2",
+   "run": 43627910752,
+   "started": "2026-11-14T18:44:23Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:01:02Z",
+   "conclusion": "success",
+   "created": "2026-11-14T18:59:59Z",
+   "name": "check",
+   "run": 43627910752,
+   "started": "2026-11-14T19:00:43Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:31:07Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:23:22Z",
+   "name": "site static",
+   "run": 43631279410,
+   "started": "2026-11-14T19:24:54Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:25:30Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:23:22Z",
+   "name": "quick",
+   "run": 43631279410,
+   "started": "2026-11-14T19:25:17Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:25:16Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:23:22Z",
+   "name": "site community",
+   "run": 43631279410,
+   "started": "2026-11-14T19:23:43Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:33:56Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:25:30Z",
+   "name": "hass shard 1",
+   "run": 43631279410,
+   "started": "2026-11-14T19:25:32Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:44:30Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:25:31Z",
+   "name": "hass shard 2",
+   "run": 43631279410,
+   "started": "2026-11-14T19:29:16Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:47:20Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:25:31Z",
+   "name": "hass shard 3",
+   "run": 43631279410,
+   "started": "2026-11-14T19:31:09Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:42:21Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:25:31Z",
+   "name": "hass shard 0",
+   "run": 43631279410,
+   "started": "2026-11-14T19:28:26Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:51:09Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:47:20Z",
+   "name": "check",
+   "run": 43631279410,
+   "started": "2026-11-14T19:51:00Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:50:58Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:46:44Z",
+   "name": "quick",
+   "run": 43633924243,
+   "started": "2026-11-14T19:50:41Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:53:27Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:46:44Z",
+   "name": "site community",
+   "run": 43633924243,
+   "started": "2026-11-14T19:51:10Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T19:59:21Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:46:44Z",
+   "name": "site static",
+   "run": 43633924243,
+   "started": "2026-11-14T19:52:57Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:17:18Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:50:59Z",
+   "name": "hass shard 3",
+   "run": 43633924243,
+   "started": "2026-11-14T20:03:01Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:16:46Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:50:59Z",
+   "name": "hass shard 1",
+   "run": 43633924243,
+   "started": "2026-11-14T20:05:24Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:15:51Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:50:59Z",
+   "name": "hass shard 2",
+   "run": 43633924243,
+   "started": "2026-11-14T20:07:42Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:26:29Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:50:59Z",
+   "name": "hass shard 0",
+   "run": 43633924243,
+   "started": "2026-11-14T20:11:28Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:28:58Z",
+   "conclusion": "success",
+   "created": "2026-11-14T20:26:30Z",
+   "name": "check",
+   "run": 43633924243,
+   "started": "2026-11-14T20:28:45Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:01:28Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:55:22Z",
+   "name": "quick",
+   "run": 43634692444,
+   "started": "2026-11-14T19:58:32Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:07:41Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:55:22Z",
+   "name": "site static",
+   "run": 43634692444,
+   "started": "2026-11-14T20:01:29Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:20:02Z",
+   "conclusion": "success",
+   "created": "2026-11-14T19:55:22Z",
+   "name": "site community",
+   "run": 43634692444,
+   "started": "2026-11-14T20:18:36Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:01:28Z",
+   "conclusion": "skipped",
+   "created": "2026-11-14T20:01:29Z",
+   "name": "hass shard ${{ matrix.shard }}",
+   "run": 43634692444,
+   "started": "2026-11-14T20:01:29Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:26:43Z",
+   "conclusion": "success",
+   "created": "2026-11-14T20:20:03Z",
+   "name": "check",
+   "run": 43634692444,
+   "started": "2026-11-14T20:26:31Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:54:58Z",
+   "conclusion": "success",
+   "created": "2026-11-14T20:53:33Z",
+   "name": "site community",
+   "run": 43639340719,
+   "started": "2026-11-14T20:53:34Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:59:39Z",
+   "conclusion": "success",
+   "created": "2026-11-14T20:53:33Z",
+   "name": "site static",
+   "run": 43639340719,
+   "started": "2026-11-14T20:53:34Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T20:53:46Z",
+   "conclusion": "success",
+   "created": "2026-11-14T20:53:33Z",
+   "name": "quick",
+   "run": 43639340719,
+   "started": "2026-11-14T20:53:34Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T21:08:18Z",
+   "conclusion": "success",
+   "created": "2026-11-14T20:53:47Z",
+   "name": "hass shard 3",
+   "run": 43639340719,
+   "started": "2026-11-14T20:53:48Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T21:02:33Z",
+   "conclusion": "success",
+   "created": "2026-11-14T20:53:47Z",
+   "name": "hass shard 1",
+   "run": 43639340719,
+   "started": "2026-11-14T20:53:48Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T21:07:46Z",
+   "conclusion": "success",
+   "created": "2026-11-14T20:53:47Z",
+   "name": "hass shard 2",
+   "run": 43639340719,
+   "started": "2026-11-14T20:53:48Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T21:05:13Z",
+   "conclusion": "success",
+   "created": "2026-11-14T20:53:47Z",
+   "name": "hass shard 0",
+   "run": 43639340719,
+   "started": "2026-11-14T20:53:48Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T21:08:28Z",
+   "conclusion": "success",
+   "created": "2026-11-14T21:08:18Z",
+   "name": "check",
+   "run": 43639340719,
+   "started": "2026-11-14T21:08:19Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-15T00:00:16Z",
+   "conclusion": "success",
+   "created": "2026-11-14T23:58:50Z",
+   "name": "site community",
+   "run": 43655881666,
+   "started": "2026-11-14T23:58:52Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-14T23:59:08Z",
+   "conclusion": "success",
+   "created": "2026-11-14T23:58:50Z",
+   "name": "quick",
+   "run": 43655881666,
+   "started": "2026-11-14T23:58:52Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-15T00:04:58Z",
+   "conclusion": "success",
+   "created": "2026-11-14T23:58:50Z",
+   "name": "site static",
+   "run": 43655881666,
+   "started": "2026-11-14T23:58:52Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-15T00:08:06Z",
+   "conclusion": "success",
+   "created": "2026-11-14T23:59:08Z",
+   "name": "hass shard 0",
+   "run": 43655881666,
+   "started": "2026-11-14T23:59:09Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-15T00:12:39Z",
+   "conclusion": "success",
+   "created": "2026-11-14T23:59:08Z",
+   "name": "hass shard 3",
+   "run": 43655881666,
+   "started": "2026-11-14T23:59:10Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-15T00:14:25Z",
+   "conclusion": "failure",
+   "created": "2026-11-14T23:59:08Z",
+   "name": "hass shard 2",
+   "run": 43655881666,
+   "started": "2026-11-14T23:59:09Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-15T00:14:34Z",
+   "conclusion": "failure",
+   "created": "2026-11-14T23:59:08Z",
+   "name": "hass shard 1",
+   "run": 43655881666,
+   "started": "2026-11-14T23:59:09Z"
+  },
+  {
+   "attempt": 1,
+   "completed": "2026-11-15T00:14:49Z",
+   "conclusion": "failure",
+   "created": "2026-11-15T00:14:34Z",
+   "name": "check",
+   "run": 43655881666,
+   "started": "2026-11-15T00:14:36Z"
+  }
+ ],
+ "missing_coverage": {
+  "host_cpu_disk_metrics": "UNKNOWN: no per-interval CPU/iowait/disk series in the receipts",
+  "repository_variable_value": "UNKNOWN: HASS_SHARD_JOBS value not read (config read out of scope)",
+  "runner_identity": "UNKNOWN: receipts carry no runner name/alias per job",
+  "unsampled_runs": "jobs.json is a sample; runs without sampled jobs have no elapsed data"
+ },
+ "runs": [
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T07:58:00Z",
+   "event": "pull_request",
+   "head": "e2543ee631c3",
+   "id": 43573529242,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T07:52:56Z",
+   "event": "pull_request",
+   "head": "f43600c246ba",
+   "id": 43573153969,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T07:51:24Z",
+   "event": "pull_request",
+   "head": "41ed23035dbb",
+   "id": 43573032537,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T07:47:16Z",
+   "event": "pull_request",
+   "head": "a93e4071adf6",
+   "id": 43572710817,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T07:44:00Z",
+   "event": "pull_request",
+   "head": "6fd6a3c07c98",
+   "id": 43572463468,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T06:52:43Z",
+   "event": "push",
+   "head": "4938e550e14f",
+   "id": 43568449755,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T06:42:45Z",
+   "event": "pull_request",
+   "head": "cc3cac10b63b",
+   "id": 43567674628,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T06:25:58Z",
+   "event": "pull_request",
+   "head": "2d330107e3d9",
+   "id": 43566303822,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T06:22:23Z",
+   "event": "pull_request",
+   "head": "f8fc5168899a",
+   "id": 43566013954,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T06:02:52Z",
+   "event": "push",
+   "head": "0989857e6c9e",
+   "id": 43564404921,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T05:52:53Z",
+   "event": "push",
+   "head": "6bdf919435aa",
+   "id": 43563632151,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T05:48:07Z",
+   "event": "pull_request",
+   "head": "b9601a1c8645",
+   "id": 43563262350,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T05:40:48Z",
+   "event": "pull_request",
+   "head": "45935064b80f",
+   "id": 43562689900,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T05:25:24Z",
+   "event": "pull_request",
+   "head": "1ff697b32c5a",
+   "id": 43561454856,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T05:22:47Z",
+   "event": "push",
+   "head": "8d22d9b33b3f",
+   "id": 43561247442,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T05:18:34Z",
+   "event": "pull_request",
+   "head": "c0d55989dab2",
+   "id": 43560898167,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T04:52:49Z",
+   "event": "push",
+   "head": "c739c98e6b7a",
+   "id": 43558801822,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T04:51:51Z",
+   "event": "pull_request",
+   "head": "f60b1517224b",
+   "id": 43558723406,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T04:47:47Z",
+   "event": "pull_request",
+   "head": "8336af99d441",
+   "id": 43558398906,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T04:42:41Z",
+   "event": "push",
+   "head": "fbeba8816975",
+   "id": 43557992653,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T04:39:55Z",
+   "event": "pull_request",
+   "head": "da8f3102449d",
+   "id": 43557767326,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T04:38:33Z",
+   "event": "pull_request",
+   "head": "452f80270d76",
+   "id": 43557663251,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T04:34:53Z",
+   "event": "push",
+   "head": "39f03b99e413",
+   "id": 43557359999,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "failure",
+   "created": "2026-11-14T04:09:28Z",
+   "event": "pull_request",
+   "head": "04dec5463fa5",
+   "id": 43555213691,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "failure",
+   "created": "2026-11-14T04:01:33Z",
+   "event": "pull_request",
+   "head": "ae7ee68d647b",
+   "id": 43554558279,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "failure",
+   "created": "2026-11-14T03:49:01Z",
+   "event": "pull_request",
+   "head": "630b0b37caba",
+   "id": 43553546652,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T03:48:33Z",
+   "event": "pull_request",
+   "head": "c02382d9290e",
+   "id": 43553510013,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "failure",
+   "created": "2026-11-14T03:39:05Z",
+   "event": "pull_request",
+   "head": "2dd855512c21",
+   "id": 43552723684,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T03:25:51Z",
+   "event": "pull_request",
+   "head": "b9a134ca1242",
+   "id": 43551595026,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "failure",
+   "created": "2026-11-14T03:13:05Z",
+   "event": "push",
+   "head": "78f64070b2b3",
+   "id": 43550458639,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T03:12:51Z",
+   "event": "push",
+   "head": "8c948372e7ff",
+   "id": 43550436688,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "failure",
+   "created": "2026-11-14T03:04:02Z",
+   "event": "push",
+   "head": "9f49e3c0a767",
+   "id": 43549651208,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T03:03:47Z",
+   "event": "push",
+   "head": "e1fe502effaa",
+   "id": 43549629835,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T03:03:31Z",
+   "event": "push",
+   "head": "b798adb95e07",
+   "id": 43549605754,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T02:53:38Z",
+   "event": "push",
+   "head": "e5b3e8ea296e",
+   "id": 43548751616,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T02:53:25Z",
+   "event": "push",
+   "head": "2c320aa10ef9",
+   "id": 43548733117,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T02:53:16Z",
+   "event": "push",
+   "head": "5e4c2f30081e",
+   "id": 43548721675,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T02:50:04Z",
+   "event": "pull_request",
+   "head": "b82d711fb689",
+   "id": 43548441786,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T02:35:20Z",
+   "event": "pull_request",
+   "head": "c081b823f748",
+   "id": 43547142606,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T01:40:11Z",
+   "event": "pull_request",
+   "head": "7f4eee40a016",
+   "id": 43541960267,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T01:32:06Z",
+   "event": "pull_request",
+   "head": "0df5ae582ce9",
+   "id": 43541161012,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T01:31:47Z",
+   "event": "pull_request",
+   "head": "1d05adabd6fa",
+   "id": 43541129095,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T01:28:35Z",
+   "event": "pull_request",
+   "head": "a591655c881d",
+   "id": 43540804205,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T01:26:20Z",
+   "event": "pull_request",
+   "head": "3ba9874d39d4",
+   "id": 43540587682,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T01:25:44Z",
+   "event": "pull_request",
+   "head": "bf06e3c3f24b",
+   "id": 43540529398,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T01:14:04Z",
+   "event": "pull_request",
+   "head": "aeea70d3314e",
+   "id": 43539327093,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T01:07:21Z",
+   "event": "pull_request",
+   "head": "4f9ea651e538",
+   "id": 43538628926,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T01:01:31Z",
+   "event": "pull_request",
+   "head": "cb43edfe3381",
+   "id": 43537972553,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T00:59:00Z",
+   "event": "pull_request",
+   "head": "f46233a8c10b",
+   "id": 43537697649,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T00:58:23Z",
+   "event": "pull_request",
+   "head": "96e8fba45684",
+   "id": 43537636225,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T00:46:07Z",
+   "event": "pull_request",
+   "head": "a39fe43b8903",
+   "id": 43536379911,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T00:43:15Z",
+   "event": "pull_request",
+   "head": "991928015c58",
+   "id": 43536070495,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "failure",
+   "created": "2026-11-14T23:58:50Z",
+   "event": "pull_request",
+   "head": "705bc17cb8ea",
+   "id": 43655881666,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T21:45:55Z",
+   "event": "push",
+   "head": "aa4887595c8f",
+   "id": 43644528395,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T21:25:05Z",
+   "event": "pull_request",
+   "head": "ad7fbc392722",
+   "id": 43642701420,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T20:57:01Z",
+   "event": "push",
+   "head": "5532a2c8e3a2",
+   "id": 43640171797,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T20:56:49Z",
+   "event": "push",
+   "head": "9659ea7356cd",
+   "id": 43640153989,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T20:56:35Z",
+   "event": "push",
+   "head": "33bc3a1e0b85",
+   "id": 43640134309,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T20:47:21Z",
+   "event": "push",
+   "head": "acd7076176a9",
+   "id": 43639340719,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T20:47:05Z",
+   "event": "push",
+   "head": "2ee4e70ebe0b",
+   "id": 43639316702,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T20:46:52Z",
+   "event": "push",
+   "head": "b733722e5575",
+   "id": 43639296358,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T20:36:43Z",
+   "event": "push",
+   "head": "a3c24c099a59",
+   "id": 43638410538,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T20:36:29Z",
+   "event": "push",
+   "head": "f4d15bf8d1f3",
+   "id": 43638391065,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:58:45Z",
+   "event": "pull_request",
+   "head": "84331abb7804",
+   "id": 43634981469,
+   "status": "completed"
+  },
+  {
+   "attempt": 2,
+   "conclusion": "success",
+   "created": "2026-11-14T19:58:13Z",
+   "event": "pull_request",
+   "head": "ff9825ce5c4a",
+   "id": 43634936472,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:55:21Z",
+   "event": "pull_request",
+   "head": "08ee44f87bc8",
+   "id": 43634692444,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:54:56Z",
+   "event": "pull_request",
+   "head": "d545eeaaac7d",
+   "id": 43634652621,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:52:38Z",
+   "event": "pull_request",
+   "head": "cfe6090a4ee8",
+   "id": 43634454137,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:50:10Z",
+   "event": "pull_request",
+   "head": "299278c21f4a",
+   "id": 43634231430,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:46:44Z",
+   "event": "pull_request",
+   "head": "7b26ce71d89f",
+   "id": 43633924243,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:35:15Z",
+   "event": "pull_request",
+   "head": "17db1ca0cf67",
+   "id": 43632902790,
+   "status": "completed"
+  },
+  {
+   "attempt": 2,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T19:31:37Z",
+   "event": "pull_request",
+   "head": "d05e78bc493a",
+   "id": 43632565058,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T19:25:59Z",
+   "event": "pull_request",
+   "head": "1addc4875c2a",
+   "id": 43632056845,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:22:53Z",
+   "event": "pull_request",
+   "head": "155e1fc20d9f",
+   "id": 43631783615,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:22:11Z",
+   "event": "pull_request",
+   "head": "9f4234073e21",
+   "id": 43631721488,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:17:29Z",
+   "event": "push",
+   "head": "cfc29b9960ec",
+   "id": 43631279410,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T19:17:14Z",
+   "event": "push",
+   "head": "42df6e123dca",
+   "id": 43631257859,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T19:06:54Z",
+   "event": "push",
+   "head": "d9824f6448d6",
+   "id": 43630308540,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T18:52:38Z",
+   "event": "pull_request",
+   "head": "48d0c32307b3",
+   "id": 43629016385,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T18:45:22Z",
+   "event": "pull_request",
+   "head": "cd95f88aab06",
+   "id": 43628360205,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T18:40:28Z",
+   "event": "pull_request",
+   "head": "e6cba5a94cf6",
+   "id": 43627910752,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T18:38:12Z",
+   "event": "pull_request",
+   "head": "93e9125752f7",
+   "id": 43627701627,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T16:39:00Z",
+   "event": "schedule",
+   "head": "44b0b30445fe",
+   "id": 43616754719,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T14:55:33Z",
+   "event": "push",
+   "head": "44b0b30445fe",
+   "id": 43607387335,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T14:35:17Z",
+   "event": "pull_request",
+   "head": "c44793989fa4",
+   "id": 43605643816,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T14:25:24Z",
+   "event": "push",
+   "head": "b0b432542506",
+   "id": 43604780369,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T13:56:22Z",
+   "event": "pull_request",
+   "head": "532972e37b99",
+   "id": 43602252624,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T11:34:01Z",
+   "event": "push",
+   "head": "f3e41185b50d",
+   "id": 43590634170,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T11:09:38Z",
+   "event": "pull_request",
+   "head": "9f5e1602b92e",
+   "id": 43588686256,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T10:47:58Z",
+   "event": "pull_request",
+   "head": "d546bee2ad92",
+   "id": 43586969577,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T09:22:52Z",
+   "event": "push",
+   "head": "f398337e7ed9",
+   "id": 43580280902,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T09:12:53Z",
+   "event": "push",
+   "head": "24e975964d85",
+   "id": 43579480706,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T09:02:52Z",
+   "event": "push",
+   "head": "5836d22ce16a",
+   "id": 43578657016,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T08:57:52Z",
+   "event": "pull_request",
+   "head": "0c372b53c240",
+   "id": 43578256422,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T08:48:02Z",
+   "event": "pull_request",
+   "head": "b974638c4de6",
+   "id": 43577516399,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T08:41:03Z",
+   "event": "pull_request",
+   "head": "f15f9a989ec4",
+   "id": 43576977673,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T08:36:37Z",
+   "event": "pull_request",
+   "head": "6abd773fb18d",
+   "id": 43576638006,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "cancelled",
+   "created": "2026-11-14T08:28:28Z",
+   "event": "pull_request",
+   "head": "c9db577041de",
+   "id": 43575989183,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T08:22:54Z",
+   "event": "push",
+   "head": "8e5fad42267b",
+   "id": 43575556637,
+   "status": "completed"
+  },
+  {
+   "attempt": 1,
+   "conclusion": "success",
+   "created": "2026-11-14T08:02:30Z",
+   "event": "pull_request",
+   "head": "86b43c1c75fb",
+   "id": 43573890602,
+   "status": "completed"
+  }
+ ],
+ "schema_version": 1,
+ "window": {
+  "end_exclusive": "2026-11-15T00:00:00Z",
+  "start": "2026-11-14T00:00:00Z"
+ },
+ "workflow": {
+  "fallback_width": 4,
+  "main_sha": "1a8efafbef247783f6a64c0d1f4bf84d96ceaffc",
+  "path": ".github/workflows/check.yml",
+  "quote": [
+   "# free. Retune with the repo variable HASS_SHARD_JOBS (1-8) without a code change.",
+   "HASS_SHARD_JOBS: ${{ vars.HASS_SHARD_JOBS || 4 }}"
+  ],
+  "sha256": "cc91cfaaaf826c693ab0f1d06ae1af18129bc917f44fb6d05df5fd74273471dd"
+ }
+}

@@ -1,0 +1,19 @@
+{
+ "schema_version": 1,
+ "inspected_main": "1a8efafbef247783f6a64c0d1f4bf84d96ceaffc",
+ "candidate": true,
+ "installed": false,
+ "no_apply_boundary": "report-only; no variable, cap, workflow, runner or repository change; no network; reused sources are read-only",
+ "reused_sources": {
+  ".github/workflows/check.yml": "cc91cfaaaf826c693ab0f1d06ae1af18129bc917f44fb6d05df5fd74273471dd",
+  "agent-work/reports/ci-metrics-cache/runs-avocado-shack-2026-11-13.json": "215d68b6d1b757f41c34151490158fc92c8e61f5235a084bbf1c4eabcc6647e4",
+  "agent-work/reports/ci-metrics-cache/runs-avocado-shack-2026-11-14.json": "7df05f1e04f09beb191ec87edf0a0812b7e035f471ceece34c80fa876f968837",
+  "agent-work/reports/ci-metrics-cache/jobs.json": "e106324b6ffa091f7211c2b7c15c4382e77a76e8f300cf209006db0dc2069c41"
+ },
+ "package_sources": {
+  "candidate.py": "1556009f5876db0bc2225c708a047159d49287ecd2ac148b4e56e6e4688f7927",
+  "fixtures.json": "6e8b8a18e152d5855deb3174c1fb4ce446a9e32afedc4b96080fae26f194bad9",
+  "SOURCES.json": "1477589d3569d6db53c3c5fc494bb0fcfa9fea3448dc18cbc85951a384f192a4",
+  "avocado-contention-retuning-20261114.md": "a47bbcf13a91789e1dd470185ac094a9bf81ef38cb60c935e310bff7a5b9ddc7"
+ }
+}
