@@ -46,7 +46,12 @@ def safe_path(rel):
         ATTEMPTED_IO.append(rel)
         raise SourceError("path escapes package root: %r" % rel)
     p = os.path.join(ROOT, rel)
-    if os.path.islink(p) or os.path.realpath(p) != os.path.normpath(p) and os.path.exists(p):
+    resolved = os.path.realpath(p)
+    probe, linked = os.path.normpath(p), False
+    while probe != ROOT:
+        linked = linked or os.path.islink(probe)
+        probe = os.path.dirname(probe)
+    if linked or os.path.commonpath((ROOT, resolved)) != ROOT or resolved != os.path.normpath(p):
         ATTEMPTED_IO.append(rel)
         raise SourceError("symlink path refused: %r" % rel)
     return p
@@ -91,9 +96,16 @@ def classify(e, groups):
         if status in ("merged", "pr", "queued"):
             conflicts.append("recorded CUT but state=%s" % status)
     else:
+        # Preserve exact-ID evidence even when it is not a recognized release/denial.
+        # Quoting a record does not infer approval or lift its prerequisite hold.
+        for h in log_hits:
+            decision.append("exact-ID log record (not an approval): " + h["text"])
+            src.append("G-DECISIONS.log:%d" % h["line"])
+            date, scope = h["date"], "EXACT_ID_LOG"
         if "APPROVED 2026-11-07" in why:
             decision.append("state note 'G APPROVED 2026-11-07'; log 1635 approves a group ('Avocado site 9') with no ID list")
-            date, scope = "2026-11-07", "STATE_NOTE_AND_GROUP_LOG_1635_NO_ID_LIST"
+            if not log_hits:
+                date, scope = "2026-11-07", "STATE_NOTE_AND_GROUP_LOG_1635_NO_ID_LIST"
             src += ["modes/unit-state.json:%s.why" % e["id"], "G-DECISIONS.log:1635"]
             missing.append("no per-ID approval record naming this ID")
             if e.get("applied"):
@@ -101,16 +113,17 @@ def classify(e, groups):
         elif "HOLD" in why or "held for G" in why or "dropped" in why:
             m = re.search(r"G (\d{4}-\d\d-\d\d)", why)
             decision.append("state note: " + why[:160])
-            date = m.group(1) if m else ""
-            scope = "STATE_NOTE_ONLY"
+            if not log_hits:
+                date = m.group(1) if m else ""
+                scope = "STATE_NOTE_ONLY"
+                missing.append("no per-ID log line; state note is operator-written")
             src.append("modes/unit-state.json:%s.why" % e["id"])
-            missing.append("no per-ID log line; state note is operator-written")
             if "HASS-LIVE-AUDIT-1" in why:
                 decision.append("hold generally lifted by log 1896, no per-ID release for this ID")
                 src.append("G-DECISIONS.log:1896")
             if "dropped" in why:
                 conflicts.append("state says dropped but APPLIED json lists it held and status=%s" % status)
-        else:
+        elif not log_hits:
             missing.append("no per-ID decision record found")
             scope = "NONE"
         if e.get("applied"):
@@ -282,6 +295,19 @@ class Cases(unittest.TestCase):
         self.assertEqual(rows["AV9001-04"]["disposition"], "HOLD")
         self.assertEqual(rows["AV9001-05"]["disposition"], "RELEASE-RECORDED")
 
+    def test_exact_prerequisite_hold_is_preserved(self):
+        e = dict(self.fx["entries"][1], id="AV9001-06")
+        text = "- 2026-11-05 G: released 12 (AV9001-06 left held: needs a 5-unit prerequisite chain)"
+        e["log_exact"] = [{"id": e["id"], "line": 1580, "date": "2026-11-05", "text": text}]
+        r = classify(e, {"state_as_of": "fx"})
+        self.assertEqual(r["disposition"], "HOLD")
+        self.assertEqual(r["scope_match"], "EXACT_ID_LOG")
+        self.assertEqual(r["decision_date"], "2026-11-05")
+        self.assertIn(text, r["recorded_decision"])
+        self.assertIn("G-DECISIONS.log:1580", r["decision_source"])
+        self.assertNotIn("no per-ID log line", r["missing_evidence"])
+        self.assertIn("merge is execution", r["conflicts"])
+
     def test_merged_state_does_not_prove_authority_and_tsv_escapes_cells(self):
         rows = {x["id"]: x for x in emit_rows(self.src(self.fx["entries"]))}
         self.assertEqual(rows["AV9001-03"]["current_status"], "merged")
@@ -290,6 +316,44 @@ class Cases(unittest.TestCase):
         self.assertEqual(tsv_cell("=1+1"), "'=1+1")
         line = render([dict(rows["AV9001-03"], recorded_decision="x\ty\n=z")]).split("\n")[1]
         self.assertEqual(len(line.split("\t")), len(COLS))
+
+    def test_emit_refuses_symlink_ancestors_for_new_files(self):
+        import shutil, subprocess, tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = os.path.realpath(tmp)
+            pkg, outside = os.path.join(tmp, "package"), os.path.join(tmp, "outside")
+            os.mkdir(pkg)
+            os.mkdir(outside)
+            os.mkdir(os.path.join(pkg, "real"))
+            script = os.path.join(pkg, "candidate.py")
+            shutil.copyfile(__file__, script)
+            with open(os.path.join(pkg, "sources.json"), "w") as f:
+                json.dump(self.src(self.fx["entries"]), f)
+            os.symlink(outside, os.path.join(pkg, "link"))
+            os.symlink(os.path.join(pkg, "real"), os.path.join(pkg, "inside"))
+            os.symlink(os.path.join(outside, "missing"), os.path.join(pkg, "dangling"))
+            os.symlink(os.path.join(outside, "leaf.tsv"), os.path.join(pkg, "leaf.tsv"))
+            with open(os.path.join(outside, "existing.tsv"), "w") as f:
+                f.write("unchanged")
+            for rel in ("link/new.tsv", "link/existing.tsv", "inside/new.tsv", "dangling/new.tsv", "leaf.tsv"):
+                with self.subTest(rel=rel):
+                    r = subprocess.run([sys.executable, script, "--emit", rel, "--sources", "sources.json"],
+                                       capture_output=True, text=True)
+                    self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+                    self.assertIn("symlink path refused", r.stderr)
+                    with patch.dict(globals(), ROOT=pkg):
+                        with self.assertRaises(SourceError):
+                            safe_path(rel)
+            self.assertEqual(os.listdir(outside), ["existing.tsv"])
+            with open(os.path.join(outside, "existing.tsv")) as f:
+                self.assertEqual(f.read(), "unchanged")
+            self.assertEqual(os.listdir(os.path.join(pkg, "real")), [])
+            r = subprocess.run([sys.executable, script, "--emit", "real/new.tsv", "--sources", "sources.json"],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            with open(os.path.join(pkg, "real", "new.tsv")) as f:
+                self.assertEqual(check_text(f.read(), self.src(self.fx["entries"])), len(self.fx["entries"]))
 
     def test_schema_path_escape_symlink_and_side_effect_boundary(self):
         del ATTEMPTED_IO[:]

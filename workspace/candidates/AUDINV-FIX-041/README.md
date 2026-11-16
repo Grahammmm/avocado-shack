@@ -5,7 +5,7 @@ Report-only. The 76 IDs classed PROPOSED (48) or UNCLEAR (28) in `reports/QUEUE-
 decisions and unit state. Nothing here approves, denies, revives, edits state/queue/ledger or contacts G.
 
 ## Files (all owned; nothing else is changed)
-- `candidate.py` - stdlib CLI plus the six embedded tests (local-only; not collected by CI)
+- `candidate.py` - stdlib CLI plus eight embedded tests (local-only; not collected by CI)
 - `fixtures.json` - synthetic cases (AV9001-* are invented IDs)
 - `BASES.json` - inspected main, source and package digests, no-apply boundary
 - `SOURCES.json` - sanitized snapshot of every cited source row, digests, missing coverage
@@ -19,6 +19,7 @@ python3 workspace/candidates/AUDINV-FIX-041/candidate.py --check avocado-76-deci
 ```
 `--snapshot` (read explicit files, write only SOURCES.json) and `--emit` regenerate the artifacts; `--check` re-derives every
 row from SOURCES.json and fails on any difference, missing/extra/duplicate ID or bad disposition.
+Package paths reject symlinked ancestors (including internal/dangling links) even when an output leaf does not exist.
 
 ## What the report says (counts from the TSV)
 - 76 rows: 66 HOLD, 7 CUT-RECORDED, 2 RELEASE-RECORDED, 1 DENIED.
@@ -29,6 +30,8 @@ row from SOURCES.json and fails on any difference, missing/extra/duplicate ID or
 - HOLD: everything else. Reasons are in `scope_match`, `conflicts` and `missing_evidence`: 8 rows carry only an operator state note
   "G APPROVED 2026-11-07" plus the ID-less group line 1635 ("Avocado site 9 APPROVED"); others carry a hold/drop note or only the
   2026-11-05 audit hold (line 1565 / QUEUE-AUDIT-APPLIED.json); several have NO per-ID record.
+- AV1922-01 preserves the exact-ID prerequisite hold at `G-DECISIONS.log:1580`: it was left held pending a five-unit chain.
+  Other exact-ID log wording is retained verbatim without inferring approval; state/group notes do not erase that evidence.
 - Line 1931 (approve ALL 295 NOT-STARTED audit rows) names no ID and does not authorize these feature proposals.
 - `merged` rows are historical execution; 'state=merged while recorded hold stands' is flagged as a conflict and stays HOLD.
 

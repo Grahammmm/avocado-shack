@@ -6,8 +6,8 @@
  "installed": false,
  "package_digests_sha256": {
   "SOURCES.json": "265e9bd8b8392c61684672bb34394a66ae98f9008fd3848487e37ffccc9e2d20",
-  "avocado-76-decision-reconciliation.tsv": "f768aaf062cbb7b25f115a48443aeff459917a10b50c03ee305fb364c6906a35",
-  "candidate.py": "2080bf4da2a70f7c4b5675b672178351b19be01a9ca8543c8b8ca832716c89a0",
+  "avocado-76-decision-reconciliation.tsv": "9afd9e45a8d7437f07424bca29c700986e05f3260df1794784407d37562150d5",
+  "candidate.py": "444626fe6abf3d2e69a47b67bf0afc584dbcb78bf270e83f800ef13e92570337",
   "fixtures.json": "0f48ce703e5347d47ec7305d939b1647c3c7466ac7878dc7e4d9358c2532cc5e"
  },
  "reused_helpers": "none (stdlib only)",
