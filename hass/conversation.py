@@ -1635,6 +1635,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 photos = self.photos.fetch(msg.provider_id, count)
                 if not isinstance(photos, list) or len(photos) != count or not all(isinstance(p, (bytes, bytearray)) for p in photos):
                     raise ValueError("fetch")
+        except media.Refused as exc:
+            return self._photos_refused([(getattr(exc, "position", 1), exc)], count)
         except Exception:  # never applied or read without the photo: retry via the inbox, or one reply on the last try
             if not last_try: raise AttachmentPending("fetch") from None
             return self._reply(FETCH_FAILED) or "attachment-failed"
