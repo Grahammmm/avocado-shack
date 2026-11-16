@@ -28,21 +28,21 @@ def _edit(field, before, after):
 class ProposalHikeTimeTests(unittest.TestCase):
     def test_edit_shows_both_sides_with_weekday(self):
         self.assertEqual(_edit("startsAt", "2026-11-07T09:00:00-08:00", "2026-11-14T10:30:00-08:00"),
-                         ["Here's the change I'd make:", 'this, the start time:', '  was: Saturday, Nov 7 at 9 am (Pacific time)', '  now: Saturday, Nov 14 at 10:30 am (Pacific time)']
+                         ["Here's the change I'd make:", 'this: rescheduled', 'this, the start time:', '  was: Saturday, Nov 7 at 9 am (Pacific time)', '  now: Saturday, Nov 14 at 10:30 am (Pacific time)']
                          + TAIL)
 
     def test_dst_fall_back_hour_keeps_its_zone(self):
         self.assertEqual(conversation._hike_time("2026-11-01T01:30:00-07:00"), "Sun 2026-11-01 01:30 PDT")
         self.assertEqual(conversation._hike_time("2026-11-01T01:30:00-08:00"), "Sun 2026-11-01 01:30 PST")
         line = _edit("startsAt", "2026-11-01T01:30:00-07:00", "2026-11-01T01:30:00-08:00")[1]
-        self.assertEqual(_edit("startsAt", "2026-11-01T01:30:00-07:00", "2026-11-01T01:30:00-08:00")[1:4],
-                         [line, "  was: Sunday, Nov 1 at 1:30 am (Pacific time)", "  now: Sunday, Nov 1 at 1:30 am (Pacific time)"])
-        self.assertEqual(line, "this, the start time:")
+        self.assertEqual(_edit("startsAt", "2026-11-01T01:30:00-07:00", "2026-11-01T01:30:00-08:00")[1:5],
+                         [line, "this, the start time:", "  was: Sunday, Nov 1 at 1:30 am (Pacific time)", "  now: Sunday, Nov 1 at 1:30 am (Pacific time)"])
+        self.assertEqual(line, "this: rescheduled")
 
     def test_utc_value_reads_pacific(self):
-        self.assertEqual(_edit("startsAt", "2026-07-04T16:00:00+00:00", "2026-07-04T17:00:00Z")[1],
-                         "this, the start time:")
-        self.assertEqual(_edit("startsAt", "2026-07-04T16:00:00+00:00", "2026-07-04T17:00:00Z")[2:4],
+        self.assertEqual(_edit("startsAt", "2026-07-04T16:00:00+00:00", "2026-07-04T17:00:00Z")[1:3],
+                         ["this: rescheduled", "this, the start time:"])
+        self.assertEqual(_edit("startsAt", "2026-07-04T16:00:00+00:00", "2026-07-04T17:00:00Z")[3:5],
                          ["  was: Saturday, Jul 4 at 9 am (Pacific time)", "  now: Saturday, Jul 4 at 10 am (Pacific time)"])
 
     def test_naive_or_garbage_shown_raw_and_proposal_complete(self):

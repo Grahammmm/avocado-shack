@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "idempotency_contract": "SYNTHETIC ONLY: repeated key returns the original receipt; not a BlueBubbles guarantee",
+  "item": {"id": 1, "chat": "iMessage;-;fixture@example.invalid", "text": "Synthetic reply", "pictures": 0},
+  "expected": {"baseline_attempts": 2, "baseline_accepted": 2, "idempotent_attempts": 2, "idempotent_accepted": 1, "unknown_attempts": 1, "unknown_accepted": 1}
+}
