@@ -89,6 +89,8 @@ class OfflineRehearsal(unittest.TestCase):
     def test_the_till_is_only_attached_for_till_rows(self):
         by_id = {r.row["id"]: r for r in Run.get()}
         self.assertNotEqual(by_id["s15-whats-sold-out"].disposition, "till-read")
+        self.assertEqual(by_id["s15-whats-sold-out"].disposition, "answer")
+        self.assertEqual(by_id["s15-whats-sold-out"].status, "PASS")
         self.assertNotIn("known_gap", by_id["s15-whats-sold-out"].row)  # AV2007-03 fixed ROUTER-15: the row PASSes now
         world, rows = demo.load_fixture()
         shop = demo.Shop(world)
