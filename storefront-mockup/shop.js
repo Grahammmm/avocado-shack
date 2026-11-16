@@ -74,7 +74,7 @@ const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
 // A new array each time; the day is renderNow's, so badges and sequence agree for one render.
 function orderedProducts(now=renderNow){const d=catalog.map((p,i)=>({p,i,n:isNew(p,now)}));
  d.sort((x,y)=>x.n!==y.n?(x.n?-1:1):x.n&&x.p.addedOn!==y.p.addedOn?(x.p.addedOn>y.p.addedOn?-1:1):x.i-y.i);return d.map(x=>x.p)}
-// AV1104-02: cards whose current word is exactly Sold out go last, order otherwise kept (new array, nothing mutated).
+// AV1104-02: cards whose current word is exactly Sold out go last; other positions stay stable (new array, nothing mutated).
 const soldLast=l=>l.filter(p=>p.availability!=='Sold out').concat(l.filter(p=>p.availability==='Sold out'));
 function drawCards(l){pinNow=renderNow;try{return l.map(card).join('')}finally{pinNow=null}}
 // AV1052-01: a search term also matches the description, after the card's own words. One stable pass splits the ordered list:
