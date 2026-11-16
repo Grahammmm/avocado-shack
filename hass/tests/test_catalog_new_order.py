@@ -57,7 +57,13 @@ class NewOrderTests(unittest.TestCase):
         self.assertEqual(drive(cat)["ids"], ["n2", "n3", "n1", "o1", "o2"])
         self.assertEqual(drive(cat, category="dairy")["ids"], ["n2", "n3", "o2"])
         self.assertEqual(drive(cat, brand="Brand B")["ids"], ["n3", "n1", "o1"])
-        self.assertEqual(drive(cat, q="item n")["ids"], ["n2", "n3", "n1"])
+        # AV1104-01 matches separate words across fields: every Brand contains "n".
+        self.assertEqual(drive(cat, q="item n")["ids"], ["n2", "n3", "n1", "o1", "o2"])
+        # Keep a selective search oracle as well: only these names contain "fresh".
+        search_cat = [dict(p, name="Fresh " + p["name"]) if p["id"].startswith("n") else p for p in cat]
+        self.assertEqual(drive(search_cat, q="item fresh")["ids"], ["n2", "n3", "n1"])
+        self.assertEqual(drive(search_cat, q="fresh item")["ids"], ["n2", "n3", "n1"])
+        self.assertEqual(drive(search_cat, q="item fresh zzzz")["ids"], [])
         self.assertEqual(drive(cat, q="zzz")["ids"], [])
         self.assertEqual(drive(cat, **{"from": "b"}, producers={"b": {}})["ids"], ["n3", "n1", "o1"])
 
