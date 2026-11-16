@@ -66,7 +66,7 @@ exit: 0
 
 ```json
 {
-  "bases_sha256": "28b4209877e3f7515ae476128349b97b93df0a0164eabe6cda539e3e6968c8d9",
+  "bases_sha256": "d625bad9878454c373a21a2fd77877e6e0699f2c0b6da726793b75bfccc202ce",
   "coverage": {
     "assistant_state": "FIXTURE_PROVEN",
     "content": "FIXTURE_PROVEN",
@@ -131,6 +131,19 @@ bound BASES digest. The original inspection revision, source citations, candidat
 code, fixtures, package inventory and live UNVERIFIED/HOLD gates are unchanged.
 New proof is reported in the repair handoff, not substituted for historical
 builder output above.
+
+## Conflict-repair revalidation
+
+Merged main `f18d22c5d5db583be0c22cba9109d1bd3eeefae0` (#907), retaining its
+fixture-clock implementation where the PR already carried the equivalent undo
+correction. The complete acceptance runner, test kit and CI weights match that
+main revision byte-for-byte. All 1,332 existing source pins were compared;
+only `hass/skills/acceptance_run.py`, `hass/skills/testkit.py` and
+`hass/tests/ci_weights.json` changed, each independently verified against main.
+Those three source digests and the bound BASES digest were refreshed. Original
+inspection provenance, candidate code, fixtures, source citations and live
+UNVERIFIED/HOLD gates remain unchanged. Fresh execution results belong to the
+repair handoff; the original builder receipts above remain historical.
 
 ## Handoff and limits
 
