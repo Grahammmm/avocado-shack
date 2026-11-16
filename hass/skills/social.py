@@ -84,9 +84,12 @@ INTENT = (
 )
 
 
+_APOSTROPHES = str.maketrans({"\u2018": "'", "\u2019": "'"})  # phone keyboards type curly apostrophes: I\u2019ll is I'll
+
+
 def wants_posting(texts) -> bool:
     """True when one of the owner's texts asks Hass to publish, send or schedule (Hass only writes a caption to copy)."""
-    said = [SELF.sub(" ", t.lower()) for t in texts or () if isinstance(t, str)]  # the owner posting it himself is fine
+    said = [SELF.sub(" ", t.lower().translate(_APOSTROPHES)) for t in texts or () if isinstance(t, str)]  # the owner posting it himself is fine
     return any(rx.search(t) for t in said for rx in INTENT)
 
 
