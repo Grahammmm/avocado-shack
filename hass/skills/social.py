@@ -106,7 +106,10 @@ _NUM_WORDS = {w: n for n, w in enumerate(
 _TENS = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"
 _UNITS = "one|two|three|four|five|six|seven|eight|nine"
 _COMPOUND = r"(?:" + _TENS + r")(?:\s+|-)(?:" + _UNITS + r")"  # "twenty one", "twenty-one": one whole count
-_NUM = r"(\d[\d,]*|" + _COMPOUND + "|(?:" + _TENS + r")(?![\s-]+(?:" + _UNITS + r")\b)|" + "|".join(w for w in _NUM_WORDS if w not in _TENS.split("|")) + r")"
+_SMALL = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen"
+_HUNDREDS = (r"(?:" + _UNITS + r")\s+hundred(?:\s+(?:and\s+)?(?:" + _COMPOUND + "|(?:" + _TENS + r")(?![\s-]+(?:" + _UNITS + r")\b)|(?:"
+             + _SMALL + r"))\b)?+")  # possessive remainder: rejecting its unit must not fall back to bare hundreds
+_NUM = r"(\d[\d,]*|" + _HUNDREDS + "|" + _COMPOUND + "|(?:" + _TENS + r")(?![\s-]+(?:" + _UNITS + r")\b)|" + "|".join(w for w in _NUM_WORDS if w not in _TENS.split("|")) + r")(?![\s-]+(?:hundred|thousand|million|billion)\b)"  # never the front of a longer number
 _UNIT_OF_COMPOUND = re.compile(r"\b(?:" + _TENS + r")[\s-]+$")  # a unit word right after a tens word belongs to that compound
 _WHO = r"(?:people|persons?|folks|hikers|walkers|members|guests|attendees|participants|friends|locals|adults|kids|children|of us|" \
        r"showed up|turned out|came|joined|attended)"
@@ -125,23 +128,48 @@ _ADD = re.compile(r"\b(?:say|says|mention|add|include|put|write|note|state|tell|
 _TAGGING = re.compile(r"\btag(?:s|ging|ged)?\b(?!-)|\bhashtags?\b|[#@\uFF03\uFF20\uFE5F\uFE6B]\w")
 
 
+_RUN_WORD = "thousand|million|billion|" + "|".join(sorted(_NUM_WORDS, key=len, reverse=True))
+_RUN = re.compile(r"\b(?:" + _RUN_WORD + r")(?:(?:\s+and\s+|[\s-]+)(?:" + _RUN_WORD + r"))*\b")
+_RUN_OK = re.compile(_HUNDREDS + "|hundred")  # the only hundred-bearing runs supported; anything else is not a count
+_RUN_TAIL = re.compile(r"(?:\s+(?!(?:" + _NOT_HEADS + r")\b)\w+){0,2}?\s+" + _WHO + r"\b")
+_RUN_HEAD = re.compile(r"\b(?:turnout|attendance|headcount|crowd)\b(?:\s+\w+){0,3}?\s+$")
+
+
+def _bad_runs(low):
+    """(start, end, in attendance context) of each unsupported number-word run with a hundred, thousand or the like in it
+    (``two thousand two``, ``two hundred hundred``): its smaller words are never a count of their own."""
+    out = []
+    for m in _RUN.finditer(low):
+        run = m.group(0)
+        if not re.search(r"hundred|thousand|million|billion", run) or _RUN_OK.fullmatch(run):
+            continue
+        out.append((m.start(), m.end(), bool(_RUN_TAIL.match(low, m.end()) or _RUN_HEAD.search(low[:m.start()]))))
+    return out
+
+
+def _value(n) -> int:
+    """The number of one recognized word count: a word, a tens-unit compound, or hundreds with an optional remainder."""
+    parts = [p for p in re.split(r"[\s-]+", n) if p != "and"]
+    if len(parts) > 1 and parts[1] == "hundred":
+        return _NUM_WORDS[parts[0]] * 100 + sum(_NUM_WORDS[p] for p in parts[2:])
+    return sum(_NUM_WORDS[p] for p in parts)
+
+
 def _counts(text) -> set:
     """The head counts a text states about who came (``40 people came``, ``attendance was forty``), as numbers."""
-    out = set()
+    out, low = set(), text.lower()
+    bad = _bad_runs(low)
     for rx in _COUNT:
-        for m in rx.finditer(text.lower()):
-            if _NOT_COUNT_BEFORE.search(text.lower()[:m.start(1)]):
+        for m in rx.finditer(low):
+            if _NOT_COUNT_BEFORE.search(low[:m.start(1)]):
                 continue  # "Nov 7 friends", "mile 6 hikers": a date or a place, not a head count
-            if _UNIT_OF_COMPOUND.search(text.lower()[:m.start(1)]):
+            if _UNIT_OF_COMPOUND.search(low[:m.start(1)]):
                 continue  # the "one" of "twenty one" is not a count of its own
+            if any(a <= m.start(1) < b for a, b, _ in bad) or (
+                    m.group(1) == "hundred" and re.search(r"\b(?:" + _UNITS + r")[\s-]+$", low[:m.start(1)])):
+                continue  # a piece of a longer or unsupported number ("two thousand two"), not a count
             n = m.group(1)
-            parts = re.split(r"[\s-]+", n)
-            if len(parts) == 2:
-                out.add(_NUM_WORDS[parts[0]] + _NUM_WORDS[parts[1]])
-            elif n in _NUM_WORDS:
-                out.add(_NUM_WORDS[n])
-            elif n.replace(",", "").isdigit():
-                out.add(int(n.replace(",", "")))
+            out.add(int(n.replace(",", "")) if n.replace(",", "").isdigit() else _value(n))
     return out
 
 
@@ -160,6 +188,8 @@ def _recap_preflight(texts, ctx):
     asked = set()
     for t in texts or ():
         if isinstance(t, str) and _ADD.search(t.lower()):
+            if any(here for _, _, here in _bad_runs(t.lower())):
+                return ADD_TO_RECAP  # an attendance number I cannot read whole ("two thousand two"): a piece of it never matches
             asked |= _counts(t)
     if asked:  # a number he asks me to say: only if the saved recap already says it as a head count (the caption never reads his words)
         saved = set().union(*(_counts(r) for r in _recaps(ctx, texts) or ()))

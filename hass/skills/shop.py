@@ -274,12 +274,30 @@ def check_hours_conflict(slots, texts, ctx):
     return None
 
 
+_KEEP_DAY_RE = re.compile(r"(?:please\s+)?(?:(?:don['’]t|do not)\s+change\s+(?P<a>[a-z]+)(?:\s+hours)?|"
+                          r"keep\s+(?P<b>[a-z]+)(?:\s+hours)?\s+unchanged)", re.I)
+
+
+def _kept_days(texts) -> frozenset:
+    """Days the owner explicitly said to leave as they are: a whole clause (split at ; newline . ,) that is only
+    "[please] don't change|do not change <day> [hours]" or "[please] keep <day> [hours] unchanged". Finite grammar, no
+    general negation. Conservative: it holds anywhere in the current request texts, a later affirmative line for the
+    same day does not revoke it (the stay-as-is question is asked instead)."""
+    out = set()
+    for clause in re.split(r"[;\n.,]", unicodedata.normalize("NFKC", "\n".join(str(t) for t in texts))):
+        m = _KEEP_DAY_RE.fullmatch(clause.strip())
+        day = _day((m.group("a") or m.group("b")).lower()) if m else None
+        if day is not None:
+            out.add(day)
+    return frozenset(out)
+
+
 def check_hours_untouched(slots, texts, ctx):
     """hours-untouched-lines: a day the owner did not name keeps exactly what the site says now, or he is asked."""
     store = store_of(ctx)
     if store is None or not texts or not isinstance(store.get("hours"), list):
         return None  # without the saved hours or his words this rule cannot judge; the structural checks still ran
-    named = days_in_text(" ".join(texts))
+    named = days_in_text(" ".join(texts)) - _kept_days(texts)
     old, new = hours_by_day(store["hours"]), hours_by_day(slots["hours"])
     kept = {_line_key(piece) for line in slots["hours"] for piece in schedule_pieces(line) if piece.strip()}
     for opaque in old[1]:  # a piece of the current hours that names no day: it stays unless he rewrote the whole list around it

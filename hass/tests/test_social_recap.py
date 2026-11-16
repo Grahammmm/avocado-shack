@@ -287,6 +287,64 @@ class SkillTests(RecapCase):
                 self.assertEqual(self.recap(text, title), ("refused", [social.ADD_TO_RECAP]))
         self.assert_untouched(before)
 
+    def test_hundred_attendance_is_one_complete_count(self):
+        for said, counted in (("one hundred people came", {100}), ("Two Hundred people came.", {200}), ("two  hundred and one guests came", {201}),
+                              ("two hundred one guests came", {201}), ("two hundred twenty-one people came", {221}),
+                              ("two hundred and twenty one people came", {221}), ("nine hundred ninety-nine hikers came", {999}),
+                              ("attendance was two hundred", {200}), ("Attendance was two hundred and twenty-one", {221}),
+                              ("turnout was nine hundred ninety-nine", {999}), ("two hundred and five of us came", {205}),
+                              ("Attendance was two hundred twenty", {220}), ("two hundred eighteen people came", {218}),
+                              ("Attendance was two hundred nineteen", {219}), ("two hundred and eighteen people came", {218}),
+                              ("a hundred people came", {100}), ("Twenty-one people and 12 guests came.", {21, 12}), ("200 people came", {200})):
+            with self.subTest(said):
+                self.assertEqual(social._counts(said), counted)
+
+    def test_hundred_equivalence_uses_saved_attendance(self):
+        self._with_recaps(**{"Bluff Walk": "200 people came.", "Cove Walk": "Two hundred people came.", "Pier Walk": "2 people came.",
+                             "Spring Walk": "Two hundred and twenty-one people came.", "Friend Walk": "21 people came."})
+        before = self.snapshot()
+        for title, text, saved in (("Bluff Walk", "bluff walk caption, say two hundred people came", "200 people came."),
+                                   ("Cove Walk", "cove walk caption, say 200 people came", "Two hundred people came."),
+                                   ("Spring Walk", "spring walk caption, say 221 people came", "Two hundred and twenty-one people came.")):
+            with self.subTest(text):
+                self.assertEqual(self.recap(text, title), ("answer", [self.want(title, saved)]))
+        for title, text in (("Pier Walk", "pier walk caption, say two hundred people came"), ("Friend Walk", "friend walk caption, say two hundred and twenty-one people came"),
+                            ("Pier Walk", "pier walk caption, say 200 people came"), ("Bluff Walk", "bluff walk caption, say two hundred and one people came"),
+                            ("Bluff Walk", "bluff walk caption, say one hundred people came")):
+            with self.subTest(text):  # the real dispatcher refuses before any caption
+                self.assertEqual(self.recap(text, title), ("refused", [social.ADD_TO_RECAP]))
+        self.assert_untouched(before)
+
+    def test_hundred_context_is_not_a_distance_date_or_price(self):
+        for said in ("We walked two hundred miles with friends.", "two hundred minutes with kids", "On Nov two hundred friends joined.",
+                     "mile two hundred hikers waited", "route two hundred and five guests", "$ two hundred friends", "Attendance was two hundred miles"):
+            with self.subTest(said):
+                self.assertEqual(social._counts(said), set())
+
+    def test_hundred_remainder_distance_cannot_authorize_attendance(self):
+        for number in ("two hundred twenty", "two hundred twenty-one", "two hundred twenty one", "two hundred one",
+                       "two hundred and twenty", "two hundred and twenty-one", "two hundred and one"):
+            saved = f"Attendance was {number} miles"
+            with self.subTest(saved=saved, seam="counts"):
+                self.assertEqual(social._counts(saved), set())
+            with self.subTest(saved=saved, seam="dispatch"):
+                self._with_recaps(**{"Bluff Walk": saved})
+                before = self.snapshot()
+                self.assertEqual(self.recap("bluff walk caption, say 200 people came", "Bluff Walk"), ("refused", [social.ADD_TO_RECAP]))
+                self.assert_untouched(before)
+
+    def test_unsupported_numeric_run_cannot_authorize_by_suffix(self):
+        self._with_recaps(**{"Bluff Walk": "2 people came. 100 hikers came.", "Cove Walk": "Two people came."})
+        before = self.snapshot()
+        for title, text in (("Bluff Walk", "bluff walk caption, say two thousand two people came"), ("Cove Walk", "cove walk caption, say two thousand people came"),
+                            ("Bluff Walk", "bluff walk caption, say two hundred hundred people came"), ("Bluff Walk", "bluff walk caption, add attendance was two hundred hundred"),
+                            ("Bluff Walk", "bluff walk caption, say two hundred and hundred people came")):
+            with self.subTest(text):
+                self.assertEqual(self.recap(text, title), ("refused", [social.ADD_TO_RECAP]))
+        for said in ("two thousand two people came", "two hundred hundred people came"):
+            self.assertEqual(social._counts(said), set())
+        self.assert_untouched(before)
+
     def test_tag_partners_and_publish_are_refused(self):
         before = self.snapshot()
         for text in ("bluff walk caption and tag the partners", "post about the bluff walk with the hashtag #hikingfun", "caption, thank @trailcrew please",

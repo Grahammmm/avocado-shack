@@ -479,8 +479,8 @@ def iso_day(value) -> date | None:
 
 
 SPECIAL_LINK_RE = re.compile(r"https?:|www\.|\b[a-z0-9-]+\.[a-z]{2,24}\b|//|\bdot\s?com\b", re.I)
-SPECIAL_EMAIL_RE = re.compile(r"@|\b\w+\s+(?:at|\(at\))\s+\w+\s+dot\s+\w+", re.I)
-SPECIAL_PHONE_RE = re.compile(r"\d[\d\s().+-]{8,}\d")  # ten or more digits with only separators between: a phone number
+SPECIAL_EMAIL_RE = re.compile(r"[\w.+-]@|@\s*[A-Za-z]|\b\w+\s+(?:at|\(at\))\s+\w+\s+dot\s+\w+", re.I)  # a real email; "2 @ $5" and "3 @ 2 for $5" price notation is not
+SPECIAL_PHONE_RE = re.compile(r"\d(?:[\s().+-]*\d){9,}")  # ten or more DIGITS with only separators between: a phone number (not 10 - 15 - 20 or 2026 - 2027)
 SPECIAL_FORBIDDEN = tuple(c for c in FORBIDDEN_TEXT if c != "$") + ("&lt", "&gt", "&#", "&amp")
 
 
