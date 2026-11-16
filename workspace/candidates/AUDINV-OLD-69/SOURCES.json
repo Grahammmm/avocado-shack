@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "main": "b302d26bee6a4d8993f9da324d743bf206c56aca",
+  "captured_at": "2026-11-16T03:38:19Z",
+  "sources": [
+    {
+      "path": "storefront-mockup/community-server.py",
+      "sha256": "7da0fb5d639efc0ebd28765c5c15e16ba6328eb7b8f8bbd3833ff22355378e30",
+      "lines": "93-101",
+      "observation": "Separate local consent flags; response says delivery not connected; no delivery adapter reused."
+    },
+    {
+      "path": "storefront-mockup/README.md",
+      "sha256": "cff27e2ea6bbb327b85b9566027d509bf8e2eba863cdc4ecd78a41385f646070",
+      "lines": "44-53",
+      "observation": "Local list only; sender setup, delivery, unsubscribe and launch acceptance remain separate."
+    },
+    {
+      "path": "docs/hass/OPERATIONS.md",
+      "sha256": "61f9f382a963c0b6dffd958a8aeeb97bb5a45d58a9c12b087d48173a4f860a5f",
+      "lines": "1-5",
+      "observation": "Attended runtime boundary; nothing installed or applied by this package."
+    }
+  ],
+  "missing": [
+    "live_delivery",
+    "provider_setup",
+    "owner_acceptance",
+    "production_integration"
+  ]
+}
