@@ -68,7 +68,10 @@ that came first: short answers, then the rules. Mike's side is in [the phone gui
   writer settings turns on the photo clean-up (`hass/photo_polish.py`). After Hass replies to a new photo, a background
   thread asks Hermes (its `openai-codex` image plugin, ChatGPT/Codex sign-in; Hass holds no key) to edit the photo with
   `gpt-image-2` at quality high onto the house ivory background, with a 90 s limit. A model-free fidelity gate (the product found
-  again in Mike's photo, same colour, label words unchanged) decides; a passing picture is placed and scaled to the
+  again in Mike's photo, same colour, label words unchanged both ways: no word on the edit that is not on the photo at
+  that spot, and no word read on the photo missing from the edit) decides. The gate reads labels with the host's
+  `tesseract`; if it is missing, fails or times out, the edit is unverified and the house render is published
+  (`polish-ocr`). A passing picture is placed and scaled to the
   catalog's 800 x 800 square (JPEG, no metadata; nothing is cut out, so label print on cream paper is kept) and published
   in place of the house render of the photo. Any failure, timeout or
   rejection publishes the house render as before, logs one `polish-<code>` row to the correspondence log, and is never

@@ -3,12 +3,14 @@
 Every path ends in a published picture or the existing fallback, and the interview never waits:
 * a faithful edit is published (house-framed 800x800 JPEG, no metadata), the same bytes at every install;
 * it also rescues a busy-background photo the house render alone would ask to retake;
-* timeout, refusal, wrong size, wrong type, huge file, a changed product, no Hermes: the fallback, and one short
+* timeout, refusal, wrong size, wrong type, huge file, a changed product, a changed, blanked or partly erased label,
+  an unreadable label (no tesseract, a failed or timed-out read), no Hermes: the fallback, and one short
   ``polish-<code>`` row in the correspondence log;
 * ``start`` returns at once; an install that comes first settles the fallback and a late answer is dropped;
 * the switch defaults off, is validated, and needs ``houseRender``.
 
-The stub transport writes its picture where the Hermes runner would. Label reading is stubbed (CI has no tesseract).
+The stub transport writes its picture where the Hermes runner would. Label reading is stubbed (CI has no tesseract):
+``NO_LABEL`` is a read that worked and found no words; None is a read that did not work.
 Needs Pillow; no network, no Hermes, no live service.
 """
 import io
@@ -50,6 +52,45 @@ def edit_of(data, size=1024, change=None):
     """What a faithful image edit looks like: the product on a plain ivory background, square, PNG."""
     im = Image.open(io.BytesIO(photos.house_picture(data)["jpeg"])).convert("RGB").resize((size, size))
     return png(change(im) if change else im)
+
+
+NO_LABEL = lambda framed, scale=2: []  # noqa: E731 - tesseract read the picture and found no label words
+REAL_WORDS = photo_polish.words  # the real reader, kept before the class-wide stubs replace it
+TSV_HEAD = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n"
+
+
+def label_box(im):
+    """(left, top, right, bottom) of the synthetic jar's cream label, from its amber body, on a photo or an edit."""
+    r, g, b = im.convert("RGB").split()
+    mask = Image.merge("RGB", (r.point(lambda v: 255 if v > 160 else 0), g.point(lambda v: 255 if 80 < v < 185 else 0),
+                               b.point(lambda v: 255 if v < 90 else 0))).convert("L").point(lambda v: 255 if v > 254 else 0)
+    x0, by0, x1, y1 = mask.getbbox()
+    w, h = x1 - x0, (y1 - by0) / 0.86  # the body starts 14% down the jar (under the lid)
+    top = y1 - h
+    return round(x0 + .14 * w), round(top + .40 * h), round(x0 + .86 * w), round(top + .72 * h)
+
+
+LABEL_WORDS = (("WILD", .04, .40), ("HONEY", .60, .96))  # two "words" across the label (shares of its width)
+
+
+def labelled(data):
+    """The synthetic jar photo with two clear printed words on its label: rows of dark strokes, a different rhythm
+    for each word, in the middle quarter of the label's height (``LABEL_WORDS``)."""
+    from PIL import ImageDraw
+    im = Image.open(io.BytesIO(data)).convert("RGB")
+    x0, y0, x1, y1 = label_box(im)
+    w, h, d = x1 - x0, y1 - y0, ImageDraw.Draw(im)
+    for n, (_word, a, b) in enumerate(LABEL_WORDS):
+        x, end, top, bottom = x0 + a * w, x0 + b * w, y0 + .38 * h, y0 + .62 * h
+        for i in range(99):
+            stroke = (3, 7, 4, 2, 6)[(i + 2 * n) % 5]
+            if x + stroke > end:
+                break
+            d.rectangle((x, top if i % 3 else top + (bottom - top) / 2, x + stroke, bottom), fill=(40, 30, 20))
+            x += stroke + (4, 9, 5)[(i + n) % 3]
+    out = io.BytesIO()
+    im.save(out, "JPEG", quality=92)
+    return out.getvalue()
 
 
 class Stub:
@@ -97,7 +138,7 @@ class Bare:
 
 
 @unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
-@mock.patch.object(photo_polish, "words", lambda framed: None)
+@mock.patch.object(photo_polish, "words", NO_LABEL)
 class ContractTests(unittest.TestCase):
     def polish(self, bare, sha, stub):
         log = Log()
@@ -133,9 +174,9 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(target, f"assets/products/photo-{sha[:16]}.jpg")
         self.assertEqual(Image.open(io.BytesIO(data)).size, (800, 800))
 
-    def assertFallback(self, stub, code, photo_name="jar-white-sheet"):
+    def assertFallback(self, stub, code, photo_name="jar-white-sheet", data=None):
         bare = Bare(self)
-        data = photo(photo_name)
+        data = data or photo(photo_name)
         sha = bare.store(data)
         got, rows = self.polish(bare, sha, stub)
         self.assertEqual(got, code)
@@ -196,19 +237,78 @@ class ContractTests(unittest.TestCase):
             return im
         data = photo("jar-white-sheet")
         with mock.patch.object(photo_polish, "words", centre_word), mock.patch.object(photo_polish, "photo_words",
-                                                                                      lambda _original: None):
+                                                                                      lambda _original: []):
             ok = Bare(self)
             self.assertEqual(self.polish(ok, ok.store(data), Stub(edit_of(data))), ("ok", []))  # the same marks: kept
             bad = Bare(self)
             code, rows = self.polish(bad, bad.store(data), Stub(edit_of(data, change=stamped)))
         self.assertEqual((code, rows), ("text", [("error", "polish-text")]))
 
+    def test_unreadable_label_uses_the_fallback(self):
+        """No tesseract, a failed or timed-out read, on either picture: the edit is unverified, so the fallback."""
+        data = photo("jar-white-sheet")
+        for edit_read, photo_read in ((lambda framed, scale=2: None, None), (None, lambda _original: None)):
+            with self.subTest(edit=edit_read is not None), \
+                    mock.patch.object(photo_polish, "words", edit_read or NO_LABEL), \
+                    mock.patch.object(photo_polish, "photo_words", photo_read or (lambda _original: [])):
+                self.assertFallback(Stub(edit_of(data)), "ocr")
+
+    def test_words_is_none_whenever_tesseract_does_not_read(self):
+        jpeg = photos.house_picture(photo("jar-white-sheet"))["jpeg"]
+        with mock.patch.object(photo_polish.shutil, "which", return_value=None):
+            self.assertIsNone(REAL_WORDS(jpeg))  # not installed
+        with mock.patch.object(photo_polish.shutil, "which", return_value="/usr/bin/tesseract"):
+            for effect in (OSError("cannot start"), photo_polish.subprocess.TimeoutExpired("tesseract", 30)):
+                with self.subTest(effect=type(effect).__name__), \
+                        mock.patch.object(photo_polish.subprocess, "run", side_effect=effect):
+                    self.assertIsNone(REAL_WORDS(jpeg))
+            for done in (SimpleNamespace(returncode=1, stdout=TSV_HEAD), SimpleNamespace(returncode=0, stdout="")):
+                with self.subTest(done=done), mock.patch.object(photo_polish.subprocess, "run", return_value=done):
+                    self.assertIsNone(REAL_WORDS(jpeg))  # a failed read is not an empty label
+            row = "5\t1\t1\t1\t1\t1\t10\t20\t80\t24\t91\tHoney\n"
+            with mock.patch.object(photo_polish.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=TSV_HEAD + row)):
+                self.assertEqual(REAL_WORDS(jpeg), [("HONEY", (5, 10, 40, 12))])
+            with mock.patch.object(photo_polish.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=TSV_HEAD)):
+                self.assertEqual(REAL_WORDS(jpeg), [])  # read fine, no words: an empty label
+
+    def test_a_removed_label_or_word_is_rejected(self):
+        """The photo's label words must still be on the edit at that spot: a blank label or one erased word is caught."""
+        def word_boxes(im):  # (word, (left, top, width, height)) of the two words drawn on the label, on any copy
+            x0, y0, x1, y1 = label_box(im)
+            w, h = x1 - x0, y1 - y0
+            return [(word, (round(x0 + a * w), round(y0 + .38 * h), round((b - a) * w), round(.24 * h)))
+                    for word, a, b in LABEL_WORDS]
+
+        def cover(words):
+            def change(im):
+                from PIL import ImageDraw
+                for word, (left, top, width, height) in word_boxes(im):
+                    if word in words:
+                        ImageDraw.Draw(im).rectangle((left - 3, top - 3, left + width + 3, top + height + 3),
+                                                     fill=(246, 238, 214))
+                return im
+            return change
+        data = labelled(photo("jar-white-sheet"))
+        reads = lambda original: word_boxes(Image.open(io.BytesIO(original)).convert("RGB"))  # noqa: E731
+        with mock.patch.object(photo_polish, "photo_words", reads):
+            ok = Bare(self)
+            self.assertEqual(self.polish(ok, ok.store(data), Stub(edit_of(data))), ("ok", []))  # all kept
+            for name, gone in (("blank label", {"WILD", "HONEY"}), ("one word removed", {"HONEY"})):
+                with self.subTest(name):
+                    self.assertFallback(Stub(edit_of(data, change=cover(gone))), "text", data=data)
+        self.assertTrue(photo_polish.text_removed([("WILD", 0.8), ("HONEY", -1.0)], set()))
+        self.assertFalse(photo_polish.text_removed([("WILD", 0.8), ("HONEY", -1.0)], {"HONEY"}))  # read on the edit
+        self.assertTrue(photo_polish.text_removed([("HONEY", 0.42)], set()))  # faint likeness, never read: gone
+        self.assertFalse(photo_polish.text_removed([("RAW", 0.42), ("HONEY", 0.6)], set()))  # short word / looks the same
+        self.assertTrue(photo_polish.text_removed([("HONEY", None)], {"TEA"}))  # cannot be judged and not read: gone
+        self.assertFalse(photo_polish.text_removed([("HONEY", None), ("RAW", None)], {"HONE"}))  # read (OCR slip)
+
     def test_a_plausible_new_word_must_be_read_on_the_photo(self):
         known = {"HONE", "ILDFLOWER", "RIDGE", "ROAS"}  # what tesseract reads on Mike's photo, slips included
         self.assertFalse(photo_polish.text_changed([("HONEY", 0.5), ("WILDFLOWER", 0.4), ("ROAST", 0.45)], known))
         self.assertTrue(photo_polish.text_changed([("SUNNY", 0.40)], known))  # looks a little like it, never read
         self.assertFalse(photo_polish.text_changed([("SUNNY", 0.7)], known))  # looks like that spot: kept
-        self.assertFalse(photo_polish.text_changed([("SUNNY", 0.40)], None))  # the photo reads nothing: marks only
+        self.assertFalse(photo_polish.text_changed([("SUNNY", 0.40)], set()))  # the photo reads nothing: marks only
         self.assertFalse(photo_polish.text_changed([("SUN", 0.40), ("SUNNY", None)], known))  # too short / too small
         self.assertTrue(photo_polish.text_changed([("HONEY", 0.2)], known))  # unlike that spot, read or not
 
@@ -222,7 +322,7 @@ def bare_web(bare, sha):
 
 
 @unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
-@mock.patch.object(photo_polish, "words", lambda framed: None)
+@mock.patch.object(photo_polish, "words", NO_LABEL)
 class BackgroundTests(unittest.TestCase):
     def test_start_never_waits_and_a_late_answer_is_dropped(self):
         bare = Bare(self)

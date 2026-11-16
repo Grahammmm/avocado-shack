@@ -26,8 +26,9 @@ The original photo stays where media.py keeps it; only the settled JPEG is ever 
 
 The fidelity gate (``gate``) needs no model: the edited product, cut from its clean background, must be found again in
 Mike's photo (grey-level correlation over position and scale), with the same colour there, and the label words that
-tesseract reads (when installed) must not change. Thresholds were calibrated on real gpt-image-2 edits and deliberate
-bad outputs (HASS-IMAGE-1 T2/T3).
+tesseract reads must not change either way: no word on the edit that is not in the photo at that spot, no word of the
+photo's product missing from the edit. Without a working tesseract read the edit is unverified and never published.
+Thresholds were calibrated on real gpt-image-2 edits and deliberate bad outputs (HASS-IMAGE-1 T2/T3).
 """
 from __future__ import annotations
 
@@ -272,10 +273,13 @@ def _attempt(root, sha, transport, timeout):
 
 
 # ---------------------------------------------------------------- the fidelity gate
-def gate(original, edited, *, ocr=None) -> dict:
+def gate(original, edited) -> dict:
     """Is ``edited`` the same product as Mike's photo ``original``? {"ok", "code", "jpeg" (the edited picture as the
-    catalog square, ``frame``), "metrics"}. ``ocr``: framed JPEG -> [(word, (left, top, width, height))] or None; default
-    tesseract when installed. Every measure is taken before deciding, so a rejection still reports all of them."""
+    catalog square, ``frame``), "metrics"}. The label is read with tesseract on both pictures: every word the edit
+    shows must be in the photo at that spot (``text_changed``) and every word the photo shows on the product must still
+    be in the edit at that spot (``text_removed``). When either picture cannot be read (no tesseract, it fails or times
+    out) the edit is not verified and is rejected (code ``ocr``): the fallback is published. Every measure is taken
+    before deciding, so a rejection still reports all of them."""
     fail = lambda code, **m: {"ok": False, "code": code, "jpeg": None, "metrics": m}  # noqa: E731
     if len(edited) > MAX_OUTPUT_BYTES:
         return fail("huge")
@@ -296,14 +300,19 @@ def gate(original, edited, *, ocr=None) -> dict:
     if m is None:
         return fail("match")
     mapping = m.pop("_map")
-    found = words(made["jpeg"]) if ocr is None else ocr(made["jpeg"])
-    if found is not None:
+    found = words(made["jpeg"])  # the label as the edit shows it
+    read = photo_words(original)  # the label as Mike's photo shows it
+    if found is None or read is None:  # the label cannot be checked: never publish an unverified edit
+        m["ocr"] = "unavailable"
+    else:
         m["words"] = word_scores(original, made["jpeg"], mapping, found)
-        known = photo_words(original) if ocr is None and m["words"] else None
-        m["photo_words"] = sorted(known) if known is not None else None
-        m["text_changed"] = text_changed(m["words"], known)
+        m["photo_words"] = sorted({w for w, _box in read})
+        m["kept"] = kept_scores(original, made["jpeg"], mapping, read)
+        m["text_changed"] = text_changed(m["words"], set(m["photo_words"]))
+        m["text_removed"] = text_removed(m["kept"], {w for w, _box in found})
     colour_off = (m["hue_shift"] is not None and m["hue_shift"] > HUE_SHIFT_MAX) or m["chroma"] > CHROMA_MAX
-    code = "match" if m["match"] < MATCH_MIN else "colour" if colour_off else "text" if m.get("text_changed") else "ok"
+    code = ("match" if m["match"] < MATCH_MIN else "colour" if colour_off else "ocr" if m.get("ocr")
+            else "text" if m["text_changed"] or m["text_removed"] else "ok")
     if code != "ok":
         return fail(code, **m)
     return {"ok": True, "code": "ok", "jpeg": made["jpeg"], "metrics": m}
@@ -487,6 +496,8 @@ def words(framed, scale=2):
                                   check=False)
         except (OSError, subprocess.TimeoutExpired):
             return None
+    if done.returncode != 0 or not done.stdout.startswith("level\t"):  # a failed read is no read, not an empty label
+        return None
     out = []
     for line in done.stdout.splitlines()[1:]:
         cols = line.split("\t")
@@ -504,51 +515,86 @@ def word_scores(original, framed, mapping, found):
     """For each word read on the edited picture: how well the same spot of Mike's photo shows the same marks (the best
     grey correlation within a small search around where ``match`` maps it), or None when it is too small there to
     judge. A changed, added or invented word does not look like what is in the photo at that spot."""
-    Image, ImageChops, ImageStat = _pil()
+    Image, _, _ = _pil()
     (fw, fh), (rx, ry, rw, rh), (bx0, by0, bx1, by1) = mapping
     photo = newitem_render._upright(original)[0].convert("L")
     grey = Image.open(io.BytesIO(framed)).convert("L")
     sx, sy = rw * fw / max(1, bx1 - bx0), rh * fh / max(1, by1 - by0)  # photo px per framed px
     out = []
     for word, (left, top, width, height) in found:
-        if height * sy < WORD_PX:
-            out.append((word, None))
-            continue
-        k = WORD_HEIGHT / height  # both patches go to this scale: the word WORD_HEIGHT px high
-        tmpl = grey.crop((left, top, left + width, top + height))
-        tmpl = tmpl.resize((max(4, round(width * k)), WORD_HEIGHT), Image.Resampling.LANCZOS)
-        if ImageStat.Stat(tmpl).stddev[0] < 2:  # no marks in the box: nothing to compare
-            out.append((word, None))
-            continue
-        cx, cy = rx * fw + (left - bx0) * sx, ry * fh + (top - by0) * sy  # the word's top-left in Mike's photo
-        pad_x, pad_y = width * sx * WORD_SEARCH, height * sy * WORD_SEARCH
-        area = (round(cx - pad_x), round(cy - pad_y), round(cx + width * sx + pad_x), round(cy + height * sy + pad_y))
-        best = -1.0
-        for zoom in WORD_ZOOM:  # the mapping is only as exact as the match's size steps: try a little bigger and smaller
-            region = photo.crop(area).resize((max(1, round((area[2] - area[0]) * k * zoom / sx)),
-                                              max(1, round((area[3] - area[1]) * k * zoom / sy))), Image.Resampling.LANCZOS)
-            full = Image.new("L", tmpl.size, 255)
-            ts = ImageStat.Stat(tmpl, full)
-            for y in range(0, max(1, region.height - tmpl.height + 1)):
-                for x in range(0, max(1, region.width - tmpl.width + 1), 2):
-                    best = max(best, _ncc(ImageChops, ImageStat, region.crop((x, y, x + tmpl.width, y + tmpl.height)),
-                                          tmpl, full, ts))
-        out.append((word, round(best, 3)))
+        at = (rx * fw + (left - bx0) * sx, ry * fh + (top - by0) * sy)  # the word's top-left in Mike's photo
+        out.append((word, _spot(grey, (left, top, width, height), photo, at, (sx, sy))))
     return out
 
 
+def kept_scores(original, framed, mapping, read):
+    """The other way round: for each word read on Mike's photo, how well the same spot of the edited picture shows
+    the same marks, or None when that cannot be judged (it is off the place ``match`` found the product, too small, or
+    has no marks). A blanked or partly erased label does not look like the photo's words there any more. The search
+    reaches no further sideways than up and down: a wide one would let an erased word match the next word along."""
+    Image, _, _ = _pil()
+    (fw, fh), (rx, ry, rw, rh), (bx0, by0, bx1, by1) = mapping
+    photo = newitem_render._upright(original)[0].convert("L")
+    grey = Image.open(io.BytesIO(framed)).convert("L")
+    sx, sy = rw * fw / max(1, bx1 - bx0), rh * fh / max(1, by1 - by0)  # photo px per framed px
+    out = []
+    for word, (left, top, width, height) in read:
+        mid_x, mid_y = left + width / 2, top + height / 2
+        if not (rx * fw <= mid_x <= (rx + rw) * fw and ry * fh <= mid_y <= (ry + rh) * fh):
+            out.append((word, None))
+            continue
+        at = (bx0 + (left - rx * fw) / sx, by0 + (top - ry * fh) / sy)  # the word's top-left on the edited picture
+        out.append((word, _spot(photo, (left, top, width, height), grey, at, (1 / sx, 1 / sy),
+                                slide=WORD_SEARCH * height / max(1, width))))
+    return out
+
+
+def _spot(src, box, dst, at, step, *, slide=WORD_SEARCH):
+    """The best grey correlation of the word ``box`` (left, top, width, height) of ``src`` with ``dst`` in a small
+    search around ``at`` (the word's mapped top-left in ``dst`` px; ``step``: dst px per src px), both brought to a word
+    WORD_HEIGHT px high; None when the word is under WORD_PX high on either picture or has no marks to compare. The
+    search reaches WORD_SEARCH of the word's height up and down and ``slide`` of its width sideways."""
+    Image, ImageChops, ImageStat = _pil()
+    left, top, width, height = box
+    (cx, cy), (sx, sy) = at, step
+    if min(height, height * sy) < WORD_PX:
+        return None
+    k = WORD_HEIGHT / height
+    tmpl = src.crop((left, top, left + width, top + height))
+    tmpl = tmpl.resize((max(4, round(width * k)), WORD_HEIGHT), Image.Resampling.LANCZOS)
+    if ImageStat.Stat(tmpl).stddev[0] < 2:  # no marks in the box: nothing to compare
+        return None
+    pad_x, pad_y = width * sx * slide, height * sy * WORD_SEARCH
+    area = (round(cx - pad_x), round(cy - pad_y), round(cx + width * sx + pad_x), round(cy + height * sy + pad_y))
+    full = Image.new("L", tmpl.size, 255)
+    ts = ImageStat.Stat(tmpl, full)
+    best = -1.0
+    for zoom in WORD_ZOOM:  # the mapping is only as exact as the match's size steps: try a little bigger and smaller
+        region = dst.crop(area).resize((max(1, round((area[2] - area[0]) * k * zoom / sx)),
+                                        max(1, round((area[3] - area[1]) * k * zoom / sy))), Image.Resampling.LANCZOS)
+        for y in range(0, max(1, region.height - tmpl.height + 1)):
+            for x in range(0, max(1, region.width - tmpl.width + 1), 2):
+                best = max(best, _ncc(ImageChops, ImageStat, region.crop((x, y, x + tmpl.width, y + tmpl.height)),
+                                      tmpl, full, ts))
+    return round(best, 3)
+
+
 def photo_words(original):
-    """The set of label words tesseract reads on Mike's photo itself (same rules as ``words``, read at its own size),
-    or None without tesseract or a readable photo."""
+    """[(word, (left, top, width, height))] for the label words tesseract reads on Mike's photo itself (same rules as
+    ``words``, read at up to 1600 px; boxes in the upright photo's own px), or None when it cannot be read."""
     try:
         photo = newitem_render._upright(original)[0].convert("RGB")
     except (media.Refused, newitem_render.Refused):
         return None
+    full = photo.width
     photo.thumbnail((1600, 1600))  # a phone photo's full size only slows tesseract down
     buf = io.BytesIO()
     photo.save(buf, "JPEG", quality=92)
     found = words(buf.getvalue(), scale=1)
-    return None if found is None else {w for w, _box in found}
+    if found is None:
+        return None
+    k = full / photo.width
+    return [(w, tuple(round(v * k) for v in box)) for w, box in found]
 
 
 def _known(word, known) -> bool:
@@ -568,5 +614,22 @@ def text_changed(scores, known=None) -> bool:
         if s < WORD_MIN:
             return True
         if known and s < WORD_SURE and len(word) >= 4 and not _known(word, known):
+            return True
+    return False
+
+
+def text_removed(kept, edit_words) -> bool:
+    """True when a word Mike's photo shows is gone from the edit. A word read on the edit too is kept. Otherwise it
+    must still look like that spot of the edited picture: not under WORD_MIN (flat paper there scores -1), and a 4+
+    letter word not under WORD_SURE (a blanked label still has faint patch edges). A 4+ letter word that cannot be
+    judged there (off the place ``match`` found, or too small) and is not read on the edit counts as gone: preservation
+    is not established, so the fallback is used (a word on the room behind the product costs only the polish)."""
+    for word, s in kept:
+        if len(word) < 3 or _known(word, edit_words):
+            continue
+        if s is None:
+            if len(word) >= 4:
+                return True
+        elif s < WORD_MIN or (s < WORD_SURE and len(word) >= 4):
             return True
     return False
