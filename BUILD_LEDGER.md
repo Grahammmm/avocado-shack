@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## AV2007-13 — candidate cancellation fixture alignment (November 15, 2026)
+
+Reproduced PR #878's exact shard-3 failure: the candidate safety fixture still expected `no-target` for bare `no` after this PR intentionally made it `cancelled`. Updated only that fixture to require the exact dropped-question reply, no interpreter call and no remaining open request. The subsequent numeric answer must still reach the interpreter without drafting or writing. Merged current main (b83d3615a2ff8802c5b82339b7802e6e62c8d97d) without conflicts, preserving its Clover matching changes.
+
+Fresh local proof: 197 focused candidate/question/request/dispatch/conversation/hike/shelf tests and 52 Clover mapper/chat tests passed. Exact-head CI is checked separately on the PR; these local results are not an all-green CI claim. No workflow changes, installs, servers, live data or publication. Rollback: revert the fixture/ledger correction.
+
 ## R4-AV-09 — G-only backlog reason ranking (November 14, 2026)
 
 Added `python3 hass/skills/backlog.py top --state DIR [--all]` to the local operator CLI, not the owner-chat skill registry. It prints only counts and fixed reason labels, descending by count with alphabetical ties; open rows by default, closed rows included with `--all`. It aggregates in SQLite without selecting messages, summaries or identifiers and without the listing's row limit. Existing private-state checks and host/operator access remain the boundary; no new endpoint or identity mechanism.
