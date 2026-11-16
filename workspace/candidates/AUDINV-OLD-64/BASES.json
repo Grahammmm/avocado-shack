@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "base_sha": "b302d26bee6a4d8993f9da324d743bf206c56aca",
+  "candidate_only": true,
+  "installed": false,
+  "no_apply": true,
+  "source_hashes": {
+    "docs/hass/OPERATIONS.md": "61f9f382a963c0b6dffd958a8aeeb97bb5a45d58a9c12b087d48173a4f860a5f",
+    "docs/hass/RETENTION-OPTIONS.md": "bc7a4acf179cec7d093dda3058cd8306d1b06c401e11e62806de229d214a1136",
+    "hass/retention.py": "78afe7ccad5627727f5e439435d51cfc43136c0394b242c6ed608d8830961d88",
+    "hass/inbox.py": "bd814288f7bf6339ccf2273250bb70e9e5599bd2eebe7fc77025112e010de95a",
+    "hass/relay.py": "01b9fba322525c2ff040643d030974dcc4f833fc7d050358d2130e8515ecd529",
+    "hass/media.py": "a14b677004c07a567d68f2ddf6b3074a2acd9df871b003eac8bc0307581a6b0a",
+    "hass/memory.py": "127abdac443b9b6d1fb640812b527bd922a0c8f90a0c2e7b0bb3f0bf77a90276",
+    "hass/conversation.py": "7f1de0dc7a7519badf0390962c49c31ca292402735daefcaaf0a64ec667e60a1",
+    "mac/hass_forwarder.py": "8a381d62f79c070e0f451129daaef28345de9fa51bb9c0388546eb503b594606",
+    "hass/README.md": "1073680cd7fff20b9ba8e41d3f6d0a88a04649578d9990a612d255cb69e2f469",
+    "reports/hass/HASS-LIVE-AUDIT-1.md": "37605ccf4ce18eb1aefe317a296b2d763910f5b1c8fd537001ff8bcc44b79c0d",
+    "docs/hass/MAC_RUNBOOK.md": "b1ba7b5ecf8a7f2736628da96d4049431827850e1bfe2351cf917ad864a5cf21",
+    "docs/hass/HANDOVER.md": "f006062750c0a845e3fc742fa080b2670891a29648f75bca3407d41e8f805c2f",
+    "docs/hass/FEATURES.md": "41c6edb7f5c22a70772fba88ea943829544ae93305e1d15ea771d6a8c1ae67d5",
+    "operator-local/decisions/G-DECISIONS.log:L1606 (sanitized excerpt)": "26bfb1ad5dfd8ad9028efc8884c43e65922b17deaffb9557c8867b20f6e0f100",
+    "operator-local/decisions/G-DECISIONS.log:L1931 (sanitized excerpt)": "dff9c8226bc077113d8e2da5a890808a9e5ee0cd300df7a08be49a347f8bedf0"
+  },
+  "package_hashes": {
+    "candidate.py": "249e31ff67bd66fd152a08906fb79e8ff899d7605988b9fa3e5505b2d0156bff",
+    "SOURCES.json": "978a235e2d103196b62d425359f18ad944688d50ee63e7b4bf0a67285ed02ff3",
+    "fixtures.json": "993bdc2b9f545425a7ad285a221576112ea0b6af27ab278ac4d09a529614b1d2"
+  }
+}
