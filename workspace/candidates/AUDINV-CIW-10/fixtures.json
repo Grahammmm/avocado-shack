@@ -1,0 +1,53 @@
+{
+ "schema_version": 1,
+ "note": "synthetic only; expected outcomes are stated independently of candidate.py",
+ "join_cases": [
+  {"why": "same head/run/attempt, overlapping", "expect": true,
+   "a": {"head": "aaaa", "run": 1, "attempt": 1, "start": "2026-11-14T01:00:00Z", "end": "2026-11-14T01:10:00Z"},
+   "b": {"head": "aaaa", "run": 1, "attempt": 1, "start": "2026-11-14T01:05:00Z", "end": "2026-11-14T01:15:00Z"}},
+  {"why": "different head", "expect": false,
+   "a": {"head": "aaaa", "run": 1, "attempt": 1, "start": "2026-11-14T01:00:00Z", "end": "2026-11-14T01:10:00Z"},
+   "b": {"head": "bbbb", "run": 2, "attempt": 1, "start": "2026-11-14T01:05:00Z", "end": "2026-11-14T01:15:00Z"}},
+  {"why": "same head, no overlap (touching ends)", "expect": false,
+   "a": {"head": "aaaa", "run": 1, "attempt": 1, "start": "2026-11-14T01:00:00Z", "end": "2026-11-14T01:10:00Z"},
+   "b": {"head": "aaaa", "run": 1, "attempt": 1, "start": "2026-11-14T01:10:00Z", "end": "2026-11-14T01:15:00Z"}},
+  {"why": "same head, different attempt", "expect": false,
+   "a": {"head": "aaaa", "run": 1, "attempt": 1, "start": "2026-11-14T01:00:00Z", "end": "2026-11-14T01:10:00Z"},
+   "b": {"head": "aaaa", "run": 1, "attempt": 2, "start": "2026-11-14T01:05:00Z", "end": "2026-11-14T01:15:00Z"}}
+ ],
+ "verdict_cases": [
+  {"why": "one width only", "hold": true, "missing": [], "per_width": {"4": {"n": 10, "p50_s": 300, "p90_s": 400}}},
+  {"why": "two widths, enough samples, nothing missing", "hold": false, "missing": [],
+   "per_width": {"2": {"n": 6, "p50_s": 250, "p90_s": 300}, "4": {"n": 7, "p50_s": 300, "p90_s": 400}}},
+  {"why": "two widths, one under-sampled", "hold": true, "missing": [],
+   "per_width": {"2": {"n": 2, "p50_s": 250, "p90_s": 300}, "4": {"n": 9, "p50_s": 300, "p90_s": 400}}},
+  {"why": "two widths adequate but a contention metric missing", "hold": true, "missing": ["host_cpu_disk_metrics"],
+   "per_width": {"2": {"n": 6, "p50_s": 250, "p90_s": 300}, "4": {"n": 7, "p50_s": 300, "p90_s": 400}}},
+  {"why": "no shard jobs at all", "hold": true, "missing": [], "per_width": {}}
+ ],
+ "width4_sequential": {
+  "schema_version": 1,
+  "missing_coverage": {"host_cpu_disk_metrics": "UNKNOWN: none", "repository_variable_value": "UNKNOWN: not read", "runner_identity": "UNKNOWN: none"},
+  "runs": [{"id": 1, "attempt": 1, "head": "aaaa", "event": "push", "created": "2026-11-14T01:00:00Z", "status": "completed", "conclusion": "success"}],
+  "jobs": [
+   {"run": 1, "attempt": 1, "name": "hass shard 0", "created": "2026-11-14T01:00:00Z", "started": "2026-11-14T01:00:00Z", "completed": "2026-11-14T01:01:40Z", "conclusion": "success"},
+   {"run": 1, "attempt": 1, "name": "hass shard 1", "created": "2026-11-14T01:00:00Z", "started": "2026-11-14T01:01:40Z", "completed": "2026-11-14T01:03:20Z", "conclusion": "success"},
+   {"run": 1, "attempt": 1, "name": "hass shard 2", "created": "2026-11-14T01:00:00Z", "started": "2026-11-14T01:03:20Z", "completed": "2026-11-14T01:05:00Z", "conclusion": "success"},
+   {"run": 1, "attempt": 1, "name": "hass shard 3", "created": "2026-11-14T01:00:00Z", "started": "2026-11-14T01:05:00Z", "completed": "2026-11-14T01:06:40Z", "conclusion": "success"}
+  ]
+ },
+ "attempts_and_window": {
+  "schema_version": 1,
+  "missing_coverage": {"runner_identity": "UNKNOWN: none"},
+  "runs": [
+   {"id": 1, "attempt": 1, "head": "aaaa", "event": "push", "created": "2026-11-14T23:59:59Z", "status": "completed", "conclusion": "failure"},
+   {"id": 1, "attempt": 2, "head": "aaaa", "event": "push", "created": "2026-11-14T23:59:59Z", "status": "completed", "conclusion": "success"},
+   {"id": 3, "attempt": 1, "head": "cccc", "event": "push", "created": "2026-11-15T00:00:00Z", "status": "completed", "conclusion": "success"}
+  ],
+  "jobs": [
+   {"run": 1, "attempt": 1, "name": "hass shard 0", "created": "2026-11-14T23:59:59Z", "started": "2026-11-14T23:59:59Z", "completed": "2026-11-15T00:03:00Z", "conclusion": "success"},
+   {"run": 1, "attempt": 2, "name": "hass shard 0", "created": "2026-11-15T00:04:00Z", "started": "2026-11-15T00:04:00Z", "completed": "2026-11-15T00:07:00Z", "conclusion": "success"},
+   {"run": 3, "attempt": 1, "name": "hass shard 0", "created": "2026-11-15T00:00:00Z", "started": "2026-11-15T00:00:00Z", "completed": "2026-11-15T00:03:00Z", "conclusion": "success"}
+  ]
+ }
+}
