@@ -205,6 +205,7 @@ def natural_iso(iso, now=None) -> str:
 
 GENERIC_REFUSAL = "I couldn't make that change, so nothing changed. Could you say it another way?"
 REASONS = (  # (regex on the lower-cased technical text, log code, plain sentence)
+    (r"^\s*there is no notice\s*$", "notice-absent", "There is no notice on the website now. Nothing changed."),  # AV2007-18
     (r"selection was not checked today", "shelf-check-needed",
      "I need today's shelf check first. Tell me what's on the shelves today, and then I can change that."),
     (r"out of date; check the selection", "shelf-check-old",

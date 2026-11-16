@@ -1,0 +1,7 @@
+{"schema_version":1,"note":"synthetic cases mirrored by the embedded unittest cases in candidate.py; expected outcomes stated independently","cases":[
+{"name":"observed_walltime_and_sum_of_shards_are_distinct","jobs":[{"shard":0,"elapsed_s":600},{"shard":1,"elapsed_s":300}],"run_window_s":1200,"expect":{"sum_shard_s":900,"max_shard_s":600,"critical_path_s":1200}},
+{"name":"plan_weight_and_planned_count_are_not_actual_receipts","jobs":[{"shard":0,"tests_ran":null,"plan_weight":290,"planned_tests":500}],"expect":{"tests":"UNKNOWN"}},
+{"name":"missing_timeout_count_or_samples_stays_unknown","jobs":[],"workflow_revisions":{},"expect":{"median":"UNKNOWN","headroom":"UNKNOWN"}},
+{"name":"cancelled_timeout_and_retry_attempts_not_double_counted","jobs":[{"attempt":1,"conclusion":"cancelled"},{"attempt":2,"conclusion":"success","elapsed_s":600}],"expect":{"success_samples":1,"cancelled_censored":0,"superseded":1}},
+{"name":"headroom_seconds_and_percentage_use_exact_workflow_revision","revs":{"a":1800,"b":900},"elapsed_s":600,"expect":{"min_headroom_s":300,"ratio":0.6667}},
+{"name":"schema_path_escape_symlink_and_side_effect_boundary","reject":["../x.json","/etc/passwd","a/../../x","symlink component","schema_version 2","duplicate JSON key"],"expect":{"files_opened_before_rejection":0,"files_written":0}}]}

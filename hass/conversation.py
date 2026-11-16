@@ -17,10 +17,10 @@ from hass import claims, interpret_check, label_reader, margins, media, morning_
 from hass.content_model import HOME_IMAGE_RE, MAX_NOTICE, SHELF_LABELS, ContentError, _read_json, _text as checked_text, checked_on, load_and_validate, load_content, notice_days, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
-from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, voice  # noqa: E402
+from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, nl_prep, voice  # noqa: E402
 from hass import capabilities  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
-from hass.skills import dispatch as dispatch_mod, openreq  # noqa: E402
+from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
 # imported back here, so hass.conversation.<name> still works for every caller and test.
 from hass.chat.shared import (  # noqa: E402,F401
@@ -398,6 +398,8 @@ def load_settings(sdir, photos=False) -> dict:
     if mode not in dispatch_mod.MODES: problems.append("skills.mode must be ops-only, both or skills-first")
     house = settings.get("houseRender", False)  # SKILLS-FW-3: read here, used by the picture card (SKILLS-PIC-1); default off
     if type(house) is not bool: problems.append("houseRender must be true or false")
+    intake = settings.get("itemIntake", False)  # HASS-INTAKE-2: the full intake interview for a new item; default off, like houseRender
+    if type(intake) is not bool: problems.append("itemIntake must be true or false")
     lookup = settings.get("hikeLookup")  # HIKE-LOOKUP-2: {"contact": address} (or the flat key "hikeLookup.contact"); absent = no map lookup, the plain hike flow
     contact = settings.get("hikeLookup.contact") if lookup is None else lookup.get("contact") if isinstance(lookup, dict) else False
     if contact is not None and hike_lookup.valid_contact(contact) is None: problems.append("hikeLookup.contact must be an e-mail address or an https link")
@@ -406,6 +408,7 @@ def load_settings(sdir, photos=False) -> dict:
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
             "interpreterDailyCap": cap, "skillsMode": mode, "houseRender": house,  # SKILLS-FW-3
             **({"hikeLookupContact": contact} if contact is not None else {}),  # HIKE-LOOKUP-2: only when set
+            **({"itemIntake": True} if intake is True else {}),  # HASS-INTAKE-2: only when on
             **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),
             **({"gKeys": frozenset(g_keys), "gChat": g_chat, "gSenders": tuple(g_senders)} if g_keys and isinstance(g_chat, str) else {}),
             **({"gOwner": True} if g_owner is True else {}),
@@ -604,6 +607,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         """True when an earlier draft had this exact hash (it was cancelled, expired, replaced or failed)."""
         if not row["draft_hash"]: return False
         return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
+
+    def _earlier_outcome(self, row) -> str:
+        """AV2007-06: what became of the newest earlier draft with this row's hash: timed out, cancelled, couldn't save,
+        replaced, or (anything else) a neutral description. Only words the repeat warning uses; never changes admission."""
+        if not row["draft_hash"]: return "was written up"
+        earlier = self.db.execute("SELECT * FROM drafts WHERE draft_hash = ? AND row_id < ? ORDER BY row_id DESC LIMIT 1",
+                                  (row["draft_hash"], row["row_id"])).fetchone()
+        if earlier is None: return "was written up"
+        state = earlier["state"]
+        if state == "expired": return "timed out"
+        if state == "failed": return "I couldn't save"
+        if state == "rejected":
+            return "was replaced" if earlier["reason"] == "revised" or earlier["replaced_by"] else "you cancelled"
+        return "I wrote up"
 
     def _named(self, row) -> bool:
         """AV2152-03: a draft whose yes must name its code: a repeat of a closed hash (_repeat), or one made by `again <code>`
@@ -839,6 +856,34 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._pages = {}
 
     _pages: dict = {}  # HASS-SEC-3 (M2): the maker websites read for the message being handled, BEFORE its write transaction
+    early_flush = None  # HASS-INTAKE-2: fn() that sends the queued replies now (host.Worker sets it); None = they go out after the message
+    answer_reader = None  # HASS-INTAKE-2: an answer_reader.AnswerReader for an intake answer fixed code cannot read; None = ask again
+
+    def _intake_receipt(self, msg) -> None:
+        """HASS-INTAKE-2 (G, 2026-11-16): the moment the owner's bare photo arrives, with the interview on, his first question goes out
+        from fixed words: no model call, no preview, and BEFORE the photo is fetched, checked or stored (the slow part). The photo
+        is then handled as always; a photo that cannot be fetched is tried again without a second question. Nothing else is
+        decided here: the same checks as the photo path (owner, one photo, no caption, skills on, writer free, nothing else open)
+        keep an ordinary photo exactly as it was."""
+        try:
+            if (self.dispatch is None or self.photos is None or self.settings.get("itemIntake") is not True or msg.attachments != 1
+                    or msg.from_me or msg.kind != "new" or self.skills_mode == dispatch_mod.DEFAULT_MODE
+                    or msg.chat not in self._owner_chats or not self._is_owner(msg)
+                    or msg.text.replace("\ufffc", "").strip() or not self.dispatch.intake_ready()):
+                return
+            now = self._now()
+            if (self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone()
+                    or item_intake.acknowledged(self.db, msg.provider_id) or self.requests.get(msg.chat, now) is not None
+                    or self._writer_busy(now) is not None):
+                return
+            with self._tx():
+                if item_intake.acknowledge(self.db, msg.provider_id, now):
+                    self._reply(item_intake.START)
+        except Exception:  # noqa: BLE001 - a quick first question is a convenience: the photo path asks it as before
+            return
+        if self.early_flush is not None:
+            try: self.early_flush()
+            except Exception: pass  # noqa: BLE001,S110 - cycle() flushes again and raises as before
 
     def _read_sites(self, msg) -> dict:
         """HASS-SEC-3 (M2): a maker's web address the owner typed (in this text or earlier in his open request) is read HERE,
@@ -876,6 +921,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if hasattr(self.editor, "sync_settings"): self.editor.sync_settings(self.settings)
         self._label_jobs = []  # AV2152-04: one job per new photo draft, in the order sent; reset on every message
         self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
+        self._intake_receipt(msg)  # HASS-INTAKE-2: a bare photo's first question goes out before the photo is fetched
         try:
             with self._tx():
                 disposition, approved = self._handle(msg, last_try)
@@ -960,13 +1006,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         keyword = parse_keyword(msg.text) or coded
         social = classify_social(msg.text) if keyword is None and parse_near(msg.text) is None else None  # AV0007-07
         if social == "social":  # thanks, a greeting or emoji only: no interpreter call, draft or usage count
-            self._reply(SOCIAL_REPLY)
+            self._reply(self._waiting_note(now) or SOCIAL_REPLY, long_ok=True)  # AV2007-02: a thanks never reads as the end of a change still waiting
             self._record(msg, "social")
             return "social", None
         if keyword is None and (near := "" if social == "near" else parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
             codes = [r["code"] for r in self._drafts("state = 'proposed'")
                      if self._mine(r) and self._expiry(r) > now and near in ("", r["code"])]
-            self._reply(f"I haven't changed anything yet. To go ahead, reply {q('yes ' + codes[0])}." if len(codes) == 1 else
+            self._reply(f"I haven't changed anything yet. To go ahead with {q(self._by_code(codes[0], ('proposed',))['summary'])}, reply {q('yes ' + codes[0])}." if len(codes) == 1 else
                         "I haven't changed anything yet. Which one do you want?\n" + self._choices(codes) if codes else NOTHING, long_ok=True)
             self._record(msg, "near-approval")
             return "near-approval", None
@@ -1029,7 +1075,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if code is None and self._named(target):  # a delayed bare `yes` must not approve a repeat of a closed draft, or an `again` draft
             again = str(target["reason"] or "").startswith("again:")
             self._reply((f"That change was written up again from an expired one, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it." if again else
-                         f"That is the same change that was cancelled earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it."))
+                         f"That is the same change that {self._earlier_outcome(target)} earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it."))
             self._record(msg, "no-target")
             return "no-target", None
         if hasattr(self.editor, "check_environment") and (problem := self.editor.check_environment(target["change_id"])):
@@ -1051,6 +1097,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self.requests.close_drafted(self._chat(), now)  # SKILLS-FW-3: the request that made this draft is finished
         self._record(msg, "approved")
         return "approved", self._row(target["row_id"])
+
+    def _waiting_note(self, now, exclude=None) -> str:
+        """AV2007-02: what still waits on this chat (proposed or needing an answer, unexpired), with each one's own `no <code>`;
+        "" when nothing waits. It only reads: nothing is approved, dropped or renewed."""
+        rows = [r for r in self._drafts("state IN ('proposed', 'needs-details')")
+                if self._mine(r) and self._expiry(r) > now and (exclude is None or r["change_id"] != exclude)]
+        def line(r):
+            what = q(r["summary"] or "that change")
+            return (f"{what} is still waiting for your yes" if r["state"] == "proposed" else f"{what} still needs an answer from you")
+        if len(rows) == 1:
+            return f"{line(rows[0])}. Reply {q('no ' + rows[0]['code'])} to drop it."
+        if rows:
+            return "These are still waiting:\n" + "\n".join(f"{line(r)}: {q('no ' + r['code'])} drops it." for r in rows)
+        return ""
 
     def _choices(self, codes) -> str:
         """One line per waiting change: the words to reply with, then what the change is."""
@@ -1415,6 +1475,22 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         earlier = (recent or {}).get("earlier") or []  # HASS-HIKE-FLOW-1: the open request this text may be answering
         return self._draft(msg, now, result, earlier, failed=failed, req=req)
 
+    def _weekday_conflict(self, msg, now, result, earlier):
+        """AV2007-10: the code-owned question when a hike date or a notice from/until in ``result["ops"]`` is either reading of a
+        weekday that disagrees with the date beside it, in the newest date-bearing text of this request; else None."""
+        ops = result.get("ops")
+        if not isinstance(ops, list): return None
+        today = shop_today(_answered_at(msg, now))
+        for text in reversed([*earlier, msg.text]):  # a time or place answer says no day and does not erase an open conflict
+            rows, hits = nl_prep.all_date_rows(text, today)
+            if rows or hits: break
+        else: return None
+        used = {str(c["args"][k])[:10] for c in ops if isinstance(c, dict) and isinstance(c.get("args"), dict)
+                for k in {"hike.create": ("date",), "hike.update": ("date",), "store.set_notice": ("from", "until")}.get(c.get("op"), ()) if k in c["args"]}
+        for row in rows:
+            if row.get("weekday_mismatch") and used & {row["date"], *row["weekday_dates"]}: return nl_prep.weekday_mismatch_question(row)
+        return None
+
     def _draft(self, msg, now, result, earlier, prefix="", failed=None, req=None, legacy=True, notes=(), skill_names=()):
         """Draft ``result["ops"]`` (from the interpreter, or from a skill plan: SKILLS-FW-3), or relay its question / unsupported
         reply: revises, the interpret check, the editor, the claims gate over the owner's JOINED texts, the proposal. The caller
@@ -1432,6 +1508,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if named is not None and named["state"] == "expired" or cancelled_question:  # H16 vs NB-AV-01 (2026-10-31):
             result = {**result, "revises": None}  # a closed draft has nothing left to revise; an unknown code still asks
         result = interpret_check.check(result, self._registry(), codes)  # NB-AV-01: a bad op/arg/kind/code asks
+        if (said := self._weekday_conflict(msg, now, result, earlier)) is not None:  # AV2007-10: asked before any draft side effect
+            result = {"question": said, "revises": result.get("revises")}
         if legacy and "question" in result:
             if req is not None and (req["skill"] or req["attachments"]):  # a question about a skill request stays on that request
                 self.requests.put(self._chat(), msg.provider_id, now, texts=[*req["texts"], msg.text], request_id=req["request_id"],
@@ -1504,7 +1582,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if out["result"] == "refused" and out.get("reason") == catalog.NOT_CHECKED_TODAY and not ({"store.confirm_selection"} & {c["op"] for c in result["ops"]}):
             return self._ask_shelf(msg, now, result, earlier, skill_names)  # keep skill off-policy through the shelf question
         if out["result"] != "ok":
-            self._reply(self._plain(_reason(out)))
+            ops, reason = result["ops"], _reason(out)
+            event = (self._sources() or {}).get(ops[0]["args"].get("id")) if len(ops) == 1 and ops[0].get("op") == "hike.update" else None
+            if (isinstance(reason, str) and reason.strip().lower() == "guest count unavailable" and isinstance(event, dict)
+                    and "capacity" in ops[0]["args"] and ops[0]["args"].get("rsvpEnabled") is not True  # AV2007-18: the real reason
+                    and event.get("rsvpEnabled") is False and event.get("status") == "scheduled"
+                    and isinstance(event.get("title"), str) and event["title"].strip()):
+                self._reply(f"Sign-up is off for {voice.quote(event['title'])}, so there is no guest limit to change. Nothing changed.")
+                self._problem("could-not-do", "signup-off-no-limit")
+                return "not-drafted"
+            self._reply(self._plain(reason))
             return "not-drafted"
         draft = out["draft"]
         if hits := claims.unstated(draft, " ".join([*earlier, msg.text]), self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts; HASS-HIKE-FLOW-1: the owner's earlier texts of this request count as stated
@@ -1657,11 +1744,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if result in ("applied", "already-applied"):
             self._move(row, "applied", commit=out.get("commit"))
             self._audit("undone" if _is_undo(row) else "applied", row, commit=out.get("commit"))  # AVB-10
+            if self.dispatch is not None and not _is_undo(row): self.dispatch.intake_applied(row["code"], now)  # HASS-INTAKE-2: his private intake record is saved now, not before his yes
             for call in json.loads(row["ops_json"]):  # an applied undo closes the draft it reverted
                 if call.get("op") == "history.revert":
                     for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
                                              call["args"].get("changeId")):
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
+                        if self.dispatch is not None: self.dispatch.intake_undone(orig["code"], now)  # HASS-INTAKE-2
             if self.previewer is None or self._row_live_site(row):
                 self._reply(answers.applied_text(row["code"], row["summary"], live_site=self._row_live_site(row)))
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
@@ -1811,7 +1900,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 if self._visible_undo(r) and (code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code)]
         # HASS-LIVE-PLAN-1: only the asking owner's own changes (by chat) can be taken back, with or without a code
         if not done:
-            self._reply("I don't have a change with that code to undo." if code else "There's nothing to undo.")
+            note = self._waiting_note(now)  # AV2007-02: nothing saved, but a change may still be waiting for its yes
+            if code: self._reply("I don't have a change with that code to undo." + (" " + note if note else ""), long_ok=True)
+            else: self._reply("Nothing has been saved yet. " + note if note else "There's nothing to undo.", long_ok=True)
             return "no-target"
         target = done[-1]
         theirs = self._shared and not self._mine(target)  # HASS-OWNERS-2: the site's last change was another owner's
@@ -1826,7 +1917,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return "not-drafted"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", out["draft"]["change_id"]) if self._mine(r)]
         row = same[0] if same else self._propose(out["draft"], msg.sender, now, undo_of=self._audit_action(target))
-        self._proposal_reply(row, out["draft"], f"To undo {self._whose(target['chat'], False)}, I'd change it back:\n" if theirs else "To undo that, I'd change it back:\n")
+        note = self._waiting_note(now, exclude=out["draft"]["change_id"])  # AV2007-02: the change waiting before this undo, not the undo itself
+        self._proposal_reply(row, out["draft"], (note + "\n\n" if note else "") +
+                             (f"To undo {self._whose(target['chat'], False)}, I'd change it back:\n" if theirs else "To undo that, I'd change it back:\n"))
         return "proposed"
 
     # -- H17: status, pause changes, resume changes ----------------------------------------------------------------
