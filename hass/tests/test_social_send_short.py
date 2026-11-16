@@ -27,6 +27,24 @@ class RecognizerTests(unittest.TestCase):
             with self.subTest(text):
                 self.assertFalse(social.wants_posting([text]))
 
+    def test_self_posting_apostrophes_are_equivalent(self):
+        for verb in ("post", "share", "schedule", "send"):
+            for form in ("I'll", "I\u2019ll", "I\u2018ll", "I\u2019LL", "We\u2019ll", "I\u2019d", "we\u2019d"):
+                texts = [f"write a post for the honey; {form} {verb} it later"]
+                original = list(texts)
+                with self.subTest(texts[0]):
+                    self.assertFalse(social.wants_posting(texts))
+                    self.assertEqual(texts, original)
+        for text in ("I\u2019m going to post it later", "we\u2019ll post it later"):
+            self.assertFalse(social.wants_posting([text]))
+
+    def test_self_clause_does_not_hide_a_later_posting_command(self):
+        for text in ("I\u2019ll post it later; post it now", "I\u2019ll write it, then send it to the club",
+                     "I\u2019ll post it later; publish the caption"):
+            with self.subTest(text):
+                self.assertTrue(social.wants_posting([text]))
+        self.assertTrue(social.wants_posting(["post it now"]))
+
     def test_non_social_preflight_is_unchanged(self):
         self.assertIsNone(social.preflight("specials.show", {}, mock.Mock(texts=["send it"])))
 
@@ -54,6 +72,16 @@ class DispatchTests(SocialCase):
         item = self.product("Hass avocado")
         self.assertEqual(self.answered("write a caption so I can send it", skill_reply("social.item", item="Hass avocado")),
                          ("answer", [self.want("item", item["id"])]))
+
+    def test_real_smart_apostrophe_self_post_returns_same_caption(self):
+        item = self.product("Hass avocado")
+        want = self.want("item", item["id"])
+        for text in ("write a post for the Hass avocado; I'll post it later",
+                     "write a post for the Hass avocado; I\u2019ll post it later"):
+            with self.subTest(text):
+                self.assertEqual(self.answered(text, skill_reply("social.item", item="Hass avocado")), ("answer", [want]))
+        self.assertEqual(self.answered("write a post for the Hass avocado; I\u2019ll post it later; post it now",
+                                       skill_reply("social.item", item="Hass avocado")), ("refused", [social.NO_POSTING]))
 
 
 if __name__ == "__main__":
