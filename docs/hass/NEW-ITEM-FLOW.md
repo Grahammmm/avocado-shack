@@ -70,7 +70,8 @@ that came first: short answers, then the rules. Mike's side is in [the phone gui
   `gpt-image-2` at quality high onto the house ivory background, with a 90 s limit. A model-free fidelity gate (the product found
   again in Mike's photo, same colour, label words unchanged) decides; a passing picture is placed and scaled to the
   catalog's 800 x 800 square (JPEG, no metadata; nothing is cut out, so label print on cream paper is kept) and published
-  in place of the house render of the photo. Any failure, timeout or
+  in place of the house render of the photo. Tesseract is required for label verification; missing or failed OCR
+  (including a timeout or unavailable source-photo reading) uses the house fallback with code `polish-ocr`. Any other failure, timeout or
   rejection publishes the house render as before, logs one `polish-<code>` row to the correspondence log, and is never
   mentioned to Mike. The original photo stays in the private media store; decisions live under
   `<mediaRoot>/polish/`. `photo_polish` without `houseRender: true` is refused at load. The model is the single line

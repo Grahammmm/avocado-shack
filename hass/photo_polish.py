@@ -26,7 +26,7 @@ The original photo stays where media.py keeps it; only the settled JPEG is ever 
 
 The fidelity gate (``gate``) needs no model: the edited product, cut from its clean background, must be found again in
 Mike's photo (grey-level correlation over position and scale), with the same colour there, and the label words that
-tesseract reads (when installed) must not change. Thresholds were calibrated on real gpt-image-2 edits and deliberate
+tesseract reads must not change. Unavailable or failed OCR uses the house fallback. Thresholds were calibrated on real gpt-image-2 edits and deliberate
 bad outputs (HASS-IMAGE-1 T2/T3).
 """
 from __future__ import annotations
@@ -275,7 +275,7 @@ def _attempt(root, sha, transport, timeout):
 def gate(original, edited, *, ocr=None) -> dict:
     """Is ``edited`` the same product as Mike's photo ``original``? {"ok", "code", "jpeg" (the edited picture as the
     catalog square, ``frame``), "metrics"}. ``ocr``: framed JPEG -> [(word, (left, top, width, height))] or None; default
-    tesseract when installed. Every measure is taken before deciding, so a rejection still reports all of them."""
+    tesseract (required). Unavailable OCR rejects the edit; otherwise every measure is taken before deciding."""
     fail = lambda code, **m: {"ok": False, "code": code, "jpeg": None, "metrics": m}  # noqa: E731
     if len(edited) > MAX_OUTPUT_BYTES:
         return fail("huge")
@@ -297,11 +297,14 @@ def gate(original, edited, *, ocr=None) -> dict:
         return fail("match")
     mapping = m.pop("_map")
     found = words(made["jpeg"]) if ocr is None else ocr(made["jpeg"])
-    if found is not None:
-        m["words"] = word_scores(original, made["jpeg"], mapping, found)
-        known = photo_words(original) if ocr is None and m["words"] else None
-        m["photo_words"] = sorted(known) if known is not None else None
-        m["text_changed"] = text_changed(m["words"], known)
+    if found is None:
+        return fail("ocr", **m)
+    m["words"] = word_scores(original, made["jpeg"], mapping, found)
+    known = photo_words(original) if ocr is None and m["words"] else None
+    if ocr is None and m["words"] and known is None:
+        return fail("ocr", **m)
+    m["photo_words"] = sorted(known) if known is not None else None
+    m["text_changed"] = text_changed(m["words"], known)
     colour_off = (m["hue_shift"] is not None and m["hue_shift"] > HUE_SHIFT_MAX) or m["chroma"] > CHROMA_MAX
     code = "match" if m["match"] < MATCH_MIN else "colour" if colour_off else "text" if m.get("text_changed") else "ok"
     if code != "ok":
@@ -472,7 +475,7 @@ def _hue(rgb, mask):
 def words(framed, scale=2):
     """[(word, (left, top, width, height))] for the label words tesseract reads on the house-framed 800 px edited picture
     (read at ``scale`` times the size, where small label print is still legible; boxes in the picture's own coordinates;
-    capital letters and digits, 3+ long, at least TEXT_CONF sure), or None without tesseract."""
+    capital letters and digits, 3+ long, at least TEXT_CONF sure), or None when tesseract is unavailable or fails."""
     exe = shutil.which("tesseract")
     if exe is None:
         return None
@@ -487,6 +490,8 @@ def words(framed, scale=2):
                                   check=False)
         except (OSError, subprocess.TimeoutExpired):
             return None
+    if done.returncode != 0:
+        return None
     out = []
     for line in done.stdout.splitlines()[1:]:
         cols = line.split("\t")

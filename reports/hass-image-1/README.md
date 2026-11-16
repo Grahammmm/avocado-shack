@@ -3,6 +3,12 @@
 These tests ran on a scratch copy only (`~/agent-work/scratch/hass-image-1`), never on the live runtime. The six
 input photos are generic scratch product photos.
 
+OCR fallback correction: label verification now requires successful Tesseract execution. Missing Tesseract, an
+execution error, timeout or nonzero exit status selects the existing house fallback (`polish-ocr`), as does failed
+source-photo OCR when edited label words need checking. A successful OCR result with no detected words remains a
+valid result, distinct from unavailable OCR. The historical T2–T6 receipts below were not regenerated for this fix;
+the added offline contract regressions exercise these failures through decision storage and installation.
+
 Model route: Hermes' own `openai-codex` image plugin, signed in with ChatGPT/Codex OAuth. Hass holds no key.
 `MODEL = "openai-codex:gpt-image-2-high"` in `hass/photo_polish.py`. Each call is an image edit of Mike's photo, not
 text-to-image.
