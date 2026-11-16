@@ -53,7 +53,7 @@
     "hass/tlds.py": "59c8da9fd998e483fd2567f11ee5ff297f35020cb0e468a452179e4c28565269",
     "hass/voice.py": "8b04cfa56848d98368cecb42cab976ff786bf4d2aa97ff3a136858b9ad00cfaf",
     "mac/hass_forwarder.py": "8a381d62f79c070e0f451129daaef28345de9fa51bb9c0388546eb503b594606",
-    "workspace/candidates/AUDINV-OLD-59/candidate.py": "6f563f31d313a169a45e3f158315783888852da1f29017508a0758430a002197",
+    "workspace/candidates/AUDINV-OLD-59/candidate.py": "f3e76780d23439e8b932574db02f041768c1aa434657650a7f76f237b1721638",
     "workspace/candidates/AUDINV-OLD-59/fixtures.json": "dd26854d778697d65d934bf7f07c3ef197ae4d8953ea260780655d53886ecbf4"
   },
   "main": "b83d3615a2ff8802c5b82339b7802e6e62c8d97d",

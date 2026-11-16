@@ -61,7 +61,7 @@
     "hass/tlds.py": "59c8da9fd998e483fd2567f11ee5ff297f35020cb0e468a452179e4c28565269",
     "hass/voice.py": "8b04cfa56848d98368cecb42cab976ff786bf4d2aa97ff3a136858b9ad00cfaf",
     "mac/hass_forwarder.py": "8a381d62f79c070e0f451129daaef28345de9fa51bb9c0388546eb503b594606",
-    "workspace/candidates/AUDINV-OLD-59/candidate.py": "6f563f31d313a169a45e3f158315783888852da1f29017508a0758430a002197",
+    "workspace/candidates/AUDINV-OLD-59/candidate.py": "f3e76780d23439e8b932574db02f041768c1aa434657650a7f76f237b1721638",
     "workspace/candidates/AUDINV-OLD-59/fixtures.json": "dd26854d778697d65d934bf7f07c3ef197ae4d8953ea260780655d53886ecbf4"
   },
   "status": "CANDIDATE_ONLY / REVIEW_REQUIRED / NOT_INSTALLED",
@@ -78,6 +78,7 @@ DUPLICATE REPRODUCED on checked main. The unchanged `mac/hass_forwarder.py:373-3
 | --- | --- |
 | Provider accepts, interruption before local sent | baseline attempts=2, accepted=2; local_sent_after_crash=0 |
 | Restart after durable receipt but before local sent | same intent key/receipt; one provider attempt/delivery; duplicate pull does not resend |
+| Two distinct ids with identical chat/text/picture count | four distinct text/picture keys and receipts, four accepted parts, both ids sent/acked; reopen/replay sends neither again |
 | Synthetic documented stable-key contract | attempts=2, accepted=1, same key and receipt |
 | Ambiguous acceptance, no guarantee | UNKNOWN/HOLD, attempts=1, accepted=1, sent=0, acked=0; later FIFO item not sent |
 | Definitive pre-accept failure | no accepted delivery/ack; retry succeeds |
@@ -87,6 +88,12 @@ DUPLICATE REPRODUCED on checked main. The unchanged `mac/hass_forwarder.py:373-3
 | Malformed/duplicate/schema/identity/path/symlink/coverage | rejected, zero attempted disallowed I/O |
 | Real provider idempotency, reconciliation, owner acceptance | UNKNOWN/HOLD / UNVERIFIED |
 
+## Review RETURN correction
+
+The text adapter previously selected the first matching chat/text and could collapse two distinct reply ids into one receipt. It now consumes the actual id delivered by the unchanged Forwarder's `bb-send-start` callback, validating the one-use send context. Production Forwarder and all loaded helper bytes remain unchanged; only the candidate.py digest was refreshed in the two manifests and this report.
+
+The new same-payload/two-id regression first failed with `(attempts, accepted) = (3, 3)` instead of `(4, 4)` (two texts plus two pictures). With the binding correction it passes, including independent keys/receipts, both sent/picture markers and ack ids, and no additional provider attempts after reopen/replay. All six existing recovery/boundary tests remain intact.
+
 ## Actual execution receipts
 
 cwd: isolated avocado-shack clone root. The memcap wrapper was used for every local test/build command.
@@ -95,6 +102,7 @@ cwd: isolated avocado-shack clone root. The memcap wrapper was used for every lo
 $ /home/user/agent-work/bin/memcap -- python3 workspace/candidates/AUDINV-OLD-59/candidate.py --self-test
 test_documented_idempotent_provider_receipt_deduplicates (__main__.RecoveryTests.test_documented_idempotent_provider_receipt_deduplicates) ... SYNTHETIC_IDEMPOTENT attempts=2 accepted=1 same_key=true same_receipt=true
 ok
+test_identical_payloads_keep_distinct_reply_receipts (__main__.RecoveryTests.test_identical_payloads_keep_distinct_reply_receipts) ... ok
 test_pre_accept_failure_payload_conflict_and_picture_partial_completion (__main__.RecoveryTests.test_pre_accept_failure_payload_conflict_and_picture_partial_completion) ... ok
 test_provider_accept_then_crash_before_local_sent_is_reproduced (__main__.RecoveryTests.test_provider_accept_then_crash_before_local_sent_is_reproduced) ... BASELINE attempts=2 accepted=2 local_sent_after_crash=0
 ok
@@ -104,7 +112,7 @@ test_unknown_provider_outcome_holds_without_auto_resend_or_false_sent (__main__.
 ok
 
 ----------------------------------------------------------------------
-Ran 6 tests in 3.633s
+Ran 7 tests in 5.736s
 
 OK
 exit: 0

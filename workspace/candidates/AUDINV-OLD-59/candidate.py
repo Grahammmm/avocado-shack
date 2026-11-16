@@ -210,9 +210,13 @@ class RecoveryTests(unittest.TestCase):
         spool = self.mod.Spool(self.root, NOW)
         self.addCleanup(spool.db.close)
         outer, replies = self, replies or [self.reply]
+        sending = None
         class Sender:
             def send(self, chat, text, attachments=()):
-                reply = next(r for r in replies if (r["chat"], r["text"]) == (chat, text))
+                nonlocal sending
+                reply, sending = sending, None
+                if reply is None or (reply["chat"], reply["text"], reply["pictures"]) != (chat, text, len(attachments)):
+                    raise Hold("missing-or-mismatched-reply-context")
                 payload = json.dumps([text, len(attachments)]).encode()
                 if protocol: return protocol.send({k: reply[k] for k in outer.reply}, "text", payload)
                 return provider.send("baseline", payload)
@@ -234,6 +238,8 @@ class RecoveryTests(unittest.TestCase):
             else: raise AssertionError("unexpected transport")
             return self.mod.relay.seal_control(out, bytes.fromhex("63" * 32), now=NOW, nonce=os.urandom(16).hex())
         def stage(event, rid):
+            nonlocal sending
+            if event == "bb-send-start": sending = next(r for r in replies if r["id"] == rid)
             if crash_stage and event == "bb-send-end": raise Crash()
         self.acks = []
         f = self.mod.Forwarder(cfg, spool, lambda: NOW, transport, Sender(), attach=Attachment(), stage=stage)
@@ -263,6 +269,31 @@ class RecoveryTests(unittest.TestCase):
         restarted.pull()
         self.assertEqual(reopened.db.execute("SELECT key,receipt FROM intent").fetchone(), original)
         self.assertEqual((len(provider.attempts), len(provider.accepted), restarted.spool.status()["sent"]), (1, 1, 1))
+
+    def test_identical_payloads_keep_distinct_reply_receipts(self):
+        provider = RecordingProvider()
+        protocol = self.protocol(provider)
+        png = self.mod.relay.PNG_SIG + b"synthetic\x00"
+        shots = [dict(idx=0, sha256=hashlib.sha256(png).hexdigest(), size=len(png))]
+        replies = [dict(self.reply, id=rid, pictures=1, shots=shots) for rid in (1, 2)]
+        f = self.forwarder(provider, protocol, replies=replies)
+        f.pull()
+        self.assertEqual((len(provider.attempts), len(provider.accepted)), (4, 4))
+        rows = protocol.db.execute("SELECT identity,key,state,receipt FROM intent ORDER BY identity").fetchall()
+        self.assertEqual([row[0] for row in rows], ["1:picture-0", "1:text", "2:picture-0", "2:text"])
+        self.assertEqual(len({row[1] for row in rows}), 4)
+        self.assertEqual([row[2] for row in rows], ["RECEIPT"] * 4)
+        self.assertEqual(len({row[3] for row in rows}), 4)
+        self.assertEqual(f.spool.db.execute("SELECT reply_id FROM sent ORDER BY reply_id").fetchall(), [(1,), (2,)])
+        self.assertEqual(f.spool.db.execute("SELECT reply_id,idx FROM sent_pics ORDER BY reply_id").fetchall(), [(1, 0), (2, 0)])
+        self.assertEqual(self.acks, [1, 2])
+        protocol.db.close()
+        f.spool.db.close()
+        reopened = self.protocol(provider)
+        restarted = self.forwarder(provider, reopened, replies=replies)
+        restarted.pull()
+        self.assertEqual((len(provider.attempts), len(provider.accepted), self.acks), (4, 4, [1, 2]))
+        self.assertEqual(reopened.db.execute("SELECT identity,key,state,receipt FROM intent ORDER BY identity").fetchall(), rows)
 
     def test_documented_idempotent_provider_receipt_deduplicates(self):
         provider = RecordingProvider(idempotent=True)
