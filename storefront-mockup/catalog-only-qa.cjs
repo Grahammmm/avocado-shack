@@ -85,7 +85,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    descriptionSearchFiltersAndPaging:async()=>{const T=dAgo(0),G=[];
     for(let i=0;i<60;i++){const k=i%4;G.push(P('g'+String(i).padStart(2,'0'),k===0?`Honey item ${i}`:`Plain item ${i}`,{brand:i%2?'Acme':'Bolt',category:['pantry','dairy','bread'][i%3],producerKey:i%5===0?'ZF':null,description:k===3?'Salty.':`Sweet honey ${i}.`,availabilityState:i%7<3?'yes':'no',availabilityCheckedOn:T}))}
     const want=(f={})=>{const rows=G.filter(p=>(!f.shelf||p.category===f.shelf)&&(!f.brand||p.brand===f.brand)&&(!f.from||p.producerKey===f.from)&&(!f.avail||p.availabilityState==='yes'));
-     return [...rows.filter(p=>p.name.toLowerCase().includes('honey')),...rows.filter(p=>!p.name.toLowerCase().includes('honey')&&p.description.toLowerCase().includes('honey'))].map(p=>p.id)};
+     const last=l=>[...l.filter(p=>p.availabilityState!=='no'),...l.filter(p=>p.availabilityState==='no')];// AV1104-02: Sold out last inside each group
+     return [...last(rows.filter(p=>p.name.toLowerCase().includes('honey'))),...last(rows.filter(p=>!p.name.toLowerCase().includes('honey')&&p.description.toLowerCase().includes('honey')))].map(p=>p.id)};
     await serve(G,T);
     const cases=[{},{shelf:'pantry'},{brand:'Acme'},{from:'ZF'},{avail:true},{shelf:'dairy',brand:'Bolt',avail:true},{shelf:'bread',brand:'Acme',from:'ZF',avail:true}];
     assert.ok(want().length>24,'fixture: more than two pages across both groups');assert.ok(cases.some(f=>want(f).length===0)&&cases.some(f=>want(f).length>0),'fixture: a combined filter with no match, and some with matches');
@@ -147,6 +148,31 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await page.locator('#product-search').fill('  Red   plum ');const typed=await st();assert.equal(typed.q,'Red   plum','the visible words, not canonical forms, go to the address');
     await go('?view=all&q='+encodeURIComponent('plum   RED')+'&utm=x#market');const back=await st();assert.ok(same(back.order,[...meta,...desc]),'restore gives the same order');assert.equal(back.box,'plum   RED');assert.equal(back.count,'30 selections \u00b7 12 shown');
     await go('?view=all&q='+encodeURIComponent('<img src=x onerror=alert(1)> plum'));assert.deepEqual((await st()).order,[]);assert.equal(await page.locator('img[src="x"]').count(),0);}
+   ,
+   // AV1104-02: cards whose current word is exactly Sold out go last in their list/group, still drawn; Last confirmed and no-word cards keep their place.
+   soldOutLast:async()=>{
+    const A=(id,name,state,age,o={})=>P(id,name,{availabilityState:state,availabilityCheckedOn:age===null?'':dAgo(age),...o});
+    const H=[A('z01','Jam One','no',0),A('z02','Jam Two','yes',0),A('z03','Jam Three','no',0,{description:'Jam.'}),A('z04','Jam Four','limited',0),A('z05','Jam Five','no',12),A('z06','Jam Six','',null),A('z07','Plain','yes',0,{description:'Fruit jam.'}),A('z08','Other','no',0,{description:'Some jam here.'}),A('z09','Bread','yes',0,{category:'bread'}),A('z10','Bread Two','no',0,{category:'bread'})];
+    await serve(H,dAgo(0));await go('?view=all');
+    const words=await page.evaluate(()=>catalog.map(p=>p.availability||''));
+    assert.equal(words[0],'Sold out');assert.ok(words[4]!=='Sold out'&&words[4]!=='','a stale raw no is shown as Last confirmed, not Sold out');assert.equal(words[5],'');
+    const all=['z02','z04','z05','z06','z07','z09','z01','z03','z08','z10'];
+    let s=await st();assert.ok(same(s.order,all),'All: Sold out last, rest in source order: '+s.order.join(','));assert.ok(same(s.cards,all),'cards drawn in the same order, Sold out still shown');
+    assert.equal(s.count,'10 selections \u00b7 10 shown','count unchanged');
+    assert.equal(await page.locator('#catalog-grid .availability',{hasText:'Sold out'}).count(),4,'the Sold out word is still shown');
+    await page.locator('#product-search').fill('jam');s=await st();
+    assert.ok(same(s.order,['z02','z04','z05','z06','z01','z03','z07','z08']),'search: name group (available, then Sold out), then description group (available, then Sold out): '+s.order.join(','));
+    await page.locator('#product-search').fill('');
+    await page.locator('[data-filter="bread"]').click();s=await st();assert.ok(same(s.order,['z09','z10']),'one shelf: '+s.order.join(','));
+    await page.locator('[data-filter="all"]').click();
+    // Every card Sold out stays in source order.
+    const S=[A('y1','One','no',0),A('y2','Two','no',0),A('y3','Three','no',0)];await serve(S,dAgo(0));await go('?view=all');s=await st();assert.ok(same(s.order,['y1','y2','y3']),'all Sold out: source order');
+    // ?item reaches a Sold out card at its final place, past the first page.
+    const G=[];for(let i=0;i<16;i++)G.push(A('g'+String(i).padStart(2,'0'),'Item '+i,i<3?'no':'yes',0));
+    await serve(G,dAgo(0));await go('?item=g00');s=await st();
+    assert.ok(s.order.indexOf('g00')===13&&s.cards.includes('g00'),'?item loads enough cards to reach the Sold out card at its final place');
+    assert.ok(same(s.order.slice(0,14),[...G.slice(3).map(p=>p.id),'g00']),'order for item');assert.equal(s.count,'16 selections \u00b7 24 shown'.replace('24','16'));
+   }
   };
   try{for(const [name,check] of Object.entries(checks)){await check();descriptionSearchChecks.push(name)}}finally{await dropRoutes()}
   await page.setViewportSize({width:390,height:844});await go('?view=all');assert.equal(await countText(),fullCount,'real catalog restored after the description search fixtures');
