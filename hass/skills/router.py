@@ -25,6 +25,7 @@ from fractions import Fraction
 from hass import interpret_check, nl_prep
 from hass.skills import backlog as backlog_mod
 from hass.skills.kinds import WORDS_FOR_AVAILABILITY
+from hass.skills.model import _fold
 
 TOP = 3
 NEAR_TIE = 0.10  # the model's pick scored within 10% of the leader: the two opinions are split
@@ -92,6 +93,21 @@ def _has_attachment_slot(skill) -> bool:
     return any(s.kind == "attachment" for s in skill.slots)
 
 
+def _read_only(skill) -> bool:
+    return (skill.live_class == "read-only" and skill.approval == "none" and not skill.edits
+            and tuple(skill.side_effects) == ("none",))
+
+
+def _exact_read_only(text, items):
+    """The one active read-only skill that declares the whole message as a trigger (folded, whole-string equality), or None.
+    Another skill with the same exact trigger, change skill or not, means no preference: shared words never count."""
+    folded = _fold(text) if isinstance(text, str) else ""
+    if not folded:
+        return None
+    exact = [s for s in items if any(folded == _fold(t.text) for t in s.triggers)]
+    return exact[0].name if len(exact) == 1 and _read_only(exact[0]) else None
+
+
 def candidates(text, hints=None, open_request=None, attachment=None, skills=()) -> list:
     """Up to three ``(skill name, score)``, best first (ties by name), score > 0 only. With an attachment only skills
     that own an attachment slot compete. ``open_request`` is a dict with the open request's ``skill`` (or None)."""
@@ -114,6 +130,10 @@ def candidates(text, hints=None, open_request=None, attachment=None, skills=()) 
         score += OPEN_BOOST if open_skill == skill.name else 0.0
         if score > 0:
             scored.append((skill.name, round(score, 4)))
+    exact = _exact_read_only(text, items)
+    if exact:  # a whole-message exact trigger of a read-only skill leads clearly (outside the near-tie band); the model's pick is still validated
+        lead = 2 * max((sc for _n, sc in scored), default=0) + 1
+        scored = [p for p in scored if p[0] != exact] + [(exact, round(lead, 4))]
     scored.sort(key=lambda p: (-p[1], p[0]))
     return scored[:TOP]
 
