@@ -1,0 +1,22 @@
+{
+ "applies_nothing": true,
+ "boundary": "report-only: no ledger/queue/state mutation, no approve/deny, no revival, no network",
+ "candidate": true,
+ "inspected_main": "b302d26bee6a4d8993f9da324d743bf206c56aca",
+ "installed": false,
+ "package_digests_sha256": {
+  "SOURCES.json": "265e9bd8b8392c61684672bb34394a66ae98f9008fd3848487e37ffccc9e2d20",
+  "avocado-76-decision-reconciliation.tsv": "f768aaf062cbb7b25f115a48443aeff459917a10b50c03ee305fb364c6906a35",
+  "candidate.py": "2080bf4da2a70f7c4b5675b672178351b19be01a9ca8543c8b8ca832716c89a0",
+  "fixtures.json": "0f48ce703e5347d47ec7305d939b1647c3c7466ac7878dc7e4d9358c2532cc5e"
+ },
+ "reused_helpers": "none (stdlib only)",
+ "schema_version": 1,
+ "source_digests_sha256": {
+  "G-DECISIONS.log": "f0cb06731fbb1c47044e193e25dee6762e58372d4c245bdf73fed9ea0a7fa02c",
+  "MILESTONE-MAP.tsv": "7762c735a44c514eb75cc836647458634c87c92d677db32638fc18a8d979809a",
+  "QUEUE-AUDIT-APPLIED.json": "28405b8af483bdaac060ccf2d985d5c755bb71c227f69c8b1b329fb2ac89df7d",
+  "QUEUE-AUDIT.tsv": "59c09581e30a5135a5e3e2879985d9fb3a3c725c86cb199bbcdf76d905c64995",
+  "unit-state.json": "834942e0570b3113e9943000b550311eea57f3a27d598a1912ef7e1380ea101e"
+ }
+}
