@@ -1,6 +1,6 @@
 # How long to keep private data (H21) - options and questions
 
-**Transcript exception:** G authorized retaining all new conversation transcripts on 2026-11-16. This class is kept indefinitely, with no deletion code; the open comparisons below do not apply to it.
+**Transcript exception:** G authorized retaining all new conversation transcripts on November 16, 2026. This class is kept indefinitely, with no deletion code; the open comparisons below do not apply to it.
 
 **Open decision for Michael and G for the other classes. This page selects no period for those classes, deletes nothing and authorizes no cleanup.** 7, 30 and 90 days are three comparison points, not chosen defaults and not limits that anything enforces. The row stays open in [HANDOVER.md](HANDOVER.md) and in [FEATURES.md line 49](FEATURES.md#L49) ("Needs G: owner retention periods; no deletion step enforces them yet") until Michael and G answer privately.
 

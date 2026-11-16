@@ -75,7 +75,7 @@ def matrix_problems(doc: str) -> list:
     rows = matrix(doc)
     if not rows or rows[0] != HEADER:
         return ["header is not the six expected columns"]
-    problems = [f"class order is {[r[0] for r in rows[1:]]}"] if [r[0] for r in rows[1:]] != list(CLASSES) else []
+    problems = [f"class order is {[r[0] for r in rows[1:]]}"] if [r[0] for r in rows[1:]] != ["Transcript", *CLASSES] else []
     for row in rows[1:]:
         if len(row) != 6:
             problems.append(f"{row[0]}: {len(row)} cells")
@@ -83,6 +83,12 @@ def matrix_problems(doc: str) -> list:
         for col in (1, 2):
             if len(row[col]) < 60:
                 problems.append(f"{row[0]}: {HEADER[col]} cell is thin")
+        if row[0] == "Transcript":
+            if "Private `transcript.sqlite3`, append-only" not in row[1]:
+                problems.append("Transcript: private append-only store is missing")
+            if row[3:] != ["Keep everything; no deletion."] * 3:
+                problems.append("Transcript: keep-everything exception is missing")
+            continue
         for col, word in LOOK_BACK.items():
             if word not in row[col].lower():
                 problems.append(f"{row[0]}: {HEADER[col]} does not name its look-back")
@@ -178,7 +184,9 @@ class RetentionOptionsDocTests(unittest.TestCase):
         self.assertIn("Backups: Holds (kinds of field) cell is thin", matrix_problems(emptied))
         no_look_back = "\n".join(ln.replace("month", "while") if ln.startswith("| Inbox |") else ln for ln in lines)
         self.assertIn("Inbox: After 30 days does not name its look-back", matrix_problems(no_look_back))
-        self.assertEqual(len(matrix(self.doc)), 11)  # the header and the ten classes
+        self.assertEqual(len(matrix(self.doc)), 12)  # header, ten report classes and Transcript
+        self.assertIn("G authorized retaining all new conversation transcripts on November 16, 2026.", self.doc)
+        self.assertIn("This class is kept indefinitely, with no deletion code", self.doc)
 
     def test_age_basis_unknown_and_live_work_caveats(self):
         self.assertEqual(caveat_problems(self.doc), [])
@@ -198,9 +206,9 @@ class RetentionOptionsDocTests(unittest.TestCase):
     def test_no_policy_or_erasure_claim_and_questions_remain_open(self):
         self.assertEqual(policy_problems(self.doc), [])
         self.assertEqual(question_problems(self.doc), [])
-        for phrase in ("records no decision, selects no period, deletes nothing and authorizes no cleanup", "not chosen defaults",
+        for phrase in ("This page selects no period for those classes, deletes nothing and authorizes no cleanup", "not chosen defaults",
                        "no deletion step enforces a retention period", "Git history", "the owner's phone",
-                       "Nothing on this page is a policy, a default, a sign-off or a decision date"):
+                       "Other than the transcript retention authorization above, nothing on this page is a policy, a default, a sign-off or a decision date"):
             self.assertIn(phrase.lower(), squash(self.doc).replace("**", "").lower())
         for bad in ("The chosen period is 30 days.", "Messages will be deleted after 30 days.", "Run DELETE FROM drafts;",
                     "Then rm -rf the folder.", "The retention period is 90 days.", "Add a crontab line.", "Answer: 7 days"):
@@ -230,7 +238,7 @@ class RetentionOptionsDocTests(unittest.TestCase):
                        "is not generated from these stores", "deleting them shortens the evidence available"):
             self.assertIn(phrase, trial)
         self.assertTrue(self.doc.startswith("# How long to keep private data (H21) - options and questions\n"))
-        self.assertIn("**Open decision for Michael and G.", self.doc)
+        self.assertIn("**Open decision for Michael and G for the other classes. This page selects no period for those classes, deletes nothing and authorizes no cleanup.**", self.doc)
 
 
 if __name__ == "__main__":
