@@ -91,24 +91,30 @@ def _today(ctx):
 def _refs(value, ctx) -> list:
     """RF2135-10: the product ids a list of references names, in the owner's order, repeats kept.
 
-    A canonical id keeps the id path (the editor judges an id the content does not know). Any other string is a
-    product name or alias, resolved with the existing ``kinds.product_ref``; only one active product is accepted, so an
-    ambiguous, unknown, held or hidden name refuses the whole plan with the resolver's own plain reply.
+    An exact id of a product in the content keeps the id path. Any other string is a product name or alias (even a
+    lowercase one-word one that fits ID_RE), resolved with the existing ``kinds.product_ref``; only one active product
+    is accepted, so an ambiguous, held or hidden name refuses the whole plan with the resolver's own plain reply. An
+    unknown id-shaped string is kept for the editor to judge; with no content only id syntax passes.
     """
     if not isinstance(value, (list, tuple)) or not all(isinstance(x, str) and x.strip() for x in value):
         raise Refusal(BAD_ITEM)
     content = _content(ctx)
     out = []
     for ref in value:
-        if ID_RE.fullmatch(ref):
+        if content is None:
+            if not ID_RE.fullmatch(ref):
+                raise Refusal(BAD_ITEM)
             out.append(ref)
-        elif content is None:
-            raise Refusal(BAD_ITEM)
+        elif _find(ctx, ref) is not None:  # an exact existing id wins over any name or alias
+            out.append(ref)
         else:
             found = kinds.product_ref(content, ref, getattr(ctx, "aliases", None))
-            if found.status != "one":
+            if found.status == "none" and ID_RE.fullmatch(ref):
+                out.append(ref)  # id-shaped but unknown: the editor judges it
+            elif found.status != "one":
                 raise Refusal(found.reply)
-            out.append(found.value)
+            else:
+                out.append(found.value)
     return out
 
 
