@@ -119,7 +119,7 @@ class LiteralScanTests(unittest.TestCase):
             self.assertIn("Hide the page", str(caught.exception))
 
     def test_other_front_skills_and_registry_artifacts_remain_identical(self):
-        quoted = '"We sell red onions."'
+        quoted = '"Make the shop red."'
         with self.assertRaises(_StyleStop):
             plan_sections({"hide": ["newsletter"]}, {"texts": [quoted]})
         with self.assertRaises(_StyleStop):
