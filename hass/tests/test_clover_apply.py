@@ -188,9 +188,10 @@ class ApplyTests(NoNetwork):
         self.cfg = replace(self.cfg, writes=True, live_approved=True, write_token_file=str(self.token))
         self.engine = self.make()
         code = self.offer(d.build_set_price(self.item(), 100, self.cfg))
-        self.token.chmod(0o644)
-        with self.assertRaises(CredentialError):
-            self.yes(code)
+        for missing in (False, True):
+            self.token.unlink() if missing else self.token.chmod(0o644)
+            with self.assertRaises(CredentialError):
+                self.yes(code)
         self.assertFalse(self.till.seen)
 
     def test_apply_rechecks_cap_day_rollover_and_create_collision(self):
