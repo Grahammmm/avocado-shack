@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## AV2007-13 — acceptance undo clock CI repair (November 16, 2026)
+
+Reproduced all four acceptance failures at PR #878 head 2ea8550db606fe7e935ef34cfd30a92bc35607ed from CI run 43829551839 (shard-0 job 133189142085 and shard-2 job 133189142049): undo freshness checks used the real day rather than the fixture's rendering day. Merged current origin/main f18d22c5d5db583be0c22cba9109d1bd3eeefae0, incorporating #907's existing clock-scope fix cleanly. The question-binding implementation and its fixtures remain unchanged; no duplicate fix or new CI changes were needed. No review RETURN findings were present.
+
+Fresh local proof: 112 tests passed across both complete acceptance modules plus non-hike questions, candidate-answer safety, command documentation, phone answers and open requests. This includes the exact four reproduced failures and existing clock-restoration/corrupt-byte controls. The passing run used an isolated canonical TMPDIR and a task-local snapshot of installed CI-pinned Pillow 12.0.0; both Pillow CI checks passed. Exact-head remote CI is checked separately; local proof is not an all-green CI claim. No installs, servers, live data, publication, force pushes or PR lifecycle changes. Rollback: revert this main-sync merge only if withdrawing the inherited correction is intended.
+
 ## AV2007-13 — demo rehearsal CI alignment (November 15, 2026)
 
 Reproduced PR #878's shard-2 failure at b89b8ef13e084949769f7cfdcbaab8d9184981f4 (run 43800326355, job 133080174474): the till-isolation test indexed the removed `ROUTER-15` known-gap marker. Merged origin/main 18eafb31833211e6ad324d647656648df750ff53, bringing in #898's existing assertion correction without conflicts; this PR's question-binding changes remain intact. No additional production or test changes were needed.
