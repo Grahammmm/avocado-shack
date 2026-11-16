@@ -18,7 +18,7 @@ from hass.content_model import HOME_IMAGE_RE, MAX_NOTICE, SHELF_LABELS, ContentE
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
 from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, nl_prep, voice  # noqa: E402
-from hass import capabilities  # noqa: E402
+from hass import capabilities, photo_polish  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
@@ -398,6 +398,8 @@ def load_settings(sdir, photos=False) -> dict:
     if mode not in dispatch_mod.MODES: problems.append("skills.mode must be ops-only, both or skills-first")
     house = settings.get("houseRender", False)  # SKILLS-FW-3: read here, used by the picture card (SKILLS-PIC-1); default off
     if type(house) is not bool: problems.append("houseRender must be true or false")
+    polish = settings.get("photo_polish", False)  # HASS-IMAGE-1: background photo clean-up via Hermes; default off
+    if type(polish) is not bool or polish and house is not True: problems.append("photo_polish must be true or false, and true needs houseRender")
     intake = settings.get("itemIntake", False)  # HASS-INTAKE-2: the full intake interview for a new item; default off, like houseRender
     if type(intake) is not bool: problems.append("itemIntake must be true or false")
     lookup = settings.get("hikeLookup")  # HIKE-LOOKUP-2: {"contact": address} (or the flat key "hikeLookup.contact"); absent = no map lookup, the plain hike flow
@@ -407,6 +409,7 @@ def load_settings(sdir, photos=False) -> dict:
     return {"ownerSenders": tuple(senders), "ownerKeys": frozenset(keys), "ownerChat": chat, "approvalTtlSeconds": ttl,
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
             "interpreterDailyCap": cap, "skillsMode": mode, "houseRender": house,  # SKILLS-FW-3
+            **({"photo_polish": True} if polish is True else {}),  # HASS-IMAGE-1: only when on
             **({"hikeLookupContact": contact} if contact is not None else {}),  # HIKE-LOOKUP-2: only when set
             **({"itemIntake": True} if intake is True else {}),  # HASS-INTAKE-2: only when on
             **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),
@@ -446,6 +449,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         sdir = editor_mod.open_state(state_dir)
         self.settings, self.photos = load_settings(sdir, photos is not None), photos  # fetch(provider_id, n) -> [bytes]
         self.editor, self.interpreter, self.clock, self.labels, self._label_jobs = editor, interpreter, clock, labels, []
+        self._polish_jobs, self.polish_transport = [], None  # HASS-IMAGE-1: None = the real Hermes route (tests inject a stub)
         self.sdir, self.previewer = sdir, previewer
         path = memory_mod.private_db(sdir, "conversation.sqlite3")
         self.db = sqlite3.connect(path, isolation_level=None)
@@ -920,6 +924,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         row, the draft stays proposed) and the message is recorded as `approval-held`; editor.apply is never called."""
         if hasattr(self.editor, "sync_settings"): self.editor.sync_settings(self.settings)
         self._label_jobs = []  # AV2152-04: one job per new photo draft, in the order sent; reset on every message
+        self._polish_jobs = []  # HASS-IMAGE-1: stored photos to clean up in the background, after the commit
         self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
         self._intake_receipt(msg)  # HASS-INTAKE-2: a bare photo's first question goes out before the photo is fetched
         try:
@@ -934,6 +939,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         for job in self._label_jobs:  # AV1537-15: after the commit, never holding the lock; AV2152-04: a failed one never stops the next
             try: self._read_label(*job)
             except Exception: continue  # noqa: BLE001 - no label is today's reply exactly
+        for sha in self._polish_jobs:  # HASS-IMAGE-1: a daemon thread each; never waited for, never a reply
+            photo_polish.start(self.settings["mediaRoot"], sha, log=self.log, transport=self.polish_transport)
         if approved is None: return disposition
         out = self.editor.apply(approved["change_id"], approved["draft_hash"], chat=approved["chat"]) \
             if getattr(self.editor, "routes_chat", False) else self.editor.apply(approved["change_id"], approved["draft_hash"])
@@ -1651,6 +1658,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return self._photos_refused([(exc.position, exc)], count)
         except media.Refused as exc:
             return self._photos_refused([(1, exc)], count)
+        if photo_polish.enabled(self.settings): self._polish_jobs += [s["sha256"] for s in stored]  # HASS-IMAGE-1: started after the commit
         if count > 1: return self._photo_batch(msg, now, [s["sha256"] for s in stored])
         sha = stored[0]["sha256"]
         dup = self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%')
