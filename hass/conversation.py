@@ -1556,7 +1556,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if out["result"] == "refused" and out.get("reason") == catalog.NOT_CHECKED_TODAY and not ({"store.confirm_selection"} & {c["op"] for c in result["ops"]}):
             return self._ask_shelf(msg, now, result, earlier, skill_names)  # keep skill off-policy through the shelf question
         if out["result"] != "ok":
-            self._reply(self._plain(_reason(out)))
+            ops, reason = result["ops"], _reason(out)
+            event = (self._sources() or {}).get(ops[0]["args"].get("id")) if len(ops) == 1 and ops[0].get("op") == "hike.update" else None
+            if (isinstance(reason, str) and reason.strip().lower() == "guest count unavailable" and isinstance(event, dict)
+                    and "capacity" in ops[0]["args"] and ops[0]["args"].get("rsvpEnabled") is not True  # AV2007-18: the real reason
+                    and event.get("rsvpEnabled") is False and event.get("status") == "scheduled"
+                    and isinstance(event.get("title"), str) and event["title"].strip()):
+                self._reply(f"Sign-up is off for {voice.quote(event['title'])}, so there is no guest limit to change. Nothing changed.")
+                self._problem("could-not-do", "signup-off-no-limit")
+                return "not-drafted"
+            self._reply(self._plain(reason))
             return "not-drafted"
         draft = out["draft"]
         if hits := claims.unstated(draft, " ".join([*earlier, msg.text]), self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts; HASS-HIKE-FLOW-1: the owner's earlier texts of this request count as stated
