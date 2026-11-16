@@ -284,6 +284,52 @@ def _next_weekday(today: date, wd: int, include_today=False):
     return _shift(today, delta if (delta or include_today) else 7)
 
 
+_ORD_UNITS = ("first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth", "thirteenth", "fourteenth",
+              "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth")
+ORDINAL_WORDS = {w: i + 1 for i, w in enumerate(_ORD_UNITS)}  # AV2007-11: spoken calendar days 1-31, a closed list (no general number parser)
+ORDINAL_WORDS.update({"twentieth": 20, "thirtieth": 30})
+for _tens, _base in (("twenty", 20), ("thirty", 30)):
+    for _i, _w in enumerate(_ORD_UNITS[:9] if _base == 20 else _ORD_UNITS[:1]):
+        ORDINAL_WORDS[f"{_tens} {_w}"] = _base + _i + 1
+ORDINAL_WORD_RE = re.compile(r"(?<![\w-])(" + "|".join(sorted((w.replace(" ", r"[ -]") for w in ORDINAL_WORDS), key=len, reverse=True)) + r")(?![\w-])")
+ORD_BAD_BEFORE_RE = re.compile(r"(?:zero|minus|negative|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|\d)[ -]$")
+ORD_BEFORE_RE = re.compile(r"(?:\bthe|\b(?:" + "|".join(sorted(WEEKDAYS, key=len, reverse=True)) + r")s?\.?(?:,?\s+the)?|\b(?:" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\.?)[\s,]+$")
+ORD_AFTER_RE = re.compile(r"\s+(?:of\s+)?(?:" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b")
+
+
+def _ordinal_suffix(n):
+    return "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+
+
+def _spoken_days(t):
+    """AV2007-11: (date-local text, segments). A spelled-out day of the month ('the twenty first', 'november thirtieth', 'saturday the fifth') is read as its
+    numeric ordinal ('21st') so it takes the same calendar path; only in a day context (after 'the', a weekday or a month, or before a month). ``segments`` maps
+    each replacement back to the words said: [(new_start, new_end, said)]. Other hint families never see this text."""
+    out, segs, pos, shift = [], [], 0, 0
+    for m in ORDINAL_WORD_RE.finditer(t):
+        before, after = t[:m.start()], t[m.end():]
+        if ORD_BAD_BEFORE_RE.search(before) or not (ORD_BEFORE_RE.search(before) or ORD_AFTER_RE.match(after)): continue
+        n = ORDINAL_WORDS[m.group(1).replace("-", " ")]
+        new = f"{n}{_ordinal_suffix(n)}"
+        out.append(t[pos:m.start()]); out.append(new)
+        start = m.start() + shift
+        segs.append((start, start + len(new), m.group(1)))
+        shift += len(new) - (m.end() - m.start()); pos = m.end()
+    out.append(t[pos:])
+    return "".join(out), segs
+
+
+def _said_words(t, segs, s, e):
+    """The words as said for t[s:e] of the date-local text: each numeric stand-in goes back to its spoken form."""
+    res, pos = [], s
+    for a, b, said in segs:
+        if b <= s or a >= e: continue
+        res.append(t[pos:a]) if a > pos else None
+        res.append(said); pos = b
+    res.append(t[pos:e])
+    return "".join(res)
+
+
 def _safe_date(year, month, day):
     try: return date(year, month, day)
     except ValueError: return None
@@ -387,6 +433,7 @@ def date_hints(text, today: date):
 
 def all_date_rows(text, today: date):
     t, rows, hits = fold(text), [], []
+    t, segs = _spoken_days(t)
     wspans, dspans = [], []
     day = lambda d: d.isoformat()  # noqa: E731
     for m in RELATIVE_RE.finditer(t):
@@ -434,6 +481,8 @@ def all_date_rows(text, today: date):
         d = _safe_date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
         if d is not None and 2000 <= d.year <= 2099: rows.append(_date_row(m.group(0), d)); dspans.append((m.start(), m.end(), rows[-1]))
     _pair_weekdays(t, rows, wspans, dspans)
+    if segs:
+        for ds, de, drow in dspans: drow["said"] = _said_words(t, segs, ds, de) if drow["said"] == t[ds:de] else drow["said"]
     for m in IN_RE.finditer(t):
         n = int(m.group(1)) if m.group(1).isdigit() else WORD_NUMBERS[m.group(1)]
         d = _shift(today, n * (7 if m.group(2) == "week" else 1))

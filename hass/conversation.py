@@ -20,7 +20,7 @@ from hass.social_message import classify_social  # noqa: E402
 from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, nl_prep, voice  # noqa: E402
 from hass import capabilities  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
-from hass.skills import dispatch as dispatch_mod, openreq  # noqa: E402
+from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
 # imported back here, so hass.conversation.<name> still works for every caller and test.
 from hass.chat.shared import (  # noqa: E402,F401
@@ -398,6 +398,8 @@ def load_settings(sdir, photos=False) -> dict:
     if mode not in dispatch_mod.MODES: problems.append("skills.mode must be ops-only, both or skills-first")
     house = settings.get("houseRender", False)  # SKILLS-FW-3: read here, used by the picture card (SKILLS-PIC-1); default off
     if type(house) is not bool: problems.append("houseRender must be true or false")
+    intake = settings.get("itemIntake", False)  # HASS-INTAKE-2: the full intake interview for a new item; default off, like houseRender
+    if type(intake) is not bool: problems.append("itemIntake must be true or false")
     lookup = settings.get("hikeLookup")  # HIKE-LOOKUP-2: {"contact": address} (or the flat key "hikeLookup.contact"); absent = no map lookup, the plain hike flow
     contact = settings.get("hikeLookup.contact") if lookup is None else lookup.get("contact") if isinstance(lookup, dict) else False
     if contact is not None and hike_lookup.valid_contact(contact) is None: problems.append("hikeLookup.contact must be an e-mail address or an https link")
@@ -406,6 +408,7 @@ def load_settings(sdir, photos=False) -> dict:
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
             "interpreterDailyCap": cap, "skillsMode": mode, "houseRender": house,  # SKILLS-FW-3
             **({"hikeLookupContact": contact} if contact is not None else {}),  # HIKE-LOOKUP-2: only when set
+            **({"itemIntake": True} if intake is True else {}),  # HASS-INTAKE-2: only when on
             **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),
             **({"gKeys": frozenset(g_keys), "gChat": g_chat, "gSenders": tuple(g_senders)} if g_keys and isinstance(g_chat, str) else {}),
             **({"gOwner": True} if g_owner is True else {}),
@@ -853,6 +856,34 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._pages = {}
 
     _pages: dict = {}  # HASS-SEC-3 (M2): the maker websites read for the message being handled, BEFORE its write transaction
+    early_flush = None  # HASS-INTAKE-2: fn() that sends the queued replies now (host.Worker sets it); None = they go out after the message
+    answer_reader = None  # HASS-INTAKE-2: an answer_reader.AnswerReader for an intake answer fixed code cannot read; None = ask again
+
+    def _intake_receipt(self, msg) -> None:
+        """HASS-INTAKE-2 (G, 2026-11-16): the moment the owner's bare photo arrives, with the interview on, his first question goes out
+        from fixed words: no model call, no preview, and BEFORE the photo is fetched, checked or stored (the slow part). The photo
+        is then handled as always; a photo that cannot be fetched is tried again without a second question. Nothing else is
+        decided here: the same checks as the photo path (owner, one photo, no caption, skills on, writer free, nothing else open)
+        keep an ordinary photo exactly as it was."""
+        try:
+            if (self.dispatch is None or self.photos is None or self.settings.get("itemIntake") is not True or msg.attachments != 1
+                    or msg.from_me or msg.kind != "new" or self.skills_mode == dispatch_mod.DEFAULT_MODE
+                    or msg.chat not in self._owner_chats or not self._is_owner(msg)
+                    or msg.text.replace("\ufffc", "").strip() or not self.dispatch.intake_ready()):
+                return
+            now = self._now()
+            if (self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone()
+                    or item_intake.acknowledged(self.db, msg.provider_id) or self.requests.get(msg.chat, now) is not None
+                    or self._writer_busy(now) is not None):
+                return
+            with self._tx():
+                if item_intake.acknowledge(self.db, msg.provider_id, now):
+                    self._reply(item_intake.START)
+        except Exception:  # noqa: BLE001 - a quick first question is a convenience: the photo path asks it as before
+            return
+        if self.early_flush is not None:
+            try: self.early_flush()
+            except Exception: pass  # noqa: BLE001,S110 - cycle() flushes again and raises as before
 
     def _read_sites(self, msg) -> dict:
         """HASS-SEC-3 (M2): a maker's web address the owner typed (in this text or earlier in his open request) is read HERE,
@@ -890,6 +921,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if hasattr(self.editor, "sync_settings"): self.editor.sync_settings(self.settings)
         self._label_jobs = []  # AV2152-04: one job per new photo draft, in the order sent; reset on every message
         self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
+        self._intake_receipt(msg)  # HASS-INTAKE-2: a bare photo's first question goes out before the photo is fetched
         try:
             with self._tx():
                 disposition, approved = self._handle(msg, last_try)
@@ -1723,11 +1755,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if result in ("applied", "already-applied"):
             self._move(row, "applied", commit=out.get("commit"))
             self._audit("undone" if _is_undo(row) else "applied", row, commit=out.get("commit"))  # AVB-10
+            if self.dispatch is not None and not _is_undo(row): self.dispatch.intake_applied(row["code"], now)  # HASS-INTAKE-2: his private intake record is saved now, not before his yes
             for call in json.loads(row["ops_json"]):  # an applied undo closes the draft it reverted
                 if call.get("op") == "history.revert":
                     for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
                                              call["args"].get("changeId")):
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
+                        if self.dispatch is not None: self.dispatch.intake_undone(orig["code"], now)  # HASS-INTAKE-2
             if self.previewer is None or self._row_live_site(row):
                 self._reply(answers.applied_text(row["code"], row["summary"], live_site=self._row_live_site(row)))
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
