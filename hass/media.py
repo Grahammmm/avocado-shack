@@ -216,6 +216,8 @@ def _check_orientation(tiff: bytes) -> int:
         if at + size > len(tiff): raise Refused("unreadable")
         return int.from_bytes(tiff[at:at + size], order)
     ifd, found = num(4, 4), set()
+    # the whole IFD0 envelope (count, every 12-byte entry, 4-byte next-IFD pointer) must be present before any entry is read
+    if ifd < 8 or ifd + 2 + 12 * num(ifd, 2) + 4 > len(tiff): raise Refused("unreadable")
     for entry in range(ifd + 2, ifd + 2 + 12 * num(ifd, 2), 12):
         if num(entry, 2) != 0x0112: continue
         value = num(entry + 8, 2)  # a SHORT sits left-justified in the 4-byte value field for both byte orders
