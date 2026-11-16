@@ -19,7 +19,7 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import bridge, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
+from hass import answer_reader, bridge, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
 from hass import nl_prep, preview, receiver, relay, sandbox, stagelog  # noqa: E402
 from hass.content_model import load_content  # noqa: E402
 from hass.ops import load_registry  # noqa: E402
@@ -300,6 +300,7 @@ class Worker:
         self.sender = relay.RelaySender(store, owner_chat_order(conv.settings), lambda: int(clock().timestamp()), shots_dir, conv.settings.get("gChat"))
         self.rev = editor_mod.content_revision(self.worktree)
         conv.interpreter = _Timed(conv.interpreter, self)
+        conv.early_flush = lambda: conv.flush(self.sender)  # HASS-INTAKE-2: a photo's first question goes out on receipt, before the photo is fetched
         raw_send = self.sender.send
 
         def send(chat, text, attachments=()):
@@ -434,6 +435,10 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
     if cfg["approvals"] == "live" and not hasattr(conv.editor, 'gate'):
         conv.editor.conv = conv
         conv.editor.reconcile()
+    if conv.settings.get("itemIntake") is True:  # HASS-INTAKE-2: the same local model service reads one odd intake answer (first try only)
+        itp = cfg["interpreter"]
+        try: conv.answer_reader = answer_reader.AnswerReader(itp["url"], itp["model"], timeout=itp.get("timeout", 30), api=itp.get("api", "ollama"), think=itp.get("think"))
+        except (KeyError, ValueError): conv.answer_reader = None  # none set up: an odd answer is asked again, never guessed
     if cfg.get("clover") is not None:  # HASS-CLOVER-2: the owner's till questions, read from the private cache only (no token here)
         from hass.clover.chat import TillDesk
         conv.till = TillDesk(cfg["state"], cfg["clover"])
