@@ -1,0 +1,146 @@
+[
+ {
+  "kind": "bad-recolour-product",
+  "name": "jar",
+  "ok": false,
+  "code": "colour",
+  "seconds": 10.2,
+  "match": 0.627,
+  "hue_shift": 118.1,
+  "chroma": 0.2188,
+  "words": [
+   [
+    "MESA",
+    0.699
+   ],
+   [
+    "HONEY",
+    0.843
+   ],
+   [
+    "RAW",
+    0.811
+   ],
+   [
+    "WILDFLOWER",
+    0.672
+   ]
+  ],
+  "photo_words": [
+   "HONE",
+   "ILDFLOWER"
+  ],
+  "text_changed": false
+ },
+ {
+  "kind": "bad-recolour-product",
+  "name": "coffee",
+  "ok": false,
+  "code": "colour",
+  "seconds": 8.0,
+  "match": 0.705,
+  "hue_shift": 120.0,
+  "chroma": 0.15,
+  "words": [
+   [
+    "RIDGE",
+    0.688
+   ],
+   [
+    "ROAST",
+    0.66
+   ],
+   [
+    "DARK",
+    0.757
+   ]
+  ],
+  "photo_words": [
+   "ARK",
+   "RIDGE",
+   "ROAS"
+  ],
+  "text_changed": false
+ },
+ {
+  "kind": "bad-recolour-product",
+  "name": "loaf",
+  "ok": false,
+  "code": "colour",
+  "seconds": 4.8,
+  "match": 0.676,
+  "hue_shift": 120.5,
+  "chroma": 0.1728,
+  "words": [
+   [
+    "583",
+    0.437
+   ]
+  ],
+  "photo_words": [],
+  "text_changed": false
+ },
+ {
+  "kind": "bad-recolour-product",
+  "name": "bottle",
+  "ok": false,
+  "code": "colour",
+  "seconds": 19.6,
+  "match": 0.733,
+  "hue_shift": 122.5,
+  "chroma": 0.2835,
+  "words": [
+   [
+    "OLIVA",
+    0.675
+   ]
+  ],
+  "photo_words": [
+   "OLIV"
+  ],
+  "text_changed": false
+ },
+ {
+  "kind": "bad-recolour-product",
+  "name": "produce",
+  "ok": false,
+  "code": "colour",
+  "seconds": 4.7,
+  "match": 0.572,
+  "hue_shift": 121.0,
+  "chroma": 0.0994,
+  "words": [],
+  "photo_words": null,
+  "text_changed": false
+ },
+ {
+  "kind": "bad-recolour-product",
+  "name": "box",
+  "ok": false,
+  "code": "colour",
+  "seconds": 5.8,
+  "match": 0.773,
+  "hue_shift": 116.5,
+  "chroma": 0.0939,
+  "words": [
+   [
+    "BLUE",
+    0.511
+   ],
+   [
+    "HOUR",
+    0.435
+   ],
+   [
+    "TEA",
+    0.764
+   ]
+  ],
+  "photo_words": [
+   "BLUE",
+   "HOUR",
+   "TEA"
+  ],
+  "text_changed": false
+ }
+]

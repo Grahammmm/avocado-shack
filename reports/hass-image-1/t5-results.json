@@ -1,0 +1,186 @@
+[
+ {
+  "run": "phone-on",
+  "mode": "on",
+  "photo": "photo-draft",
+  "photo_seconds": 0.11,
+  "polish_wait_seconds": 27.4,
+  "answer": "proposed",
+  "answer_seconds": 0.07,
+  "yes": "approved",
+  "yes_seconds": 0.23,
+  "decision": {
+   "code": "ok",
+   "jpeg_sha256": "b88083c244f58f1f981e0ab3ae7b8f3a28a552763aacc5f00f669e4951a93684",
+   "model": "openai-codex:gpt-image-2-high",
+   "seconds": 27.3,
+   "use": "polished"
+  },
+  "product_image": "assets/products/photo-f389e77cdb578a8c.jpg",
+  "replies": [
+   "Is this photo for a product in the shop, a new product, or the home page? And what does it show, for people who cannot see it? A few words is fine.",
+   "Here's the change I'd make:\nA new product: Mesa raw wildflower honey\n  the brand: Mesa Honey\n  the shelf: pantry\n  the description: Raw wildflower honey in a glass jar.\n  the brand shown on the card: Mesa Honey\n  the photo: the photo from your message\n  the photo description: Mesa Honey raw wildflower honey in a glass jar\n  the name: Mesa raw wildflower honey\n  whether it shows: showing\nI'll hold this for you until today at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.",
+   "Saved: a new product: Mesa raw wildflower honey\nIt's saved, but not on the website yet. Copying it there is a separate step, done by hand."
+  ],
+  "privacy": {
+   "original_bytes_published": [],
+   "full_sha_in_text": [],
+   "private_text": [],
+   "internal_fields": [],
+   "clean": true
+  },
+  "corrlog": []
+ },
+ {
+  "run": "phone-off",
+  "mode": "off",
+  "photo": "photo-draft",
+  "photo_seconds": 0.07,
+  "polish_wait_seconds": 0.0,
+  "answer": "proposed",
+  "answer_seconds": 0.5,
+  "yes": "approved",
+  "yes_seconds": 0.25,
+  "decision": null,
+  "product_image": "assets/products/photo-f389e77cdb578a8c.jpg",
+  "replies": [
+   "Is this photo for a product in the shop, a new product, or the home page? And what does it show, for people who cannot see it? A few words is fine.",
+   "Here's the change I'd make:\nA new product: Mesa raw wildflower honey\n  the brand: Mesa Honey\n  the shelf: pantry\n  the description: Raw wildflower honey in a glass jar.\n  the brand shown on the card: Mesa Honey\n  the photo: the photo from your message\n  the photo description: Mesa Honey raw wildflower honey in a glass jar\n  the name: Mesa raw wildflower honey\n  whether it shows: showing\nI'll hold this for you until today at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.",
+   "Saved: a new product: Mesa raw wildflower honey\nIt's saved, but not on the website yet. Copying it there is a separate step, done by hand."
+  ],
+  "privacy": {
+   "original_bytes_published": [],
+   "full_sha_in_text": [],
+   "private_text": [],
+   "internal_fields": [],
+   "clean": true
+  },
+  "corrlog": []
+ },
+ {
+  "run": "phone-fail",
+  "mode": "fail",
+  "photo": "photo-draft",
+  "photo_seconds": 0.13,
+  "polish_wait_seconds": 0.0,
+  "answer": "proposed",
+  "answer_seconds": 0.08,
+  "yes": "approved",
+  "yes_seconds": 0.27,
+  "decision": {
+   "code": "api",
+   "jpeg_sha256": null,
+   "model": "openai-codex:gpt-image-2-high",
+   "seconds": 0.0,
+   "use": "house"
+  },
+  "product_image": "assets/products/photo-f389e77cdb578a8c.jpg",
+  "replies": [
+   "Is this photo for a product in the shop, a new product, or the home page? And what does it show, for people who cannot see it? A few words is fine.",
+   "Here's the change I'd make:\nA new product: Mesa raw wildflower honey\n  the brand: Mesa Honey\n  the shelf: pantry\n  the description: Raw wildflower honey in a glass jar.\n  the brand shown on the card: Mesa Honey\n  the photo: the photo from your message\n  the photo description: Mesa Honey raw wildflower honey in a glass jar\n  the name: Mesa raw wildflower honey\n  whether it shows: showing\nI'll hold this for you until today at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.",
+   "Saved: a new product: Mesa raw wildflower honey\nIt's saved, but not on the website yet. Copying it there is a separate step, done by hand."
+  ],
+  "privacy": {
+   "original_bytes_published": [],
+   "full_sha_in_text": [],
+   "private_text": [],
+   "internal_fields": [],
+   "clean": true
+  },
+  "corrlog": [
+   "polish-api"
+  ]
+ },
+ {
+  "run": "plain-on",
+  "mode": "on",
+  "photo": "photo-draft",
+  "photo_seconds": 0.08,
+  "polish_wait_seconds": 19.0,
+  "answer": "proposed",
+  "answer_seconds": 0.05,
+  "yes": "approved",
+  "yes_seconds": 0.11,
+  "decision": {
+   "code": "ok",
+   "jpeg_sha256": "436526addeff74dbb474ba3cfce4a3dfca44053560f77b79492884b31170b2eb",
+   "model": "openai-codex:gpt-image-2-high",
+   "seconds": 19.0,
+   "use": "polished"
+  },
+  "product_image": "assets/products/photo-2cec1911a5900242.jpg",
+  "replies": [
+   "Is this photo for a product in the shop, a new product, or the home page? And what does it show, for people who cannot see it? A few words is fine.",
+   "Here's the change I'd make:\nA new product: Mesa raw wildflower honey\n  the brand: Mesa Honey\n  the shelf: pantry\n  the description: Raw wildflower honey in a glass jar.\n  the brand shown on the card: Mesa Honey\n  the photo: the photo from your message\n  the photo description: Mesa Honey raw wildflower honey in a glass jar\n  the name: Mesa raw wildflower honey\n  whether it shows: showing\nI'll hold this for you until today at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.",
+   "Saved: a new product: Mesa raw wildflower honey\nIt's saved, but not on the website yet. Copying it there is a separate step, done by hand."
+  ],
+  "privacy": {
+   "original_bytes_published": [],
+   "full_sha_in_text": [],
+   "private_text": [],
+   "internal_fields": [],
+   "clean": true
+  },
+  "corrlog": []
+ },
+ {
+  "run": "plain-off",
+  "mode": "off",
+  "photo": "photo-draft",
+  "photo_seconds": 0.03,
+  "polish_wait_seconds": 0.0,
+  "answer": "proposed",
+  "answer_seconds": 0.27,
+  "yes": "approved",
+  "yes_seconds": 0.13,
+  "decision": null,
+  "product_image": "assets/products/photo-2cec1911a5900242.jpg",
+  "replies": [
+   "Is this photo for a product in the shop, a new product, or the home page? And what does it show, for people who cannot see it? A few words is fine.",
+   "Here's the change I'd make:\nA new product: Mesa raw wildflower honey\n  the brand: Mesa Honey\n  the shelf: pantry\n  the description: Raw wildflower honey in a glass jar.\n  the brand shown on the card: Mesa Honey\n  the photo: the photo from your message\n  the photo description: Mesa Honey raw wildflower honey in a glass jar\n  the name: Mesa raw wildflower honey\n  whether it shows: showing\nI'll hold this for you until today at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.",
+   "Saved: a new product: Mesa raw wildflower honey\nIt's saved, but not on the website yet. Copying it there is a separate step, done by hand."
+  ],
+  "privacy": {
+   "original_bytes_published": [],
+   "full_sha_in_text": [],
+   "private_text": [],
+   "internal_fields": [],
+   "clean": true
+  },
+  "corrlog": []
+ },
+ {
+  "run": "plain-fail",
+  "mode": "fail",
+  "photo": "photo-draft",
+  "photo_seconds": 0.04,
+  "polish_wait_seconds": 0.0,
+  "answer": "proposed",
+  "answer_seconds": 0.05,
+  "yes": "approved",
+  "yes_seconds": 0.12,
+  "decision": {
+   "code": "api",
+   "jpeg_sha256": null,
+   "model": "openai-codex:gpt-image-2-high",
+   "seconds": 0.0,
+   "use": "house"
+  },
+  "product_image": "assets/products/photo-2cec1911a5900242.jpg",
+  "replies": [
+   "Is this photo for a product in the shop, a new product, or the home page? And what does it show, for people who cannot see it? A few words is fine.",
+   "Here's the change I'd make:\nA new product: Mesa raw wildflower honey\n  the brand: Mesa Honey\n  the shelf: pantry\n  the description: Raw wildflower honey in a glass jar.\n  the brand shown on the card: Mesa Honey\n  the photo: the photo from your message\n  the photo description: Mesa Honey raw wildflower honey in a glass jar\n  the name: Mesa raw wildflower honey\n  whether it shows: showing\nI'll hold this for you until today at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.",
+   "Saved: a new product: Mesa raw wildflower honey\nIt's saved, but not on the website yet. Copying it there is a separate step, done by hand."
+  ],
+  "privacy": {
+   "original_bytes_published": [],
+   "full_sha_in_text": [],
+   "private_text": [],
+   "internal_fields": [],
+   "clean": true
+  },
+  "corrlog": [
+   "polish-api"
+  ]
+ }
+]

@@ -169,10 +169,16 @@ class ContractTests(unittest.TestCase):
 
     def test_a_changed_product_is_rejected(self):
         data = photo("jar-white-sheet")
-        recoloured = lambda im: Image.merge("RGB", im.split()[::-1])  # noqa: E731 - the jar turns another colour
+        def recoloured(im):  # the jar turns another colour; the ivory background stays as it is
+            from PIL import ImageChops
+            bg = Image.new("RGB", im.size, im.getpixel((4, 4)))
+            diff = ImageChops.difference(im, bg).convert("L").point(lambda v: 255 if v > 30 else 0)
+            return Image.composite(Image.merge("RGB", im.split()[::-1]), im, diff)
         self.assertFallback(Stub(edit_of(data, change=recoloured)), "colour")
+        swapped = lambda im: Image.merge("RGB", im.split()[::-1])  # noqa: E731 - background and all: not ivory any more
+        self.assertFallback(Stub(edit_of(data, change=swapped)), "style")
         other = photo("bottle-bench-png")
-        self.assertFallback(Stub(edit_of(other)), "match")
+        self.assertFallback(Stub(edit_of(other)), "colour")  # another product altogether: its colour gives it away first
 
     def test_changed_label_words_are_rejected(self):
         def centre_word(framed):  # "reads" one word across the middle of the product, wherever the render put it
@@ -200,10 +206,10 @@ class ContractTests(unittest.TestCase):
     def test_a_plausible_new_word_must_be_read_on_the_photo(self):
         known = {"HONE", "ILDFLOWER", "RIDGE", "ROAS"}  # what tesseract reads on Mike's photo, slips included
         self.assertFalse(photo_polish.text_changed([("HONEY", 0.5), ("WILDFLOWER", 0.4), ("ROAST", 0.45)], known))
-        self.assertTrue(photo_polish.text_changed([("SUNNY", 0.46)], known))  # looks a little like it, never read
+        self.assertTrue(photo_polish.text_changed([("SUNNY", 0.40)], known))  # looks a little like it, never read
         self.assertFalse(photo_polish.text_changed([("SUNNY", 0.7)], known))  # looks like that spot: kept
-        self.assertFalse(photo_polish.text_changed([("SUNNY", 0.46)], None))  # the photo reads nothing: marks only
-        self.assertFalse(photo_polish.text_changed([("SUN", 0.46), ("SUNNY", None)], known))  # too short / too small
+        self.assertFalse(photo_polish.text_changed([("SUNNY", 0.40)], None))  # the photo reads nothing: marks only
+        self.assertFalse(photo_polish.text_changed([("SUN", 0.40), ("SUNNY", None)], known))  # too short / too small
         self.assertTrue(photo_polish.text_changed([("HONEY", 0.2)], known))  # unlike that spot, read or not
 
     def test_no_hermes_uses_the_fallback(self):
@@ -312,7 +318,7 @@ class SettingTests(unittest.TestCase):
             def load(**extra):
                 (Path(tmp) / "config.json").write_text(json.dumps({"settings": {**base, **extra}}))
                 return conversation.load_settings(tmp)
-            self.assertIs(load()["photo_polish"], False)
+            self.assertNotIn("photo_polish", load())  # absent = off; the settings dict is unchanged for everyone else
             self.assertIs(load(houseRender=True, photo_polish=True)["photo_polish"], True)
             for bad in ({"photo_polish": "true", "houseRender": True}, {"photo_polish": 1, "houseRender": True},
                         {"photo_polish": True}, {"photo_polish": True, "houseRender": False}):

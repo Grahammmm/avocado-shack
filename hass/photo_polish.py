@@ -4,7 +4,8 @@ What it does: when Mike sends a new photo, ``start`` runs in the background (a d
 queued, so the interview never waits). It asks Hermes to edit the photo into a catalog picture (plain warm ivory
 background, even light, centred, true colours), checks that the product is still the same product (``gate``) and settles
 ONE decision for the photo in the private media store. ``photos.install`` then publishes the settled picture: the
-cleaned one when it passed the gate (framed by the house render, 800x800 JPEG, no metadata), otherwise exactly what it
+cleaned one when it passed the gate (placed and scaled to the catalog's square by ``frame``, 800x800 JPEG, no
+metadata; nothing is cut out), otherwise exactly what it
 published before this card (the house-style render of Mike's own photo, or the retake ask when that cannot be made).
 Every failure (no Hermes, timeout after ``TIMEOUT_S``, refusal, wrong size or type, huge file, gate rejection) ends in
 that fallback, silently for Mike; a short ``polish-<code>`` row goes to the correspondence log.
@@ -45,7 +46,7 @@ import threading
 import time
 from pathlib import Path
 
-from hass import media, newitem_render
+from hass import house_style as hs, media, newitem_render
 
 MODEL = "openai-codex:gpt-image-2-high"  # THE model line: <Hermes image plugin>:<model id> (gpt-image-2, quality high)
 SETTING = "photo_polish"  # settings key; only the JSON value true turns the polish on (with houseRender true)
@@ -71,7 +72,7 @@ STRETCH = (0.85, 0.92, 1.0, 1.08, 1.17)  # width stretches tried: a product turn
 TEXT_CONF = 60  # tesseract confidence a word on the edited picture needs to count
 TEXT_TOKEN = re.compile(r"[A-Z0-9]{3,}")
 WORD_MIN = 0.35  # each label word on the edited picture must correlate this well with the same spot of Mike's photo
-WORD_SURE = 0.6  # ...and a 4+ letter word under this must also be among the words read on Mike's photo (if any read)
+WORD_SURE = 0.45  # ...and a 4+ letter word under this must also be among the words read on Mike's photo (if any read)
 KNOWN_RATIO = 0.6  # difflib similarity that counts as the same word read twice (OCR slips: HONE!/HONEY, ROAS/ROAST)
 WORD_PX = 8  # a word under this many px high in Mike's photo is too small to judge
 WORD_HEIGHT = 24  # both word patches are compared at this height
@@ -272,8 +273,8 @@ def _attempt(root, sha, transport, timeout):
 
 # ---------------------------------------------------------------- the fidelity gate
 def gate(original, edited, *, ocr=None) -> dict:
-    """Is ``edited`` the same product as Mike's photo ``original``? {"ok", "code", "jpeg" (the edited picture framed by
-    the house render), "metrics"}. ``ocr``: framed JPEG -> [(word, (left, top, width, height))] or None; default
+    """Is ``edited`` the same product as Mike's photo ``original``? {"ok", "code", "jpeg" (the edited picture as the
+    catalog square, ``frame``), "metrics"}. ``ocr``: framed JPEG -> [(word, (left, top, width, height))] or None; default
     tesseract when installed. Every measure is taken before deciding, so a rejection still reports all of them."""
     fail = lambda code, **m: {"ok": False, "code": code, "jpeg": None, "metrics": m}  # noqa: E731
     if len(edited) > MAX_OUTPUT_BYTES:
@@ -285,11 +286,11 @@ def gate(original, edited, *, ocr=None) -> dict:
         short, long_ = sorted(im.size)
         if short < SIDE[0] or long_ > SIDE[1] or short / long_ < SQUARE:
             return fail("size", size=f"{im.width}x{im.height}")
-        made = newitem_render.render(edited)
+        made = frame(edited)
     except (media.Refused, newitem_render.Refused):
         return fail("type")
     hard = set(made["check"].get("hard_failures") or ())
-    if made["report"].get("isolation") != "cutout" or hard - ALLOWED_STYLE or (not hard and not made["check"]["pass"]):
+    if hard - ALLOWED_STYLE or (not hard and not made["check"]["pass"]):
         return fail("style", hard=sorted(hard), score=made["check"].get("score"))
     m = match(original, made["jpeg"])
     if m is None:
@@ -308,18 +309,60 @@ def gate(original, edited, *, ocr=None) -> dict:
     return {"ok": True, "code": "ok", "jpeg": made["jpeg"], "metrics": m}
 
 
+def frame(edited, spec=None) -> dict:
+    """{"jpeg", "check"}: the edited picture as a catalog square. The model already put the product on a plain ivory
+    background, so nothing is cut out (the house cutout drops label print that sits on cream paper next to the edge):
+    the picture is moved and scaled so the product fills the frame like the catalog's (``fill_max`` median, at most
+    0.9), the space opened at the sides takes the picture's own border colour, and it is saved as an 800 x 800 JPEG
+    with no metadata, at the house render's qualities. Raises newitem_render.Refused for an unreadable picture."""
+    Image, ImageChops, _ = _pil()
+    spec = spec or hs.load_spec()
+    stats = spec["pictures"]["catalog"]["metrics"]
+    im = newitem_render._upright(edited)[0]
+    w, h = im.size
+    ring = [im.getpixel((x, y)) for x in range(0, w, max(1, w // 64)) for y in (2, h - 3)]
+    ring += [im.getpixel((x, y)) for y in range(0, h, max(1, h // 64)) for x in (2, w - 3)]
+    bg = tuple(sorted(c[i] for c in ring)[len(ring) // 2] for i in range(3))
+    small = im.resize((200, max(1, round(200 * h / w))), Image.Resampling.BOX)
+    diff = ImageChops.difference(small, Image.new("RGB", small.size, bg)).split()
+    box = ImageChops.lighter(ImageChops.lighter(diff[0], diff[1]), diff[2]).point(lambda v: 255 if v > 30 else 0).getbbox()
+    if box is None:
+        raise newitem_render.Refused("blank")
+    k = w / 200
+    x0, y0, x1, y1 = (v * k for v in box)
+    side = max(x1 - x0, y1 - y0) / min(stats["fill_max"]["p50"], .90)
+    canvas = Image.new("RGB", (round(side), round(side)), bg)
+    canvas.paste(im, (round(side / 2 - (x0 + x1) / 2), round(side / 2 - (y0 + y1) / 2)))
+    canvas = canvas.resize((newitem_render.SIZE, newitem_render.SIZE), Image.Resampling.LANCZOS)
+    jpeg = b""
+    for quality in newitem_render.JPEG_QUALITIES:  # the house render's rule: the first not heavier than the catalog's
+        buf = io.BytesIO()
+        canvas.save(buf, "JPEG", quality=quality, optimize=True, subsampling=2)
+        jpeg = buf.getvalue()
+        if len(jpeg) <= stats["bytes"]["p95"] * 1.3:
+            break
+    return {"jpeg": jpeg, "check": hs.check_image(jpeg, spec)}
+
+
 def _pil():
     from PIL import Image, ImageChops, ImageStat  # noqa: PLC0415 - Pillow is optional for Hass, required for pictures
     return Image, ImageChops, ImageStat
 
 
 def _product(jpeg):
-    """(RGB crop, L mask, box) of the product on a house-framed picture, at 400 px: what differs from the ivory corner
-    colour; (None, None, None) without a product."""
+    """(RGB crop, L mask, box) of the product on a framed picture, at 400 px; (None, None, None) without a product.
+    The mask is the house render's own cutout (``newitem_render.isolate``: the soft contact shadow is not product), or
+    what differs from the corner colour when the cutout finds nothing. It only chooses which pixels are compared; the
+    published picture is never cut."""
     Image, ImageChops, _ = _pil()
-    im = Image.open(io.BytesIO(jpeg)).convert("RGB").resize((400, 400), Image.Resampling.BOX)
-    diff = ImageChops.difference(im, Image.new("RGB", im.size, im.getpixel((4, 4)))).split()
-    mask = ImageChops.lighter(ImageChops.lighter(diff[0], diff[1]), diff[2]).point(lambda v: 255 if v > 30 else 0)
+    full = Image.open(io.BytesIO(jpeg)).convert("RGB")
+    im = full.resize((400, 400), Image.Resampling.BOX)
+    cut, _report = newitem_render.isolate(full)
+    if cut is not None:
+        mask = cut.resize((400, 400), Image.Resampling.BOX).point(lambda v: 255 if v > 127 else 0)
+    else:
+        diff = ImageChops.difference(im, Image.new("RGB", im.size, im.getpixel((4, 4)))).split()
+        mask = ImageChops.lighter(ImageChops.lighter(diff[0], diff[1]), diff[2]).point(lambda v: 255 if v > 30 else 0)
     box = mask.getbbox()
     return (None, None, None) if box is None else (im.crop(box), mask.crop(box), box)
 

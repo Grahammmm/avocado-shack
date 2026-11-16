@@ -408,7 +408,8 @@ def load_settings(sdir, photos=False) -> dict:
     if problems: raise ConfigError("; ".join(problems))
     return {"ownerSenders": tuple(senders), "ownerKeys": frozenset(keys), "ownerChat": chat, "approvalTtlSeconds": ttl,
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
-            "interpreterDailyCap": cap, "skillsMode": mode, "houseRender": house, "photo_polish": polish,  # SKILLS-FW-3, HASS-IMAGE-1
+            "interpreterDailyCap": cap, "skillsMode": mode, "houseRender": house,  # SKILLS-FW-3
+            **({"photo_polish": True} if polish is True else {}),  # HASS-IMAGE-1: only when on
             **({"hikeLookupContact": contact} if contact is not None else {}),  # HIKE-LOOKUP-2: only when set
             **({"itemIntake": True} if intake is True else {}),  # HASS-INTAKE-2: only when on
             **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),

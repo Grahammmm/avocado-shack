@@ -1,0 +1,98 @@
+[
+ {
+  "name": "jar",
+  "tier": "high",
+  "seconds": 17.3,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 1767829
+ },
+ {
+  "name": "jar",
+  "tier": "medium",
+  "seconds": 18.6,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 1925656
+ },
+ {
+  "name": "coffee",
+  "tier": "high",
+  "seconds": 16.0,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 2253779
+ },
+ {
+  "name": "coffee",
+  "tier": "medium",
+  "seconds": 17.1,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 2309719
+ },
+ {
+  "name": "loaf",
+  "tier": "high",
+  "seconds": 20.8,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 3176329
+ },
+ {
+  "name": "loaf",
+  "tier": "medium",
+  "seconds": 22.6,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 3075503
+ },
+ {
+  "name": "bottle",
+  "tier": "high",
+  "seconds": 24.5,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 1606174
+ },
+ {
+  "name": "bottle",
+  "tier": "medium",
+  "seconds": 18.9,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 1619296
+ },
+ {
+  "name": "produce",
+  "tier": "high",
+  "seconds": 18.3,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 2477699
+ },
+ {
+  "name": "produce",
+  "tier": "medium",
+  "seconds": 21.1,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 2266646
+ },
+ {
+  "name": "box",
+  "tier": "high",
+  "seconds": 17.0,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 2106106
+ },
+ {
+  "name": "box",
+  "tier": "medium",
+  "seconds": 17.4,
+  "call": "ok",
+  "output": "1254x1254",
+  "output_bytes": 2070961
+ }
+]
