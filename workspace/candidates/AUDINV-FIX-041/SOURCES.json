@@ -1,0 +1,1506 @@
+{
+ "digests": {
+  "G-DECISIONS.log": "f0cb06731fbb1c47044e193e25dee6762e58372d4c245bdf73fed9ea0a7fa02c",
+  "MILESTONE-MAP.tsv": "7762c735a44c514eb75cc836647458634c87c92d677db32638fc18a8d979809a",
+  "QUEUE-AUDIT-APPLIED.json": "28405b8af483bdaac060ccf2d985d5c755bb71c227f69c8b1b329fb2ac89df7d",
+  "QUEUE-AUDIT.tsv": "59c09581e30a5135a5e3e2879985d9fb3a3c725c86cb199bbcdf76d905c64995",
+  "unit-state.json": "834942e0570b3113e9943000b550311eea57f3a27d598a1912ef7e1380ea101e"
+ },
+ "entries": [
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H05: approval names one version of one change; naming style not described",
+   "audit_line": 63,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV0007-05",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 54,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1794763412.9937308,
+    "card": "t_ccc3e446",
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "merged",
+    "why": "G 2026-11-15: HOLD pending HASS-SIMPLIFY-1 review"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H22 usage limits (cost) BUILD; reply wording not described",
+   "audit_line": 65,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV0007-07",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793958234.3409858,
+    "card": "t_f2c882ca",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit UNCLEAR -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "av-site-copy BUILD (H13) covers editing copy, not claims audit",
+   "audit_line": 66,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV0007-08",
+   "log_exact": [],
+   "map": {
+    "action": "BUILD",
+    "line": 44,
+    "recommendation": "KEEP"
+   },
+   "state": {
+    "at": 1794755609.1328917,
+    "card": "t_d3982f2b",
+    "status": "merged",
+    "why": "G APPROVED 2026-11-07"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H05/H15 useful clarification; specific table not described",
+   "audit_line": 73,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV0222-02",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793901232.70587,
+    "card": "t_3aa726e1",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit UNCLEAR -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED; related to illustration disclosure AV1352-01",
+   "audit_line": 75,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV0222-04",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793910235.8700874,
+    "card": "t_f842e5a6",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit PROPOSED -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED; H06 source history only",
+   "audit_line": 77,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV0222-06",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 55,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 av-status-control SKIPPED (undo/cancel already exist)",
+   "audit_line": 78,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV0222-07",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 56,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H05 readable approval; wording polish",
+   "audit_line": 79,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV0222-08",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 57,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "depends on AV1622-06 (not asked)",
+   "audit_line": 80,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV0222-09",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1794092016.4815524,
+    "card": "t_2436892f",
+    "status": "merged",
+    "why": "G APPROVED 2026-11-07"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "not asked",
+   "audit_line": 82,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV0222-11",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793859279.6376898,
+    "card": "t_742a5e4d",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H25 av-handover was SKIPPED by G (AVOCADO-BUILD-SHEET); phone guide lines for features not asked",
+   "audit_line": 83,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV0222-12",
+   "log_exact": [],
+   "map": {
+    "action": "RETIRE",
+    "line": 105,
+    "recommendation": "CUT"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15 CUT (milestone map MILESTONE-MAP-1): not building"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "only umbrella cover: av-site-improve",
+   "audit_line": 87,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1052-01",
+   "log_exact": [],
+   "map": {
+    "action": "BUILD",
+    "line": 45,
+    "recommendation": "KEEP"
+   },
+   "state": {
+    "at": 1794771808.797306,
+    "card": "t_3c204ada",
+    "status": "merged",
+    "why": "G APPROVED 2026-11-07"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "security hardening not asked; spec itself flags NOT SMALL",
+   "audit_line": 89,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1052-03",
+   "log_exact": [],
+   "map": {
+    "action": "BUILD",
+    "line": 46,
+    "recommendation": "KEEP"
+   },
+   "state": {
+    "at": 1794755609.8694708,
+    "card": "t_f6fdd35f",
+    "status": "merged",
+    "why": "G APPROVED 2026-11-07"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "SHOP-1/H03 availability is BUILD; bulk op not described",
+   "audit_line": 90,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1052-04",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 59,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED",
+   "audit_line": 91,
+   "audit_recommendation": "drop",
+   "cls": "PROPOSED",
+   "id": "AV1052-05",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 60,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED",
+   "audit_line": 92,
+   "audit_recommendation": "drop",
+   "cls": "PROPOSED",
+   "id": "AV1052-06",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 61,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED",
+   "audit_line": 93,
+   "audit_recommendation": "drop",
+   "cls": "PROPOSED",
+   "id": "AV1052-07",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 62,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED",
+   "audit_line": 94,
+   "audit_recommendation": "drop",
+   "cls": "PROPOSED",
+   "id": "AV1052-08",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 63,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED",
+   "audit_line": 95,
+   "audit_recommendation": "drop",
+   "cls": "PROPOSED",
+   "id": "AV1052-09",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 64,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H19 meaningful failure reporting BUILD; wording not described",
+   "audit_line": 96,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1052-10",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793901234.0677428,
+    "card": "t_c11261cb",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit UNCLEAR -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H24 design changes BUILD; notes mechanism not described",
+   "audit_line": 97,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1052-11",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 65,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15: HOLD pending HASS-SIMPLIFY-1 review"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED",
+   "audit_line": 98,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1052-12",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 66,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "not asked",
+   "audit_line": 99,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1052-13",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793865861.7262561,
+    "card": "t_e36fa13e",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "not asked (but protects against false organic claims)",
+   "audit_line": 100,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1052-14",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793870063.8497975,
+    "card": "t_0f2e97a6",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H25 av-handover was SKIPPED by G (AVOCADO-BUILD-SHEET); phone guide lines for features not asked",
+   "audit_line": 101,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1052-15",
+   "log_exact": [],
+   "map": {
+    "action": "RETIRE",
+    "line": 109,
+    "recommendation": "CUT"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15 CUT (milestone map MILESTONE-MAP-1): not building"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "av-site-improve umbrella only",
+   "audit_line": 106,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1104-01",
+   "log_exact": [],
+   "map": {
+    "action": "BUILD",
+    "line": 47,
+    "recommendation": "KEEP"
+   },
+   "state": {
+    "at": 1794781447.5767121,
+    "card": "t_37082ee9",
+    "status": "pr",
+    "why": "G APPROVED 2026-11-07"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "av-site-improve umbrella only",
+   "audit_line": 107,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1104-02",
+   "log_exact": [],
+   "map": {
+    "action": "BUILD",
+    "line": 48,
+    "recommendation": "KEEP"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "queued",
+    "why": "G APPROVED 2026-11-07"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "not described in H13",
+   "audit_line": 108,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1104-03",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1794738802.451228,
+    "card": "t_5bbcbf4a",
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "merged",
+    "why": "attn-unknown: card t_5bbcbf4a ended 'blocked' without a PR; card t_5bbcbf4a is running again"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "depends on AV1104-03",
+   "audit_line": 109,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1104-04",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 67,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1794763414.8089275,
+    "card": "t_30dde9bb",
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "merged",
+    "why": "G 2026-11-15: HOLD pending HASS-SIMPLIFY-1 review"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H05/H17; H17 SKIPPED",
+   "audit_line": 111,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1104-06",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 68,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "F07 BUILD; notice captions not described",
+   "audit_line": 112,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1104-07",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 69,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "F07 is photo-based; not described",
+   "audit_line": 113,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1104-08",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 70,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "not asked",
+   "audit_line": 116,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1104-11",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793882059.3658211,
+    "card": "t_a7c5ac20",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H25 av-handover was SKIPPED by G (AVOCADO-BUILD-SHEET); phone guide lines for features not asked",
+   "audit_line": 118,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1104-13",
+   "log_exact": [],
+   "map": {
+    "action": "RETIRE",
+    "line": 114,
+    "recommendation": "CUT"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15 CUT (milestone map MILESTONE-MAP-1): not building"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "only umbrella cover: av-site-improve (BUILD, no detail recorded)",
+   "audit_line": 121,
+   "audit_recommendation": "approve",
+   "cls": "UNCLEAR",
+   "id": "AV1222-01",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793861060.266367,
+    "card": "t_de83a29f",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "H13 covers hours/copy/images; phone not listed",
+   "audit_line": 122,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1222-04",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793871863.9827778,
+    "card": "t_c7bbc7cc",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "H25 av-handover was SKIPPED by G (AVOCADO-BUILD-SHEET); phone guide lines for features not asked",
+   "audit_line": 127,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1222-12",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793879647.790208,
+    "card": "t_4f8efd6d",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "H03: hiding must be reversible; H17 status-control was SKIPPED",
+   "audit_line": 128,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1222-13",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793857463.0604954,
+    "card": "t_8d05f0c0",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "only umbrella cover: av-site-improve",
+   "audit_line": 129,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1222-14",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793871865.3967686,
+    "card": "t_3279a3c0",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "av-site-improve umbrella",
+   "audit_line": 134,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1352-02",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793963629.818851,
+    "card": "t_d764be5c",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit UNCLEAR -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "F07 BUILD; disclosure tied to AV1352-01",
+   "audit_line": 135,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1352-03",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 71,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED",
+   "audit_line": 137,
+   "audit_recommendation": "drop",
+   "cls": "PROPOSED",
+   "id": "AV1352-05",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793965429.3437963,
+    "card": "t_357cc562",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit PROPOSED -> dropped"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H15 memory exists; naming not described",
+   "audit_line": 139,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1352-07",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793967231.3211925,
+    "card": "t_a0bea407",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit PROPOSED -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "F03 BUILD (purchase costs, margins); phone form not described",
+   "audit_line": 140,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1352-08",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 72,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15: HOLD pending HASS-SIMPLIFY-1 review"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "F03 BUILD; rounding phone form not described",
+   "audit_line": 141,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1352-09",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 73,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "not asked",
+   "audit_line": 142,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1352-10",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793880255.4611235,
+    "card": "t_c8fee208",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H25 av-handover was SKIPPED by G (AVOCADO-BUILD-SHEET); phone guide lines for features not asked",
+   "audit_line": 143,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1352-11",
+   "log_exact": [],
+   "map": {
+    "action": "RETIRE",
+    "line": 117,
+    "recommendation": "CUT"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15 CUT (milestone map MILESTONE-MAP-1): not building"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "only umbrella cover: av-site-improve",
+   "audit_line": 146,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1422-08",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793867657.4320042,
+    "card": "t_8396eec6",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H04 says sample events cannot silently become real; hiding samples is not described",
+   "audit_line": 148,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1422-10",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793916228.6897416,
+    "card": "t_81b87524",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit UNCLEAR -> held for G"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "structured data was a SkipperCast pick only (#64), not Avocado",
+   "audit_line": 149,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1422-11",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793879649.2404916,
+    "card": "t_7de53b4d",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H04 hike details; calendar content not described",
+   "audit_line": 153,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1622-02",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793916231.549866,
+    "card": "t_23cb040b",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit UNCLEAR -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H04: cancel and complete are explicit states; journal display not described",
+   "audit_line": 154,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1622-03",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1794092013.5189369,
+    "card": "t_fe4b90c0",
+    "status": "merged",
+    "why": "G APPROVED 2026-11-07"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "not in H03 or any pick",
+   "audit_line": 156,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1622-06",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793916234.4395273,
+    "card": "t_c2fdb5d6",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit PROPOSED -> held for G"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "consistency test; not asked (R12 discourages extra tests)",
+   "audit_line": 157,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1622-07",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793874868.0522232,
+    "card": "t_01173f6f",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "not asked; public publishing is separately authorized (H25)",
+   "audit_line": 158,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1622-08",
+   "log_exact": [
+    {
+     "date": "2026-11-14",
+     "id": "AV1622-08",
+     "line": 1896,
+     "text": "2026-11-14 10:13 | G lifted the 11-06 Avocado freeze and 11-07 HASS-LIVE-AUDIT-1 hold (cards), keeping the 3 DENIED (AV1922-08/09/10). Tranche 1: released AV1622-08, AV1937-01, AV2152-03 (lane -> sonnet-coder). 33 deferred under the holds: 7 releasable now, 26 wait on others; next tranches 2-3 at a time as these merge. DeFlock: Fable plan to propose next batch as approve/deny cards."
+    }
+   ],
+   "map": null,
+   "state": {
+    "at": 1794680007.877406,
+    "card": "t_70c6cbcb",
+    "status": "merged",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "H17 av-status-control was SKIPPED",
+   "audit_line": 159,
+   "audit_recommendation": "drop",
+   "cls": "PROPOSED",
+   "id": "AV1622-09",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793861659.0042727,
+    "card": "t_d77a57ca",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H25 av-handover was SKIPPED by G (AVOCADO-BUILD-SHEET); phone guide lines for features not asked",
+   "audit_line": 161,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1622-11",
+   "log_exact": [],
+   "map": {
+    "action": "RETIRE",
+    "line": 122,
+    "recommendation": "CUT"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15 CUT (milestone map MILESTONE-MAP-1): not building"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H06 gives previews with drafts only; H17 SKIPPED",
+   "audit_line": 165,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1922-01",
+   "log_exact": [
+    {
+     "date": "2026-11-05",
+     "id": "AV1922-01",
+     "line": 1580,
+     "text": "- 2026-11-05 G: do all of the 13 independent held units; released 12 (AV1922-01 left held: needs a 5-unit prerequisite chain)"
+    }
+   ],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 74,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793901235.4541276,
+    "card": "t_23416839",
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "SHOP-1/H03 BUILD; unblocks a refusal on non-check days",
+   "audit_line": 166,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1922-02",
+   "log_exact": [],
+   "map": {
+    "action": "HOLD-FOR-G",
+    "line": 75,
+    "recommendation": "ASK-G"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "depends on AV1422-11 (not asked)",
+   "audit_line": 169,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1922-05",
+   "log_exact": [],
+   "map": {
+    "action": "BUILD",
+    "line": 49,
+    "recommendation": "KEEP"
+   },
+   "state": {
+    "at": 1794755005.031131,
+    "card": "t_c3c9e09b",
+    "status": "merged",
+    "why": "G APPROVED 2026-11-07"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "not asked",
+   "audit_line": 170,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1922-06",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793882060.8086057,
+    "card": "t_37b32f2f",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H25 av-handover SKIPPED",
+   "audit_line": 172,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1922-08",
+   "log_exact": [
+    {
+     "date": "2026-11-14",
+     "id": "AV1922-08",
+     "line": 1896,
+     "text": "2026-11-14 10:13 | G lifted the 11-06 Avocado freeze and 11-07 HASS-LIVE-AUDIT-1 hold (cards), keeping the 3 DENIED (AV1922-08/09/10). Tranche 1: released AV1622-08, AV1937-01, AV2152-03 (lane -> sonnet-coder). 33 deferred under the holds: 7 releasable now, 26 wait on others; next tranches 2-3 at a time as these merge. DeFlock: Fable plan to propose next batch as approve/deny cards."
+    }
+   ],
+   "map": {
+    "action": "RETIRE",
+    "line": 126,
+    "recommendation": "CUT"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15 CUT (milestone map MILESTONE-MAP-1): not building"
+   }
+  },
+  {
+   "applied": [],
+   "audit_evidence": "H03 hide is BUILD; maker-with-products bulk hide not described",
+   "audit_line": 176,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV1937-03",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793876059.4786968,
+    "card": "t_70f01129",
+    "status": "merged"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 av-status-control SKIPPED",
+   "audit_line": 179,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1937-07",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1794707010.6424024,
+    "card": "t_71044e84",
+    "status": "merged",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "F07 is photo-based product posts; maker captions not described",
+   "audit_line": 181,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1937-09",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793916867.276787,
+    "card": "t_1883b145",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit PROPOSED -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "depends on AV1937-09; H17 SKIPPED",
+   "audit_line": 182,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1937-10",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1794716002.399564,
+    "card": "t_ea6c4faa",
+    "status": "merged",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H25 av-handover was SKIPPED by G (AVOCADO-BUILD-SHEET); phone guide lines for features not asked",
+   "audit_line": 184,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV1937-13",
+   "log_exact": [],
+   "map": {
+    "action": "RETIRE",
+    "line": 130,
+    "recommendation": "CUT"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15 CUT (milestone map MILESTONE-MAP-1): not building"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H17 SKIPPED; H06 source history only",
+   "audit_line": 189,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV2152-02",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793918065.7687886,
+    "card": "t_a49a2504",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit PROPOSED -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H16: stale drafts expire - re-draft not described",
+   "audit_line": 190,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV2152-03",
+   "log_exact": [
+    {
+     "date": "2026-11-14",
+     "id": "AV2152-03",
+     "line": 1896,
+     "text": "2026-11-14 10:13 | G lifted the 11-06 Avocado freeze and 11-07 HASS-LIVE-AUDIT-1 hold (cards), keeping the 3 DENIED (AV1922-08/09/10). Tranche 1: released AV1622-08, AV1937-01, AV2152-03 (lane -> sonnet-coder). 33 deferred under the holds: 7 releasable now, 26 wait on others; next tranches 2-3 at a time as these merge. DeFlock: Fable plan to propose next batch as approve/deny cards."
+    }
+   ],
+   "map": null,
+   "state": {
+    "at": 1794680009.1825943,
+    "card": "t_ddff0e13",
+    "status": "merged",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H12 one conversation for photos; multi-photo not described (today refused)",
+   "audit_line": 191,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV2152-04",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1794709401.96634,
+    "card": "t_9a63d100",
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "merged",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H05/H15; bulk wording support",
+   "audit_line": 192,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV2152-05",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1794721404.9939113,
+    "card": "t_07282704",
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "merged",
+    "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H04 cancel is explicit; note not described",
+   "audit_line": 194,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV2152-07",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793901231.2847548,
+    "card": "t_c22e1752",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit PROPOSED -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H13 copy changes; scheduling not described",
+   "audit_line": 195,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV2152-08",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1794726806.989731,
+    "card": "t_b8e703ad",
+    "note": "G 2026-11-06: Avocado frozen until the owner uses Hass; SkipperCast CI and bug fixes only",
+    "status": "merged",
+    "why": "attn-unknown: card t_b8e703ad ended 'blocked' without a PR; card t_b8e703ad is running again"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H13 home-page copy; /hike intro not named",
+   "audit_line": 196,
+   "audit_recommendation": "defer",
+   "cls": "UNCLEAR",
+   "id": "AV2152-09",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1794738801.7941284,
+    "card": "t_277390af",
+    "status": "merged",
+    "why": "attn-unknown: card t_277390af ended 'blocked' without a PR; card t_277390af is running again"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "not asked (DeFlock a11y was SKIPPED)",
+   "audit_line": 198,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV2152-12",
+   "log_exact": [],
+   "map": null,
+   "state": {
+    "at": 1793918068.9617057,
+    "card": "t_5f5a63b5",
+    "status": "merged",
+    "why": "G 2026-11-05: queue audit PROPOSED -> held for G"
+   }
+  },
+  {
+   "applied": [
+    "held_direct"
+   ],
+   "audit_evidence": "H25 av-handover was SKIPPED by G (AVOCADO-BUILD-SHEET); phone guide lines for features not asked",
+   "audit_line": 200,
+   "audit_recommendation": "defer",
+   "cls": "PROPOSED",
+   "id": "AV2152-14",
+   "log_exact": [],
+   "map": {
+    "action": "RETIRE",
+    "line": 134,
+    "recommendation": "CUT"
+   },
+   "state": {
+    "at": 1793883596.9463336,
+    "status": "deferred",
+    "why": "G 2026-11-15 CUT (milestone map MILESTONE-MAP-1): not building"
+   }
+  }
+ ],
+ "expected": {
+  "classes": {
+   "PROPOSED": 48,
+   "UNCLEAR": 28
+  },
+  "total": 76
+ },
+ "group_log_lines": {
+  "1565": "2026-11-05T04:59:13-08:00 G: queue audit: approve follow-up 7 + gap-fillers 6; drop 13; hold 108 (QUEUE-AUDIT-APPLIED.json)",
+  "1580": "- 2026-11-05 G: do all of the 13 independent held units; released 12 (AV1922-01 left held: needs a 5-unit prerequisite chain)",
+  "1635": "2026-11-07 G decided deferred proposals: Hass housekeeping (36) DENIED; Hass features (34) HOLD until audit; SkipperCast 11 DENIED; Avocado site 9 + DeFlock tool 5 APPROVED (REC-PILOT-1 stays held).",
+  "1896": "2026-11-14 10:13 | G lifted the 11-06 Avocado freeze and 11-07 HASS-LIVE-AUDIT-1 hold (cards), keeping the 3 DENIED (AV1922-08/09/10). Tranche 1: released AV1622-08, AV1937-01, AV2152-03 (lane -> sonnet-coder). 33 deferred under the holds: 7 releasable now, 26 wait on others; next tranches 2-3 at a time as these merge. DeFlock: Fable plan to propose next batch as approve/deny cards.",
+  "1930": "2026-11-15 G: CUT all 62 units per MILESTONE-MAP-1 (marked deferred, why=G CUT); build all 29 Hass phone-command units; cleanup timer yes (observe-only)",
+  "1931": "2026-11-15 G: approve ALL 295 NOT-STARTED audit rows (7 review files); NEEDS-G groups: signing HOLD till trust anchor; retire/delete HOLD; publish/launch: approve 45-unit approve/deny draft pass only (UNITS45-DECIDE-1); setup: show each as card"
+ },
+ "groups": {
+  "state_as_of": "modes/unit-state.json sha256 834942e0570b3113e9943000b550311eea57f3a27d598a1912ef7e1380ea101e read at snapshot time"
+ },
+ "missing_coverage": [
+  "units_all.tsv not present in agent-work (queue state read from modes/unit-state.json)",
+  "no per-ID record for the 11-07 'Avocado site 9' approval group",
+  "AV1922-09/10 are in the 1896 denial but outside the 76"
+ ],
+ "schema_version": 1
+}

@@ -1,0 +1,28 @@
+{
+ "schema_version": 1,
+ "note": "Synthetic cases only. AV9001-* are invented IDs; AV1922-08 mirrors the denial wording of log line 1896.",
+ "entries": [
+  {"id": "AV9001-01", "cls": "PROPOSED", "audit_recommendation": "approve",
+   "state": {"status": "deferred"}, "log_exact": [], "applied": [], "map": null,
+   "expect": "HOLD: an audit recommendation of approve is not a G decision"},
+  {"id": "AV9001-02", "cls": "UNCLEAR",
+   "state": {"status": "merged", "why": "G 2026-11-05: queue audit UNCLEAR -> held for G"}, "log_exact": [], "applied": ["held_direct"], "map": null,
+   "expect": "HOLD with conflict: merged while a hold stands"},
+  {"id": "AV9001-03", "cls": "PROPOSED",
+   "state": {"status": "merged"}, "log_exact": [], "applied": [], "map": null,
+   "expect": "HOLD: merged does not prove authority; no per-ID record"},
+  {"id": "AV9001-04", "cls": "PROPOSED",
+   "state": {"status": "merged", "why": "G APPROVED 2026-11-07"}, "log_exact": [], "applied": ["held_direct"], "map": null,
+   "expect": "HOLD: group approval with no ID list, plus earlier applied hold"},
+  {"id": "AV9001-05", "cls": "UNCLEAR",
+   "state": {"status": "merged", "why": "G 2026-11-07: HOLD until HASS-LIVE-AUDIT-1 reports"},
+   "log_exact": [{"id": "AV9001-05", "line": 1896, "date": "2026-11-14", "text": "2026-11-14 10:13 | G lifted the freeze, keeping the 3 DENIED (AV1922-08/09/10). Tranche 1: released AV9001-05, AV1937-01 (lane -> sonnet-coder)."}],
+   "applied": [], "map": null,
+   "expect": "RELEASE-RECORDED, and NOT denied although it shares the denial line"},
+  {"id": "AV1922-08", "cls": "PROPOSED",
+   "state": {"status": "deferred", "why": "G 2026-11-15 CUT (milestone map MILESTONE-MAP-1): not building"},
+   "log_exact": [{"id": "AV1922-08", "line": 1896, "date": "2026-11-14", "text": "2026-11-14 10:13 | G lifted the freeze, keeping the 3 DENIED (AV1922-08/09/10). Tranche 1: released AV1622-08."}],
+   "applied": ["held_direct"], "map": {"line": 5, "recommendation": "CUT", "action": "RETIRE"},
+   "expect": "DENIED: exact-ID denial beats a broad pick or a later cut/approval note"}
+ ]
+}

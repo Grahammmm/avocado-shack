@@ -24,8 +24,7 @@ demo = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(demo)
 
 # What 02-DEMO-PLAN promises and main does not do yet (each is a named gap, never a silent pass).
-KNOWN_GAPS = {"s02-what-can-you-do": "QA1-03", "s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-12",
-              "s05x-undo-names-the-draft": "QA1-10", "s05x-thanks": "QA1-10"}
+KNOWN_GAPS = {"s02-what-can-you-do": "QA1-03", "s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-12"}
 
 
 class Run:
@@ -84,7 +83,9 @@ class OfflineRehearsal(unittest.TestCase):
     def test_the_till_is_only_attached_for_till_rows(self):
         by_id = {r.row["id"]: r for r in Run.get()}
         self.assertNotEqual(by_id["s15-whats-sold-out"].disposition, "till-read")
-        self.assertEqual(by_id["s15-whats-sold-out"].row["known_gap"], "ROUTER-15")
+        self.assertEqual(by_id["s15-whats-sold-out"].disposition, "answer")
+        self.assertEqual(by_id["s15-whats-sold-out"].status, "PASS")
+        self.assertNotIn("known_gap", by_id["s15-whats-sold-out"].row)  # AV2007-03 fixed ROUTER-15: the row PASSes now
         world, rows = demo.load_fixture()
         shop = demo.Shop(world)
         try:

@@ -148,7 +148,8 @@ def _product_add(content, args, ctx):
         "From the market" if args["brand"] == "Producer not identified" else args["brand"])  # absence alone defaults
     record.update(producerKey=key, displayBrand=shown, status="active")
     record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
-    record["addedOn"] = shop_today(ctx.now).isoformat()  # AV1622-06: Pacific day of this add; no other op sets it
+    if args.get("showNew") is not False:  # HASS-INTAKE-2: the owner said no New label; with no day the shop shows none (shop.js isNew)
+        record["addedOn"] = shop_today(ctx.now).isoformat()  # AV1622-06: Pacific day of this add; no other op sets it
     content.products.append(record)
     if _organic(record):
         ctx.warnings.append(f"adds Organic badge to {record['id']}")
@@ -400,7 +401,7 @@ _ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
 
 OPS = (
     Op("product.add", {**_PRODUCT_FIELDS, "displayBrand": Arg("text", required=False), "image": Arg("image", required=False), "photo": Arg("id", required=False),
-                       **_OPTIONAL}, _product_add),
+                       "showNew": Arg("bool", required=False), **_OPTIONAL}, _product_add),
     Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
                         **_OPTIONAL, "clearProducer": Arg("bool", required=False),
                         "clearImageAlt": Arg("bool", required=False)}, _product_edit),

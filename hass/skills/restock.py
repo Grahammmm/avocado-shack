@@ -51,12 +51,12 @@ SHELF_SAME = "This does not change what the shelf says."
 
 # a number with a unit of goods: "40 jars", "2 dozen", "12 lbs", "x40". A date ("the 14th") or a wait ("in 2 weeks") is not one.
 UNITS = ("jars?|bottles?|boxes|box|bags?|cartons?|dozens?|cases?|crates?|units?|pieces?|pcs|packs?|packets?|loaves|loaf|cans?|tubs?|"
-         "trays?|pints?|quarts?|gallons?|liters?|litres?|lbs?|pounds?|oz|ounces?|kg|kilos?|kilograms?|grams?|items?|bunch(?:es)?")
+         "trays?|pints?|quarts?|gallons?|liters?|litres?|lbs?|pounds?|oz|ounces?|kgs?|kilos?|kilograms?|grams?|g|gals?|ml|items?|bunch(?:es)?")
 # a spelled-out run ("forty", "twenty-one", "one hundred and five", "two", "dozen") right before a unit of goods; a bare number word is not a count
 SPOKEN = "|".join(sorted({*WORD_NUMBERS, "seventy", "eighty", "ninety", "hundred", "thousand"}, key=len, reverse=True))
 # RF0721-9: a leading-point decimal (".5 kg") is the same quantity as "0.5 kg"; it must start at a safe left boundary (not "v.5", not "..5")
-QUANTITY = re.compile(rf"(?<![\w.])(?:\d[\d,]*(?:\.\d+)?|\.\d+)\s*(?:x\s*)?(?:{UNITS})\b|\b[x×]\s*\d+\b|\b\d+\s*[x×](?!\w)"
-                      rf"|\b(?:{SPOKEN})(?:[\s-]+(?:and[\s-]+)?(?:{SPOKEN}))*[\s-]+(?:{UNITS})\b", re.IGNORECASE)
+QUANTITY = re.compile(rf"(?<![\w.])(?:\d[\d,]*(?:\.\d+)?|\.\d+)\s*-?\s*(?:x\s*)?(?:(?:more|extra)\s+)?(?:{UNITS})\b|(?:\b[xX]|(?<!\w)×)\s*\d+\b|\b\d+\s*[x×](?!\w)"
+                      rf"|\b(?:{SPOKEN})(?:[\s-]+(?:and[\s-]+)?(?:{SPOKEN}))*[\s-]+(?:(?:more|extra)\s+)?(?:{UNITS})\b", re.IGNORECASE)
 
 
 class Refusal(ValueError):
