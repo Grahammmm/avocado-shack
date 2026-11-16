@@ -28,7 +28,7 @@ from hass.chat.shared import (  # noqa: E402,F401
     _iso, _is_undo)
 from hass.chat.commands import (  # noqa: E402,F401
     APPROVE, REJECT, KEYWORD_RE, NEAR_RE, COMMAND_RE, HELP_TEXT, MEMORY_RE, parse_keyword, COURTESY, parse_phone,
-    parse_near, parse_command, _note_key, parse_memory, READ_ONLY, _asked, read_command, read_memory)
+    parse_unknown_code, parse_near, parse_command, _note_key, parse_memory, READ_ONLY, _asked, read_command, read_memory)
 from hass.chat.wording import (  # noqa: E402,F401
     PHOTO_PATH_RE, VALUE_CUT, _value, _full, _changes, COLLECTION_WORDS, WHOLE_WORDS, _name, _subject, _summary,
     _when, _shown, UNREADABLE_TIME, EVENT_ORDER, _shown_in, _added, _change_line, _removed, _removal, _record_lines,
@@ -89,6 +89,8 @@ RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question st
 # only thing missing was today's shelf check. Plain words only: no "selection", no "not drafted", no ids.
 SHELF_QUESTION = "Before I change that, " + SHELF_ASK[0].lower() + SHELF_ASK[1:]
 SHELF_NO = "Okay, nothing was changed. Tell me what is different on the shelf list and I will draft that."
+QUESTION_DROPPED = "Okay, I've dropped that question"  # AV2007-13
+SEPARATE_RE = re.compile(r"(?:what'?s|what is|whats) on special(?:s)?\??")  # AV2007-13: a lookup that is never the answer to a question
 SHELF_FAILED = "Sorry, I could not set that up, so nothing was changed. Please send the change again."
 SHELF_CLOCK = "The last shelf check is dated in the future, so the date on this phone or computer looks wrong. Nothing was changed."
 MEET_NO = "Okay. Where should people meet? Tell me the spot, like a trailhead or a parking lot."  # HASS-CHAT-1
@@ -1006,6 +1008,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             disposition = "till-write-refused" if till[0] == "write" else "till-read"
             self._record(msg, disposition)
             return disposition, None
+        if msg.attachments <= 0 and (unknown := parse_unknown_code(msg.text)) is not None and not any(
+                unknown.startswith(r["code"]) for r in self._drafts("state = 'proposed'") if self._mine(r)):  # AV2007-13: refused, nothing mutated, the open question stays (a waiting code with a stray character still goes to the reader)
+            held = self._open_question(now)
+            self._reply(self._no_target(unknown, [], []), long_ok=True)
+            self._record(msg, "no-target")
+            if held is not None: self._hold(msg, held)
+            return "no-target", None
         if msg.attachments <= 0 and self.skills_mode != dispatch_mod.DEFAULT_MODE and self.dispatch.takes_answer(msg.text, now):
             disposition = self._request(msg, now)  # HIKE-LOOKUP-2: a bare yes / no / number that answers the map's "Did you mean ...?" is that answer, never an approval
             self._record(msg, disposition)
@@ -1044,14 +1053,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             disposition = self._shelf_answer(msg, now, verb, ask)  # (never a waiting draft's approval or cancel)
             self._record(msg, disposition)
             return disposition, None
+        if verb == "reject" and code is None and (open_q := self._open_question(now)) is not None:  # AV2007-13: a bare no drops the open question, first
+            if open_q["legacy"]: self._close_asks()
+            else: self.requests.mark(open_q["request_id"], "cancelled", now)
+            self._reply(QUESTION_DROPPED)
+            self._record(msg, "cancelled")
+            return "cancelled", None
         if verb == "approve" and code is None and self.settings.get("approvalNeedsCode"):
             self._reply("To put a change on the website, reply yes and its code, like " + q("yes a1b2") + ".")
             self._record(msg, "no-target")
             return "no-target", None
         # AV1537-02: no/cancel also closes an open (unexpired) question; yes only ever targets a proposal.
         states = "('proposed', 'needs-details')" if verb == "reject" else "('proposed')"
-        if verb == "reject": self._close_asks()  # HASS-HIKE-FLOW-1: no/cancel also drops the open request (the reply is unchanged)
         targets = [r for r in self._drafts(f"state IN {states}") if self._mine(r) and (code is None or r["code"] == code)]
+        if verb == "reject" and (code is None or targets): self._close_asks()  # HASS-HIKE-FLOW-1: no/cancel also drops the open request (the reply is unchanged); AV2007-13: an unknown code never does
         asks = [] if verb != "approve" or targets else [self._by_code(code, ("needs-details",))] if code else \
             [r for r in self._drafts("state = 'needs-details'") if self._mine(r) and self._expiry(r) > cutoff]  # AV1737-05: bare yes
         if asks := [a for a in asks if a is not None]:  # a waiting question is never approved; it is repeated
@@ -1060,8 +1075,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._record(msg, "no-target")
             return "no-target", None
         if len(targets) != 1:
+            held = self._open_question(now) if code and not targets else None  # AV2007-13: a code that matches nothing leaves the question usable
             self._reply(self._no_target(code, targets, expired))
             self._record(msg, "no-target")
+            if held is not None: self._hold(msg, held)
             return "no-target", None
         target = targets[0]
         if verb == "reject":
@@ -1265,6 +1282,12 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                                    " ORDER BY rowid DESC LIMIT 1", (self.settings["ownerChat"], self._chat())).fetchone()
             if last is None: return None
             earlier = self._ask_texts(last["provider_id"], now)
+            if last["disposition"] != "question" and not (last["disposition"] == "needs-details" and earlier):  # AV2007-13: a refused code or a lookup in between keeps it
+                held = self.db.execute("SELECT value, provider_id FROM control WHERE name = ?", (self._hold_name(),)).fetchone()
+                last = self.db.execute("SELECT provider_id, disposition, received_at FROM messages WHERE provider_id = ?",
+                                       (held["value"],)).fetchone() if held and held["provider_id"] == last["provider_id"] else None
+                if last is None: return None
+                earlier = self._ask_texts(last["provider_id"], now)
             if last["disposition"] != "question" and not (last["disposition"] == "needs-details" and earlier): return None
             row = self.db.execute("SELECT text, created_at FROM outbox WHERE reply_to = ? AND chat = ? ORDER BY id DESC LIMIT 1",
                                   (last["received_at"], self._chat())).fetchone()
@@ -1272,6 +1295,27 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             if now - datetime.fromisoformat(row["created_at"]) > timedelta(minutes=RECENT_MINUTES): return None
             return {"question": row["text"], **({"earlier": earlier} if earlier else {})}
         except (sqlite3.Error, ValueError, TypeError, KeyError): return None
+
+    def _hold_name(self): return "held-question:" + self._chat()
+
+    def _hold(self, msg, question):
+        """AV2007-13: this message (a refused code, a separate lookup) leaves the open question usable for the next one."""
+        self.db.execute(CONTROL)
+        self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES (?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET"
+                        " value = excluded.value, set_at = excluded.set_at, provider_id = excluded.provider_id",
+                        (self._hold_name(), question["provider_id"], _iso(self._now()), msg.provider_id))
+
+    def _open_question(self, now):
+        """AV2007-13: the owner's open non-hike question as {"request_id", "provider_id", "legacy"}, or None. A skill request counts
+        when it asked something; a legacy one is the recent question. Never a waiting change, a hike, or an expired request."""
+        try:
+            req = self.requests.get(self._chat(), now)
+            if req is None or req["state"] != "open" or req["pending"] or req["attachments"]: return None
+            if req["skill"]: return {**req, "legacy": False} if req["question"] and "hike" not in req["skill"] else None
+            recent = self._recent_question(now)
+            if recent is None or "hike" in " ".join([recent["question"], *req["texts"]]).lower(): return None
+            return {**req, "legacy": True}
+        except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
 
     def _ask_texts(self, provider_id, now) -> list:
         """The owner texts kept for the open question that answered message ``provider_id``; any problem or a stale row: []."""
@@ -1436,7 +1480,15 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         cap = self.settings["interpreterDailyCap"]
         skills_on = self.skills_mode != dispatch_mod.DEFAULT_MODE
         req = self.requests.get(self._chat(), now) if skills_on else None  # SKILLS-FW-3: the owner's own open request
-        if skills_on and (done := self.dispatch.cheap(msg, now)) is not None: return done  # a short answer read by code: no model call
+        if (held := self._open_question(now)) is not None and SEPARATE_RE.fullmatch(msg.text.strip().lower()):  # AV2007-13: its own message
+            disposition = self._request_now(msg, now, None, True)  # no old context; the question stays open
+            if self.requests.by_provider(self._chat(), held["provider_id"], now) is not None: self._hold(msg, held)
+            return disposition
+        return self._request_now(msg, now, req, False)
+
+    def _request_now(self, msg, now, req, separate) -> str:
+        cap, skills_on = self.settings["interpreterDailyCap"], self.skills_mode != dispatch_mod.DEFAULT_MODE
+        if skills_on and not separate and (done := self.dispatch.cheap(msg, now)) is not None: return done  # a short answer read by code: no model call
         if cap is not None:  # H22: counted before the call in this transaction, so a failed call still counts
             day, calls = self._calls(now)
             if calls >= cap:
@@ -1451,7 +1503,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._mine(r) and self._expiry(r) > now]
         notes = self._notes()  # AV1102-09: preferences only; no notes means no notes keyword
         kept = req is not None and bool(req["skill"] or req["attachments"])  # SKILLS-FW-3: a skill request replaces `recent`
-        recent = self.requests.snapshot(req) if kept else self._recent_question(now)  # HASS-NL-1; HASS-HIKE-FLOW-1: with the owner's earlier texts of the same request
+        recent = None if separate else self.requests.snapshot(req) if kept else self._recent_question(now)  # HASS-NL-1; HASS-HIKE-FLOW-1: with the owner's earlier texts of the same request
         context = {k: v for k, v in (("notes", notes), ("aliases", self._interpreter_aliases()),
                                      ("recent", recent)) if v}  # AV0007-06; HASS-NL-1
         sent_at = _answered_at(msg, now)  # AV1352-06: 'today' is the day it was sent; bad, naive or future means now
