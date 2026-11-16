@@ -45,12 +45,12 @@ class FakePhotos:
 class Chat:
     """One owner conversation on the throwaway repo with the real dispatcher, item.add the only skill."""
 
-    def __init__(self, photos, setup=None):
+    def __init__(self, photos, setup=None, settings=None):
         self.kit = testkit.Scratch({}, {"item.add": ia.ITEM_ADD}, photos=list(photos), setup=setup)
         self.kit.conv.db.close()  # the kit's own Conversation is not used; this one has the dispatcher
         cfg = json.loads((self.kit.repo.state / "config.json").read_text("utf-8"))
         from hass import editor
-        editor._write_json(self.kit.repo.state / "config.json", {**cfg, "settings": {**cfg["settings"], "skills": {"mode": "both"}}})
+        editor._write_json(self.kit.repo.state / "config.json", {**cfg, "settings": {**cfg["settings"], "skills": {"mode": "both"}, **(settings or {})}})
         self.asked, self.photos, self.mapping = [], FakePhotos(), {}
         self.now, self.n, self.out = testkit.START, 0, self.kit.out
         self.interp = _Interp(self.mapping, self.asked)

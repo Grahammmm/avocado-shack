@@ -398,6 +398,8 @@ def load_settings(sdir, photos=False) -> dict:
     if mode not in dispatch_mod.MODES: problems.append("skills.mode must be ops-only, both or skills-first")
     house = settings.get("houseRender", False)  # SKILLS-FW-3: read here, used by the picture card (SKILLS-PIC-1); default off
     if type(house) is not bool: problems.append("houseRender must be true or false")
+    intake = settings.get("itemIntake", False)  # HASS-INTAKE-2: the full intake interview for a new item; default off, like houseRender
+    if type(intake) is not bool: problems.append("itemIntake must be true or false")
     lookup = settings.get("hikeLookup")  # HIKE-LOOKUP-2: {"contact": address} (or the flat key "hikeLookup.contact"); absent = no map lookup, the plain hike flow
     contact = settings.get("hikeLookup.contact") if lookup is None else lookup.get("contact") if isinstance(lookup, dict) else False
     if contact is not None and hike_lookup.valid_contact(contact) is None: problems.append("hikeLookup.contact must be an e-mail address or an https link")
@@ -406,6 +408,7 @@ def load_settings(sdir, photos=False) -> dict:
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
             "interpreterDailyCap": cap, "skillsMode": mode, "houseRender": house,  # SKILLS-FW-3
             **({"hikeLookupContact": contact} if contact is not None else {}),  # HIKE-LOOKUP-2: only when set
+            **({"itemIntake": True} if intake is True else {}),  # HASS-INTAKE-2: only when on
             **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),
             **({"gKeys": frozenset(g_keys), "gChat": g_chat, "gSenders": tuple(g_senders)} if g_keys and isinstance(g_chat, str) else {}),
             **({"gOwner": True} if g_owner is True else {}),
@@ -1680,11 +1683,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if result in ("applied", "already-applied"):
             self._move(row, "applied", commit=out.get("commit"))
             self._audit("undone" if _is_undo(row) else "applied", row, commit=out.get("commit"))  # AVB-10
+            if self.dispatch is not None and not _is_undo(row): self.dispatch.intake_applied(row["code"], now)  # HASS-INTAKE-2: his private intake record is saved now, not before his yes
             for call in json.loads(row["ops_json"]):  # an applied undo closes the draft it reverted
                 if call.get("op") == "history.revert":
                     for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
                                              call["args"].get("changeId")):
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
+                        if self.dispatch is not None: self.dispatch.intake_undone(orig["code"], now)  # HASS-INTAKE-2
             if self.previewer is None or self._row_live_site(row):
                 self._reply(answers.applied_text(row["code"], row["summary"], live_site=self._row_live_site(row)))
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked

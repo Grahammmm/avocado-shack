@@ -127,6 +127,18 @@ network (the test kit gives recorded pages, so no test touches the network).
   is not published.
 * **Known limit:** a page "We make ..." is credited to whatever maker name he gave; he reads the story and the address before
   his yes.
+* **Full intake interview (HASS-INTAKE-2, setting `itemIntake: true`, default off like `houseRender`):** a photo with no words
+  gets the first question at once (fixed words, no model call, no preview): "Got the photo. A few quick questions: ..." and
+  "What is it called?". After the name, maker, town and shelf, Hass asks one question at a time: the maker's website (new makers),
+  how many bought and in what, sold per item, pound, bag or bundle, the price, what he paid, ingredients, flavor/size/variety,
+  origin, label claims (kept as his unverified word), allergens, storage, best-by date, day received, low-stock number, one
+  sentence for customers (it becomes the description when the house checks pass) and the New label. Every question takes `skip` or
+  `don't know` and is then left blank, never guessed; `cancel` drops the request. Answers are read by fixed parsing (a third
+  unreadable answer is left blank), so only the maker's story ever needs the model. The answers stay in the open request, are not
+  joined to his texts and are not shown to the reader. The draft shows the public listing as before (no price, cost or count) and a
+  separate "Kept private, not on the website" block. After `yes <code>` the record is appended to `item-intake.jsonl` in the state
+  folder (0600, beside `maker-sources.jsonl`); undo is its own draft and adds an "undone" line. The stock word is worked out from
+  the count and the low-stock number and shown as "I set". Test: `hass/tests/test_item_intake_conversation.py`.
 
 ## The live gate (HASS-LIVE-ADD-2 B)
 
