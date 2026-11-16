@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "identity": "synthetic-owner-generic-context",
+  "at": "2026-11-02T17:00:00+00:00",
+  "request": "Change the opening hours for Avocado Shack on Monday",
+  "answer": "Tuesday instead",
+  "correction": "No, Wednesday instead of Tuesday",
+  "expected": {
+    "earlier_after_answer": ["Change the opening hours for Avocado Shack on Monday"],
+    "earlier_after_correction": ["Change the opening hours for Avocado Shack on Monday", "Tuesday instead"],
+    "cancelled_recent": false,
+    "expired_recent": false,
+    "other_owner_reads": false,
+    "duplicate_transport_calls": 0,
+    "stale_applies": false,
+    "real_model": "REAL_MODEL_UNVERIFIED"
+  }
+}
