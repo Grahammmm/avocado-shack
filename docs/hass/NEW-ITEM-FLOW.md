@@ -64,6 +64,17 @@ that came first: short answers, then the rules. Mike's side is in [the phone gui
 * The label text in the photo only helps with the name and brand question; it does not feed the description.
 * **Host setting (operator):** `houseRender: true` in the Hass writer settings and the services on the Pillow 12.0.0 venv
   python. Until then a photo goes on as sent, and Hass says so before the yes.
+* **Host setting `photo_polish` (operator, default off):** `photo_polish: true` next to `houseRender: true` in the Hass
+  writer settings turns on the photo clean-up (`hass/photo_polish.py`). After Hass replies to a new photo, a background
+  thread asks Hermes (its `openai-codex` image plugin, ChatGPT/Codex sign-in; Hass holds no key) to edit the photo with
+  `gpt-image-2` at quality high onto the house ivory background, with a 90 s limit. A model-free fidelity gate (the product found
+  again in Mike's photo, same colour, label words unchanged) decides; a passing picture is framed by the house render
+  (800 x 800 JPEG, no metadata) and published in place of the house render of the photo. Any failure, timeout or
+  rejection publishes the house render as before, logs one `polish-<code>` row to the correspondence log, and is never
+  mentioned to Mike. The original photo stays in the private media store; decisions live under
+  `<mediaRoot>/polish/`. `photo_polish` without `houseRender: true` is refused at load. The model is the single line
+  `MODEL` in `hass/photo_polish.py` (`<Hermes image plugin>:<model id>`). The card shows no caption, badge or wording
+  about how the picture was made. Test evidence: `reports/hass-image-1/`.
 * A page about a different maker would be rewritten under the name Mike gave; he sees the story and the address first.
 
 ## Rehearsal

@@ -189,12 +189,22 @@ class ContractTests(unittest.TestCase):
                 d.rectangle((w * (.33 + i * .075), h * .47, w * (.36 + i * .075), h * .53), fill=(240, 240, 240))
             return im
         data = photo("jar-white-sheet")
-        with mock.patch.object(photo_polish, "words", centre_word):
+        with mock.patch.object(photo_polish, "words", centre_word), mock.patch.object(photo_polish, "photo_words",
+                                                                                      lambda _original: None):
             ok = Bare(self)
             self.assertEqual(self.polish(ok, ok.store(data), Stub(edit_of(data))), ("ok", []))  # the same marks: kept
             bad = Bare(self)
             code, rows = self.polish(bad, bad.store(data), Stub(edit_of(data, change=stamped)))
         self.assertEqual((code, rows), ("text", [("error", "polish-text")]))
+
+    def test_a_plausible_new_word_must_be_read_on_the_photo(self):
+        known = {"HONE", "ILDFLOWER", "RIDGE", "ROAS"}  # what tesseract reads on Mike's photo, slips included
+        self.assertFalse(photo_polish.text_changed([("HONEY", 0.5), ("WILDFLOWER", 0.4), ("ROAST", 0.45)], known))
+        self.assertTrue(photo_polish.text_changed([("SUNNY", 0.46)], known))  # looks a little like it, never read
+        self.assertFalse(photo_polish.text_changed([("SUNNY", 0.7)], known))  # looks like that spot: kept
+        self.assertFalse(photo_polish.text_changed([("SUNNY", 0.46)], None))  # the photo reads nothing: marks only
+        self.assertFalse(photo_polish.text_changed([("SUN", 0.46), ("SUNNY", None)], known))  # too short / too small
+        self.assertTrue(photo_polish.text_changed([("HONEY", 0.2)], known))  # unlike that spot, read or not
 
     def test_no_hermes_uses_the_fallback(self):
         transport = photo_polish.HermesTransport(launcher="/nonexistent/hermes")

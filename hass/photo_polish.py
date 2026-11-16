@@ -30,6 +30,7 @@ bad outputs (HASS-IMAGE-1 T2/T3).
 """
 from __future__ import annotations
 
+import difflib
 import hashlib
 import io
 import json
@@ -70,6 +71,8 @@ STRETCH = (0.85, 0.92, 1.0, 1.08, 1.17)  # width stretches tried: a product turn
 TEXT_CONF = 60  # tesseract confidence a word on the edited picture needs to count
 TEXT_TOKEN = re.compile(r"[A-Z0-9]{3,}")
 WORD_MIN = 0.35  # each label word on the edited picture must correlate this well with the same spot of Mike's photo
+WORD_SURE = 0.6  # ...and a 4+ letter word under this must also be among the words read on Mike's photo (if any read)
+KNOWN_RATIO = 0.6  # difflib similarity that counts as the same word read twice (OCR slips: HONE!/HONEY, ROAS/ROAST)
 WORD_PX = 8  # a word under this many px high in Mike's photo is too small to judge
 WORD_HEIGHT = 24  # both word patches are compared at this height
 WORD_SEARCH = 0.6  # the search around the mapped spot, as a share of the word's size
@@ -295,7 +298,9 @@ def gate(original, edited, *, ocr=None) -> dict:
     found = words(made["jpeg"]) if ocr is None else ocr(made["jpeg"])
     if found is not None:
         m["words"] = word_scores(original, made["jpeg"], mapping, found)
-        m["text_changed"] = text_changed(m["words"])
+        known = photo_words(original) if ocr is None and m["words"] else None
+        m["photo_words"] = sorted(known) if known is not None else None
+        m["text_changed"] = text_changed(m["words"], known)
     colour_off = (m["hue_shift"] is not None and m["hue_shift"] > HUE_SHIFT_MAX) or m["chroma"] > CHROMA_MAX
     code = "match" if m["match"] < MATCH_MIN else "colour" if colour_off else "text" if m.get("text_changed") else "ok"
     if code != "ok":
@@ -421,16 +426,16 @@ def _hue(rgb, mask):
     return math.degrees(math.atan2(sy, sx)) % 360
 
 
-def words(framed):
+def words(framed, scale=2):
     """[(word, (left, top, width, height))] for the label words tesseract reads on the house-framed 800 px edited picture
-    (read at twice the size, where small label print is still legible; boxes in 800 px coordinates; capital letters and
-    digits, 3+ long, at least TEXT_CONF sure), or None without tesseract."""
+    (read at ``scale`` times the size, where small label print is still legible; boxes in the picture's own coordinates;
+    capital letters and digits, 3+ long, at least TEXT_CONF sure), or None without tesseract."""
     exe = shutil.which("tesseract")
     if exe is None:
         return None
     Image, _, _ = _pil()
     big = Image.open(io.BytesIO(framed)).convert("L")
-    big = big.resize((big.width * 2, big.height * 2), Image.Resampling.LANCZOS)
+    big = big.resize((big.width * scale, big.height * scale), Image.Resampling.LANCZOS)
     with tempfile.NamedTemporaryFile(suffix=".png") as fh:
         big.save(fh, "PNG")
         fh.flush()
@@ -443,7 +448,7 @@ def words(framed):
     for line in done.stdout.splitlines()[1:]:
         cols = line.split("\t")
         try:
-            conf, box = float(cols[10]), tuple(int(v) // 2 for v in cols[6:10])
+            conf, box = float(cols[10]), tuple(int(v) // scale for v in cols[6:10])
         except (IndexError, ValueError):
             continue
         token = "".join(TEXT_TOKEN.findall(cols[11].upper()))
@@ -489,7 +494,36 @@ def word_scores(original, framed, mapping, found):
     return out
 
 
-def text_changed(scores) -> bool:
-    """True when a word the edited label shows is not in Mike's photo at that spot (judgeable words only)."""
-    judged = [s for _w, s in scores if s is not None]
-    return any(s < WORD_MIN for s in judged)
+def photo_words(original):
+    """The set of label words tesseract reads on Mike's photo itself (same rules as ``words``, read at its own size),
+    or None without tesseract or a readable photo."""
+    try:
+        photo = newitem_render._upright(original)[0].convert("RGB")
+    except (media.Refused, newitem_render.Refused):
+        return None
+    photo.thumbnail((1600, 1600))  # a phone photo's full size only slows tesseract down
+    buf = io.BytesIO()
+    photo.save(buf, "JPEG", quality=92)
+    found = words(buf.getvalue(), scale=1)
+    return None if found is None else {w for w, _box in found}
+
+
+def _known(word, known) -> bool:
+    """Is ``word`` (read on the edited picture) one of the words read on Mike's photo, allowing for OCR slips?"""
+    return any(word in k or k in word or difflib.SequenceMatcher(None, word, k).ratio() >= KNOWN_RATIO
+               for k in known if len(k) >= 3)
+
+
+def text_changed(scores, known=None) -> bool:
+    """True when a word the edited label shows is not in Mike's photo at that spot (judgeable words only): it looks
+    unlike that spot, or it only looks a little like it (under WORD_SURE) and is not among the words read on the photo
+    (when the photo reads at all). A plausible but different word in the same place is the case the second rule
+    catches."""
+    for word, s in scores:
+        if s is None:
+            continue
+        if s < WORD_MIN:
+            return True
+        if known and s < WORD_SURE and len(word) >= 4 and not _known(word, known):
+            return True
+    return False
