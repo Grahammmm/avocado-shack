@@ -1364,9 +1364,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             if last is None: return None
             earlier = self._ask_texts(last["provider_id"], now)
             if last["disposition"] != "question" and not (last["disposition"] == "needs-details" and earlier):  # AV2007-13: a refused code or a lookup in between keeps it
+                if (kept := self._asked_before_yes(now)) is not None: return kept  # AV2007-14: a yes that saved a draft leaves the question open
                 held = self.db.execute("SELECT value, provider_id FROM control WHERE name = ?", (self._hold_name(),)).fetchone()
                 last = self.db.execute("SELECT provider_id, disposition, received_at FROM messages WHERE provider_id = ?",
-                                       (held["value"],)).fetchone() if held and held["provider_id"] == last["provider_id"] else None
+                                       (held["value"],)).fetchone() if held and held["provider_id"] == last["provider_id"] \
+                    else None
                 if last is None: return None
                 earlier = self._ask_texts(last["provider_id"], now)
             if last["disposition"] != "question" and not (last["disposition"] == "needs-details" and earlier): return None
@@ -1376,6 +1378,41 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             if now - datetime.fromisoformat(row["created_at"]) > timedelta(minutes=RECENT_MINUTES): return None
             return {"question": row["text"], **({"earlier": earlier} if earlier else {})}
         except (sqlite3.Error, ValueError, TypeError, KeyError): return None
+
+    def _asked_before_yes(self, now):
+        """AV2007-14: the open legacy question as `recent` when every owner message since it is an approval (a yes that saved a
+        waiting draft), else None."""
+        req = self.requests.get(self._chat(), now)
+        if req is None or req["state"] != "open" or req["skill"] or req["pending"]: return None
+        rows = self.db.execute("SELECT provider_id, disposition, received_at FROM messages WHERE received_at IS NOT NULL"
+                               " AND COALESCE((SELECT chat FROM message_chats c WHERE c.provider_id = messages.provider_id), ?) = ?"
+                               " AND rowid >= (SELECT rowid FROM messages WHERE provider_id = ?) ORDER BY rowid",
+                               (self.settings["ownerChat"], self._chat(), req["provider_id"])).fetchall()
+        if len(rows) < 2 or rows[0]["provider_id"] != req["provider_id"] or rows[0]["disposition"] != "question": return None
+        if not req["question"] or not req["texts"] or not all(r["disposition"] == "approved" for r in rows[1:]): return None
+        return {"question": req["question"], "earlier": req["texts"]}
+
+    def _legacy_question(self, now):
+        """AV2007-14: the plain open question of ours (no skill, shelf-check, hike or photo ask) as one line, else None."""
+        try:
+            req = self.requests.get(self._chat(), now)
+            if req is not None and req["state"] == "open" and not req["skill"] and not req["pending"] and not req["attachments"] \
+                    and isinstance(req["question"], str) and req["question"].strip() and "hike" not in req["question"].lower():
+                return " ".join(req["question"].split())
+        except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): pass
+        return None
+
+    def _still_asking(self, now):
+        """AV2007-14: the question of ours the owner has not answered yet (one line), repeated after a saved reply; else None."""
+        if (q := self._legacy_question(now)) is not None: return q
+        try:
+            rows = [r for r in self._drafts("state = 'needs-details'") if self._expiry(r) > now and self._visible(r)]
+            return " ".join(rows[-1]["summary"].split()) if rows else None
+        except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
+
+    def _with_question(self, text):
+        q = self._still_asking(self._now())
+        return text if q is None else text + "\nI still need your answer to this: " + q
 
     def _hold_name(self): return "held-question:" + self._chat()
 
@@ -1405,11 +1442,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return req["texts"] if req and all(isinstance(t, str) and t for t in req["texts"]) else []
         except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return []
 
-    def _open_ask(self, msg, now, earlier, pending=None):
+    def _open_ask(self, msg, now, earlier, pending=None, question=None):
         """HASS-HIKE-FLOW-1: keep this owner text with the earlier ones of the same open request, newest last, bounded.
         HASS-SHELFCHECK-FLOW-1: ``pending`` = {"ops": [...], "revises": code|None}, the change that waits for today's shelf check.
         SKILLS-FW-3: written to the one open-request store (a request with no skill)."""
-        self.requests.put(self._chat(), msg.provider_id, now, texts=[*earlier, msg.text], pending=pending, legacy=True,
+        self.requests.put(self._chat(), msg.provider_id, now, texts=[*earlier, msg.text], pending=pending, legacy=True, question=question,
                           turns=ASK_TURNS, per=ASK_TEXT_CUT, total=ASK_CHARS)
 
     def _shelf_ask(self, now):
@@ -1674,7 +1711,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 self.requests.put(self._chat(), msg.provider_id, now, texts=[*req["texts"], msg.text], request_id=req["request_id"],
                                   skill=req["skill"], slots=req["slots"], calls=req["calls"], attachments=req["attachments"],
                                   question=result["question"], draft_code=req["draft_code"], asks=req["asks"])
-            else: self._open_ask(msg, now, earlier)  # keep the request with our question, for the answer
+            else: self._open_ask(msg, now, earlier, question=result["question"])  # keep the request with our question, for the answer
         elif legacy and "ops" in result: self._close_asks()  # a draft (or its own question) takes over; nothing stays open
         for key in ("question", "unsupported"):
             if key in result:
@@ -1938,7 +1975,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
                         if self.dispatch is not None: self.dispatch.intake_undone(orig["code"], now)  # HASS-INTAKE-2
             if self.previewer is None or self._row_live_site(row):
-                self._reply(answers.applied_text(row["code"], row["summary"], live_site=self._row_live_site(row)))
+                self._reply(self._with_question(answers.applied_text(row["code"], row["summary"], live_site=self._row_live_site(row))))
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
         elif result == "env-changed":
             again = self._reprepare(row)
@@ -2040,12 +2077,12 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
                     self._audit("verified", row)  # AVB-10
                     text = answers.applied_text(row["code"], row["summary"], checked=not (unshown and all(unshown)), live_site=self._row_live_site(row))
-                    if not self._row_live_site(row): self._reply(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else ""), [png])
+                    if not self._row_live_site(row): self._reply(self._with_question(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else "")), [png])
                 else:  # the raw diagnostic stays on the row; the owner gets plain words (SHOP-4)
                     self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
                     self._audit("verified", row, "not-verified")  # AVB-10: the diagnostic stays on the row, never here
-                    if not self._row_live_site(row): self._reply(answers.applied_text(row["code"], row["summary"], error=error, live_site=self._row_live_site(row)))
+                    if not self._row_live_site(row): self._reply(self._with_question(answers.applied_text(row["code"], row["summary"], error=error, live_site=self._row_live_site(row))))
 
     def screenshot(self, change_id) -> str | None:
         row = self.db.execute("SELECT screenshot FROM drafts WHERE change_id = ? AND state IN ('applied', 'verified') "
