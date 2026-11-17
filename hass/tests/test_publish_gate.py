@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from hass import live_policy, media, photo_polish, preview, product_claims
+from hass import statebackup
 from hass.content_model import REPO_ROOT
 from hass.interpret_check import PRICE_REPLY
 from hass.ops import photos, Refused
@@ -242,6 +243,33 @@ class PublishGate(unittest.TestCase):
         _, (retried,) = chat.say('?')
         self.assertIn("can't put this", retried)
         self.assertNotIn('yes ' + code, retried)
+
+    def test_fallback_picture_survives_backup_verify_and_restore(self):
+        chat = self.chat()
+        chat.conv.previewer = mock.Mock()
+        chat.conv.previewer.capture.return_value = {'ok': False, 'png': None, 'error': 'Please update your version of Node.js.'}
+        disposition, (said,) = chat.say(GLUE_CAPTION, base.JAR)
+        self.assertEqual(disposition, 'proposed')
+        self.assertIn("couldn't render the website card", said)
+        attached, = chat.out.sent[-1]['attachments']
+        path = Path(attached)
+        data = path.read_bytes()
+        self.assertEqual(path.name, hashlib.sha256(data).hexdigest() + '.jpg')
+        state = chat.conv.sdir
+        out = state.parent / 'fallback-backups'
+        out.mkdir(mode=0o700)
+        backed = statebackup.create(state, out)
+        self.assertEqual(backed['result'], 'ok', backed)
+        backup = Path(backed['backup'])
+        rel = path.relative_to(state)
+        self.assertEqual((backup / rel).read_bytes(), data)
+        self.assertEqual(statebackup.verify(backup)['result'], 'ok')
+        drill = state.parent / 'fallback-drill'
+        testkit._git(chat.kit.repo.main, 'worktree', 'add', '-b', 'hass/fallback-drill', str(drill))
+        restored = state.parent / 'restored-state'
+        result = statebackup.restore(backup, restored, drill)
+        self.assertEqual(result['result'], 'ok', result)
+        self.assertEqual((restored / rel).read_bytes(), data)
 
     def test_text_only_persimmons_generate_illustration_without_private_finances(self):
         chat = self.chat()
