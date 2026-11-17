@@ -54,7 +54,7 @@ class FractionSizes(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(keep({"name": value}, CATS), {})
         self.assertEqual(keep({"name": 5, "brand": None}, CATS), {})
-        self.assertEqual(keep({"name": "1/2 lb organic"}, CATS), {})  # claim precedence unchanged
+        self.assertEqual(keep({"name": "1/2 lb organic"}, CATS), {"printed_claims": ["1/2 lb organic"]})  # quarantined, never a name
 
     def test_category_does_not_use_name_amount_filter(self):
         self.assertEqual(keep({"category": " 1/2  LB "}, CATS), {"category": "1/2 lb"})
