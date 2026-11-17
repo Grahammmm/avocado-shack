@@ -124,7 +124,7 @@ def _decimal(v):
 
 def parse_item(raw):
     """A Clover item object -> CloverItem, by whitelist. Raises MapError when it has no usable id or name."""
-    if not isinstance(raw, dict) or not re.fullmatch(r"[A-Za-z0-9]{1,32}", str(raw.get("id", ""))) or not _text(raw, "name"):
+    if not isinstance(raw, dict) or not isinstance(raw.get("id"), str) or not re.fullmatch(r"[A-Za-z0-9]{1,32}", raw["id"]) or not _text(raw, "name"):
         raise MapError("an item from the till has no id or name")
     price_type = raw.get("priceType")
     if price_type not in PRICE_TYPES:
