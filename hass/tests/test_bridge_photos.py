@@ -73,6 +73,18 @@ class PhotosTests(unittest.TestCase):
         self.assertEqual(parse_qs(urlsplit(fake.calls[0][0]).query)["with"], ["attachment"])
         self.assertEqual([c[3] for c in fake.calls], [bridge_photos.META_LIMIT, media.MAX_BYTES])
 
+    def test_download_asks_for_the_original_bytes(self):
+        """BlueBubbles converts a HEIC to a different-length JPEG unless original=true is on the download URL."""
+        heic = b"\x00\x00\x00\x18ftypheic" + b"h" * 40
+        def transport(url, headers, timeout, limit):
+            parts = urlsplit(url)
+            if parts.path.startswith("/api/v1/message/"): return _meta({"guid": "att-1", "totalBytes": len(heic)})
+            return 200, (heic if parse_qs(parts.query).get("original") == ["true"] else JPG)  # JPG: converted, other length
+        self.assertEqual(self.photos(transport).fetch("msg-1", 1), [heic])
+        def no_original(url, headers, timeout, limit):
+            return transport(url.replace("original=true&", ""), headers, timeout, limit)
+        self.fails(no_original, "size-mismatch")
+
     def test_fewer_attachments_than_asked_is_count_error_without_download(self):
         self.fails(fake := FakeTransport(), "attachment-count", n=2)
         self.assertEqual(len(fake.calls), 1)
@@ -135,7 +147,7 @@ class PhotosTests(unittest.TestCase):
         self.assertEqual(message.path, "/api/v1/message/x%2Fy%3Fpassword%3Dz")
         self.assertEqual(download.path, "/api/v1/attachment/a%2Fb%3Fc/download")
         self.assertEqual(parse_qs(message.query), {"with": ["attachment"], "password": [PASSWORD]})
-        self.assertEqual(parse_qs(download.query), {"password": [PASSWORD]})
+        self.assertEqual(parse_qs(download.query), {"original": ["true"], "password": [PASSWORD]})
 
     def test_default_transport_has_no_proxy_and_no_redirect(self):
         handlers = bridge_photos._OPENER.handlers  # ProxyHandler({}) opens nothing, so neither it nor the

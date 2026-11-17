@@ -5,7 +5,9 @@ returns their bytes. Same safety rules as bridge.BlueBubblesSender: loopback bas
 password read fresh per call from a private file and sent only in the documented `password` query parameter, and no
 error raised here ever carries the URL, the query, the password or a response body.
 REST (docs.bluebubbles.app): GET /api/v1/message/{guid}?with=attachment -> {"data": {"attachments": [{"guid", ...}]}};
-GET /api/v1/attachment/{guid}/download -> raw bytes.
+GET /api/v1/attachment/{guid}/download?original=true -> raw original bytes (without `original`, BlueBubbles converts a HEIC
+to JPEG, so the length no longer matches totalBytes; the parameter is `original` in the BlueBubbles client, commit f2e5354
+"Add support for downloading original attachment if converted by server", github.com/BlueBubblesApp/bluebubbles-app).
 A download whose length differs from the attachment's declared int totalBytes is refused as size-mismatch.
 Attachments after the first n are never read or checked.
 A repeated JSON member `data`, `attachments`, or (in the first n attachments) `guid` or `totalBytes` is ambiguous: a `shape`
@@ -22,7 +24,7 @@ from hass import media  # noqa: E402
 from hass.bridge import LOOPBACK, BridgeError, _NoRedirect, _private_file  # noqa: E402
 
 META_LIMIT, MAX_GUID, MAX_COUNT = 256 * 1024, 200, 10
-MESSAGE_PATH, DOWNLOAD_PATH = "/api/v1/message/{}?with=attachment&", "/api/v1/attachment/{}/download?"
+MESSAGE_PATH, DOWNLOAD_PATH = "/api/v1/message/{}?with=attachment&", "/api/v1/attachment/{}/download?original=true&"
 
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)  # no proxy, no redirect
 
