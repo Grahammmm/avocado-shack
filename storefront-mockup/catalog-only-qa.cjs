@@ -1,4 +1,5 @@
-const {out,base}=require('./qa-env.cjs').qaEnv({preview:true});
+const {qaEnv,commerceAuditText}=require('./qa-env.cjs');
+const {out,base}=qaEnv({preview:true});
 const fs=require('fs'),assert=require('assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 (async()=>{
@@ -8,7 +9,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  assert.equal(await page.locator('.section-intro').textContent(),'An avocado from Morro Bay. A loaf from Atascadero. Cheese made in Cambria. Explore our selection and follow the flavors back to the farms, kitchens, and makers from our community.');
  assert.equal(await page.locator('[data-source],.sourcing-filters').count(),0);
  assert.equal(await page.locator('[data-add],#bag,#boxes,#merch,#owner,#order-preview,.price,[data-product],.food-detail,#hikes').count(),0);
- assert.doesNotMatch(await page.locator('body').innerText(),/\$\d|add to basket|pickup|local delivery|weekly boxes|online shop|merchandise|Discover this food|Food & maker story/i);
+ assert.doesNotMatch(await commerceAuditText(page),/\$\d|add to basket|pickup|local delivery|weekly boxes|online shop|merchandise|Discover this food|Food & maker story/i);
  const countText=async()=>(await page.locator('#catalog-count').textContent()).split(' \u00b7 ')[0],fullCount=await countText();assert.equal(fullCount,(await page.evaluate(()=>catalog.length))+' selections');
  const defaultCount=(await page.evaluate(()=>catalog.filter(p=>!['fruit','vegetables','flowers'].includes(p.category)||p.id==='photo-product-018').length))+' selections';
  // AV1052-01: description search on synthetic catalogs (served for catalog-products.js and producers.js only; no file on disk changes). Expected ids are written out, not read from filteredProducts().
