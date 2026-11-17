@@ -1689,11 +1689,14 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if not 1 <= count <= media.MAX_PHOTOS_PER_MESSAGE: return self._reply(media.REPLIES["many"]) or "attachment-many"
         if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)  # HASS-OWNERS-2: nothing fetched or stored
         try:
-            if count == 1: photos = [self.photos.fetch(msg.provider_id, 1)[0]]  # NB-AV-11: an empty/short answer is a failure too
+            fetch = getattr(self.photos, "fetch_for_inbox", self.photos.fetch)
+            if count == 1: photos = [fetch(msg.provider_id, 1)[0]]  # NB-AV-11: an empty/short answer is a failure too
             else:  # AV2152-04: exactly count byte entries, in the order sent, or it is a fetch failure
-                photos = self.photos.fetch(msg.provider_id, count)
+                photos = fetch(msg.provider_id, count)
                 if not isinstance(photos, list) or len(photos) != count or not all(isinstance(p, (bytes, bytearray)) for p in photos):
                     raise ValueError("fetch")
+        except media.Refused as exc:
+            return self._photos_refused([(getattr(exc, "position", 1), exc)], count)
         except Exception:  # never applied or read without the photo: retry via the inbox, or one reply on the last try
             if not last_try: raise AttachmentPending("fetch") from None
             return self._reply(FETCH_FAILED) or "attachment-failed"

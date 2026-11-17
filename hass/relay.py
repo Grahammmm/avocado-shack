@@ -7,10 +7,11 @@ import base64, hmac, json, os, sqlite3, stat  # noqa: E401
 from hashlib import sha256
 from pathlib import Path
 
-from hass import bridge, memory
+from hass import bridge, bridge_photos, media, memory
 
 KEY_BYTES, MAX_KEY_FILE, MAX_TEXT, HAND_AFTER_S = 32, 128, 8192, 60
 MAX_PNG, MAX_SHOTS, PNG_SIG, B64_MAX = 1572864, 2, b"\x89PNG\r\n\x1a\n", 2097152  # HASS-ATTACH-1
+PHOTO_MAX = 8 * 1024 * 1024
 CONTROL_KEYS = {"v", "ts", "nonce", "body", "mac"}
 
 
@@ -79,7 +80,27 @@ def _ints(v, lo, hi) -> bool:
     return type(v) is list and lo <= len(v) <= hi and all(type(x) is int and x > 0 for x in v)
 
 
-SHAPES = {  # body op -> [(keys, validator of the whole body)]; "picture" is a request or, with b64, its answer
+def _photo_index(b):
+    return bridge_photos._valid_guid(b["guid"]) and type(b["idx"]) is int and 0 <= b["idx"] < media.MAX_PHOTOS_PER_MESSAGE
+
+
+def _photo_count(b):
+    return _photo_index(b) and type(b["count"]) is int and b["idx"] < b["count"] <= media.MAX_PHOTOS_PER_MESSAGE
+
+
+def _photo_data(b):
+    if not (_photo_count(b) and type(b["sha256"]) is str and bridge.MAC_RE.fullmatch(b["sha256"])
+            and type(b["b64"]) is str and len(b["b64"]) <= 4 * ((PHOTO_MAX + 2) // 3)): return False
+    try: data = base64.b64decode(b["b64"], validate=True)
+    except ValueError: return False
+    return 1 <= len(data) <= PHOTO_MAX and sha256(data).hexdigest() == b["sha256"]
+
+
+SHAPES = {  # body op -> [(keys, validator)]; picture has request and answer forms
+    "photo": [({"op", "guid", "idx", "count", "sha256", "b64"}, _photo_data)],
+    "photo-refused": [({"op", "guid", "idx", "count", "code"}, lambda b: _photo_count(b)
+                       and type(b["code"]) is str and b["code"] in ("too-large", "unsupported-type", "fetch-failed"))],
+    "photo-ok": [({"op", "guid", "idx"}, _photo_index)],
     "pull": [({"op", "max"}, lambda b: type(b["max"]) is int and 1 <= b["max"] <= 5)],
     "ack": [({"op", "ids"}, lambda b: _ints(b["ids"], 1, 20))],
     "replies": [({"op", "items"}, lambda b: type(b["items"]) is list and len(b["items"]) <= 5
