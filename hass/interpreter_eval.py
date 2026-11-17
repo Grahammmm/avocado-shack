@@ -1,7 +1,8 @@
 """NB-AV-04 (H09): interpreter eval set and offline scorer (AV1322-14: eval set v3 adds the home-page ops, route.add/hide/
 restore and a no-source route.add question; AV1102-10: v4 adds brand, home-text, design and saved-note cases, and a
 case may carry `notes`; AV1222-09: v5 adds store phone and partial hike text-edit cases; AV2152-13: v8 adds a whole shelf, a whole maker, a
-partial product description, a cancel note, a notice first day and a club intro). `score --cases C --replies R` prints one JSON summary (ids
+partial product description, a cancel note, a notice first day and a club intro; AV0007-10: v9 adds undo guidance, a brand-only new product, an
+owner alias and a missing-field photo answer, and a case may carry `aliases`). `score --cases C --replies R` prints one JSON summary (ids
 and short reasons, never a case text or reply); exit 0 when every case was scored, even if some failed; 2 for an
 unreadable file, malformed line, duplicate id, a case file without exactly 75 cases or an unscorable case (RF0550-4:
 bad/repeated pending code, `revises` naming no pending draft, > MAX_OPS expected ops). `--live --url U --model M
@@ -23,7 +24,7 @@ from hass.ops import load_registry  # noqa: E402
 REPO = Path(__file__).resolve().parents[1]
 CASES = REPO / "hass" / "tests" / "fixtures" / "interpreter-eval.jsonl"
 EVENTS = CASES.with_name("interpreter-eval-events.json")  # AV1222-09: hikes laid over the prompt content, never written
-CASE_COUNT, ID_RE, NOTE_KEY = 75, re.compile(r"[A-Za-z0-9_-]{1,16}"), "_note"
+CASE_COUNT, ID_RE, NOTE_KEY = 79, re.compile(r"[A-Za-z0-9_-]{1,16}"), "_note"
 CLAIM_ARGS = frozenset({"organic", "producerKey"})  # an extra arg the case did not expect fails only for these
 
 
@@ -74,15 +75,21 @@ def _notes_ok(notes) -> bool:  # AV1102-10: optional saved notes, at most 20 {"k
             and isinstance(x["key"], str) and isinstance(x["text"], str) for x in notes))
 
 
+def _aliases_ok(aliases) -> bool:  # AV0007-10: optional owner aliases, at most 50 {"name", "kind", "id"} string objects
+    return (isinstance(aliases, list) and len(aliases) <= 50 and all(isinstance(x, dict) and set(x) == {"name", "kind", "id"}
+            and all(isinstance(v, str) for v in x.values()) and x["kind"] in ("product", "maker") for x in aliases))
+
+
 def load_cases(path) -> list:
     cases, seen = [], set()
     for n, row in _rows(path, "cases"):
         _id(row, n, "cases", seen)
-        if not (set(row) - {"notes"} == {"id", "text", "pending", "expect"} and isinstance(row["text"], str)
+        if not (set(row) - {"notes", "aliases"} == {"id", "text", "pending", "expect"} and isinstance(row["text"], str)
                 and isinstance(row["pending"], list) and all(isinstance(p, dict) for p in row["pending"])
                 and _expect_ok(row["expect"])):
             raise EvalError(f"cases line {n}: not a case")
         if "notes" in row and not _notes_ok(row["notes"]): raise EvalError(f"cases line {n}: bad notes")
+        if "aliases" in row and not _aliases_ok(row["aliases"]): raise EvalError(f"cases line {n}: bad aliases")
         codes, expect, most = _pending_codes(row["pending"], n), row["expect"], interpret_check.MAX_OPS
         if "ops" in expect and expect["revises"] not in (None, *codes):
             raise EvalError(f"cases line {n}: revises names no pending draft")
@@ -177,7 +184,7 @@ def live(cases, url, model, out, transport=None, registry=None, content=None, ti
         model_call = LocalInterpreter(url, model, prompt, timeout=timeout, transport=transport, think=think)
     except (ContentError, ValueError, OSError) as exc:
         raise EvalError(str(exc)) from None
-    notes = lambda c: {"notes": c["notes"]} if c.get("notes") else {}  # noqa: E731 - AV1102-10: only when it has some
+    notes = lambda c: {k: c[k] for k in ("notes", "aliases") if c.get(k)}  # noqa: E731 - AV1102-10, AV0007-10: only when it has some
     rows = [{"id": c["id"], "reply": model_call.interpret(c["text"], c["pending"], **notes(c)),
              "failed": model_call.last_error} for c in cases]
     tmp = None

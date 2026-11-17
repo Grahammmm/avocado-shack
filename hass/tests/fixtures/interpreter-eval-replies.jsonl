@@ -74,3 +74,7 @@
 {"id": "e73", "reply": {"ops": [{"op": "hike.cancel", "args": {"id": "hike-2026-11-22-cass-hill", "note": "Rained out - we will pick a new date soon."}}], "revises": null}}
 {"id": "e74", "reply": {"ops": [{"op": "store.set_notice", "args": {"text": "Closed Thanksgiving Day", "from": "2026-11-26", "until": "2026-11-26"}}], "revises": null}}
 {"id": "e75", "reply": {"ops": [{"op": "club.set_intro", "args": {"text": "Walk with us along the coast, share the trail, and leave room for discovery."}}], "revises": null}}
+{"id": "e76", "reply": {"question": "To undo the last change, say \u201cundo\u201d. To see what we changed lately, say \u201chistory\u201d."}}
+{"id": "e77", "reply": {"ops": [{"op": "product.add", "args": {"name": "Juniper oat crackers", "brand": "Fixture Pantry", "category": "pantry", "description": "Crisp oat crackers.", "photo": "5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e", "imageAlt": "A packet of oat crackers"}}], "revises": null}}
+{"id": "e78", "reply": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-001", "available": "no"}}], "revises": null}}
+{"id": "e79", "reply": {"ops": [{"op": "product.set_photo", "args": {"id": "photo-product-001", "photo": "5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e", "imageAlt": "Avocados in a wooden crate"}}], "revises": "c4d5"}}
