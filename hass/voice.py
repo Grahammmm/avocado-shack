@@ -68,6 +68,14 @@ def quote(text) -> str:
     return OPEN + text + CLOSE if text else text
 
 
+_TILL_RE = re.compile(r"(?<=SKU )[^\s),;]+|(?<=SKU: )[^\s),;]+|\b(?:yes|no|undo) [0-9a-f]{8}\b| -> ")
+
+
+def till(text) -> str:
+    """HASS-CLOVER-4, till replies only: the till's SKUs, a till line's `12 -> 24` and an 8-character till code are shown as they are."""
+    return _TILL_RE.sub(lambda m: quote(m.group(0)), str(text))
+
+
 def plain(text: str) -> str:
     """The text with the marks removed (what is actually sent)."""
     return text.replace(OPEN, "").replace(CLOSE, "")

@@ -60,6 +60,36 @@ A question mark means a question, never an answer. `yes a1b2?`, `no a1b2?`, `a1b
 
 Saved notes never change the site, and pause does not affect them.
 
+## Till changes (HASS-CLOVER-4)
+
+Only when the till is connected for changes (a Clover write setup; without one Hass still answers till questions and replies
+"I can read the till but I can't change it yet."). Each is one whole message in exactly these words, read by fixed patterns
+**before** anything else reads the message, so prices and counts never go to the model or into a website change.
+
+- `received 12 Sunshine olive oil` — Draft: `Add stock to ...? Count: 12 -> 24, Received: 12` (the till's count read live, plus 12).
+- `set Sunshine olive oil to 7` — Draft: `Set the count of ...? Count: 12 -> 7`. `... to 0` is the sold-out draft.
+- `Sunshine olive oil is sold out` — Draft: `Mark ... as sold out? Count: 12 -> 0`, only when the name is exactly a till item (otherwise it is the website's own stock words, as before).
+- `new item: Sunshine olive oil, 12.50, pantry` — Draft to add a till item with a new SKU (the category is optional). Nothing goes on the website.
+- `change price of Sunshine olive oil to 14.00` — Draft: `Price: $12.50 -> $14.00 each (+12.0%)`. One yes, even for a big change. Never on the website.
+- `hide Sunshine olive oil on the till`, `show Sunshine olive oil on the till` — Draft to hide or show the item on the till. Nothing is ever deleted.
+- `yes <code>` / `no <code>` — `yes` makes the change, reads the item back from the till and replies `Done, and I read the till back: ...`; `no` drops it.
+- `undo <code>` — Drafts the change back (its own yes); it refuses when the item changed again since.
+
+Every draft ends `Reply yes <code> to do this, or no <code> to drop it. Nothing changes until you say yes.` The code is 8
+characters and works only from the owner who asked, in his own one-to-one chat; a group chat, someone else, an edit or a
+reaction never drafts or approves. `stop changes` holds till yeses too. Over the daily limit the reply is "I have already made
+20 changes to the till today, which is my daily limit. Nothing was changed. The count starts again at midnight Pacific."
+
+**Count to 0 and back:** when the item is linked to a website product, a count reaching 0 also marks that product **Sold out**
+(and a count up from 0 marks it Available today) in the same draft, under the same one yes. The till goes first; only when it is
+read back does the website word go through the normal website change and its usual reply. If the website part does not go
+through, Hass says "The till is updated; the website is not yet." The undo of such a change puts the website word back the same
+way, only while the website still shows the word it set. The website word needs today's shelf check, as always: without one,
+the `yes <code>` first asks "Before I change that, is the shelf list right for today?" and nothing changes, till or website,
+until a bare `yes` (then the till, the shelf check and the website word go together) or `no` (the whole change is dropped).
+If the website word changed after the draft (or the undo) was shown, nothing changes and Hass says so; the newer word stays.
+`help` lists these sentences when the till is connected for changes. The conversation record keeps what you typed.
+
 Cancelling a hike (a change request, needs `yes <code>`; not the `cancel <code>` command above, which only rejects a
 waiting draft): say it in your own words, for example "cancel the Point Buchon hike, rained out - we will pick a new
 date soon". `hike.cancel` takes the hike id and an optional `note`, for example `Rained out - we will pick a new date soon`.
