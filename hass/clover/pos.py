@@ -19,6 +19,7 @@ from hass.clover.mapper import format_quantity
 
 NOTE = "(count drops, not exact sales: a recount or a till edit also shows here)"
 DATED = re.compile(r"(\d{4}-\d{2}-\d{2})-pos\.md")
+GRACE = 300   # seconds a journalled change may have landed after its draft expired (the client's retries and Retry-After waits have no smaller hard bound)
 low = reads.low_stock
 
 
@@ -32,8 +33,8 @@ def since_day(now, days):
 
 
 def journal_deltas(state, identity, since):
-    """[(time, item id, change)]: Hass's own applied count changes on or after `since` (ISO day); [] when there is no journal. time = when
-    the owner was offered the draft (expires - 600 s: the journal keeps no apply time; an approval comes at most 10 minutes later)."""
+    """[(lo, hi, item id, change)]: Hass's own applied count changes on or after `since` (ISO day); [] when there is no journal. The journal keeps
+    no apply time, so a change landed somewhere in [expires - 600, expires + GRACE]: offered at most 10 minutes before the draft expired."""
     path = Path(state) / "clover" / "journal.sqlite3"
     try:
         if not cache._private_dir(path.parent, False) or not cache._private_file(path, False):
@@ -42,37 +43,48 @@ def journal_deltas(state, identity, since):
             if db.execute("SELECT v FROM meta WHERE k='identity'").fetchone()[0] != json.dumps(list(identity)):
                 return []
             rows = db.execute("SELECT expires, result FROM changes WHERE status='applied' AND day >= ?", (since,)).fetchall()
-        entries = [(datetime.fromtimestamp(expires - 600, timezone.utc), json.loads(result)) for expires, result in rows]
-        return [(at, e["item_id"], Decimal(e["after"]["stock"]) - Decimal(e["before"]["stock"]))
-                for at, e in entries if e["kind"] == "set_stock" and e["before"]["stock"] is not None]
+        entries = [((datetime.fromtimestamp(expires - 600, timezone.utc), datetime.fromtimestamp(expires + GRACE, timezone.utc)), json.loads(result))
+                   for expires, result in rows]
+        return [(*span, e["item_id"], Decimal(e["after"]["stock"]) - Decimal(e["before"]["stock"]))
+                for span, e in entries if e["kind"] == "set_stock" and e["before"]["stock"] is not None]
     except (cache.CacheUnsafe, sqlite3.Error, ValueError, KeyError, TypeError, ArithmeticError):
         return []
 
 
-def drop_rows(snapshot, snaps, deltas, now, days):
-    """[(item, units)] biggest first, or None when no earlier count covers the period. units = count before - count now + Hass's own change."""
+def drop_rows(snapshot, snaps, deltas, now, days, unsure=None):
+    """[(item, units)] biggest first, or None when no earlier count covers the period. units = count before - count now + Hass's own change.
+    A Hass change whose window crosses either count is ambiguous: its item gets no number and is appended to `unsure` (a list) when given."""
     first = since_day(now, days)
     start = datetime.combine(first, time.min, reads.PACIFIC) - timedelta(hours=1)
     began, base = next(((t, c) for t, c in snaps if start <= t < snapshot.fetched_at), (None, None))
     if base is None:
         return None
-    own = {}
-    for at, iid, change in deltas:
-        if began < at < snapshot.fetched_at:   # only changes between the two counts; a receipt before the first count is already in it
+    own, vague = {}, set()
+    for lo, hi, iid, change in deltas:
+        if hi <= began or lo >= snapshot.fetched_at:   # wholly before the first count (already in it) or wholly after the last (not in it yet): ignored
+            continue
+        if began < lo and hi < snapshot.fetched_at:
             own[iid] = own.get(iid, 0) + change
-    rows = [(i, base[i.id] - i.stock + own.get(i.id, 0)) for i in snapshot.items if i.stock is not None and i.id in base]
+        else:
+            vague.add(iid)
+    rows = [(i, base[i.id] - i.stock + own.get(i.id, 0)) for i in snapshot.items if i.stock is not None and i.id in base and i.id not in vague]
+    if unsure is not None:
+        unsure += sorted(i.name for i in snapshot.items if i.stock is not None and i.id in base and i.id in vague)
     return sorted(((i, n) for i, n in rows if n > 0), key=lambda r: (-r[1], r[0].name))
 
 
 def drops(snapshot, snaps, deltas, now, reachable=True, days=1, show=reads._as_is):
     """'what sold today' (days=1) or 'this week' (days=7): the biggest count drops, never claimed as sales."""
-    label, rows = ("today" if days == 1 else "this week"), drop_rows(snapshot, snaps, deltas, now, days)
+    left = []
+    label, rows = ("today" if days == 1 else "this week"), drop_rows(snapshot, snaps, deltas, now, days, left)
     if rows is None:
         body = f"I don't have an earlier till count to compare with yet, so no count drops {label} {NOTE}"
     elif not rows:
         body = f"No count drops {label} {NOTE}"
     else:
         body = f"Biggest count drops {label}: " + ", ".join(f"{show(i.name)} {format_quantity(n)}" for i, n in rows[:5]) + f" {NOTE}"
+    if left:
+        body += f" Left out: {', '.join(show(n) for n in left)} (a Hass till change landed close to a count)."
     return _say(snapshot, now, reachable, body)
 
 

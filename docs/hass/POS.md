@@ -25,9 +25,10 @@ the till does not count have no row). A drop is the count at the start of the pe
 
 - the start is the earliest read from one hour before Pacific midnight of the first day (today, or the last 7 days);
 - Hass's own changes are the applied `set_stock` rows of its write journal (`journal.sqlite3`, opened read-only, same till only) made strictly between the start read
-  and the read now. The journal keeps no apply time, so the time used is when the owner was offered the draft (`expires` less 10 minutes;
-  approval comes at most 10 minutes later). A receipt before the start read is already in the start count, and one after the last read is not in
-  the count yet, so neither is added back. A count Hass lowered is taken off the drop; stock it received is added back, so a delivery does not hide sales;
+  and the read now. The journal keeps no apply time, so each change gets the window it provably landed in: from 10 minutes before its draft expired
+  (when the owner was offered it) to 5 minutes after (`GRACE` in `pos.py`). A window wholly before the start read is already in the start count and one wholly
+  after the read now is not in it yet, so neither is added back; a window wholly between the two reads is added back. A window that crosses either read is
+  **ambiguous**: that item gets no number, and the reply says "Left out: <names> (a Hass till change landed close to a count)" rather than guess. A count Hass lowered is taken off the drop; stock it received is added back, so a delivery does not hide sales;
 - a count changed by hand at the register, a recount or a till edit is **not** known, so it also shows as a drop. That is why every reply says
   "count drops, not exact sales". Exact sales need the Orders permission, which this card does not use.
 

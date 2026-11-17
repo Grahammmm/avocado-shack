@@ -73,13 +73,41 @@ class ViewTests(PosCase):
     def test_only_changes_strictly_between_the_first_and_last_count_are_added_back(self):
         self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=5))   # +10 on the oil before the first count (25 -> 11: drop 14)
         self.assertEqual(pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1)[1][1], 14)     # already in the first count: no 24
-        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=3, minutes=30))     # at the first count: not after it
+        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=3, minutes=45))     # window [offered, offered + 15 min] ends at the first count: already in it
         self.journal("2026-11-10", IDS[0], "25", "35", at=T0)                                      # at the last count: not before it
         self.journal("2026-11-10", IDS[0], "25", "35", at=T0 + timedelta(hours=1))                 # after the last count
         self.assertEqual([(i.name, n) for i, n in pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1)][:2],
                          [("Eggs, dozen", 14), ("Sunshine olive oil", 14)])
         self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=2))                 # between the two counts: added back
         self.assertEqual(pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1)[0][1], 24)
+
+    def window(self, at):
+        self.journal("2026-11-10", IDS[0], "25", "35", at=at)     # +10 on the oil; counts: first at T0-3h30, last at T0 (oil 25 -> 11)
+        left = []
+        rows = pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1, left)
+        return dict((i.name, n) for i, n in rows), left
+
+    def test_change_window_wholly_between_is_added_back(self):
+        self.assertEqual(self.window(T0 - timedelta(hours=2)), ({"Eggs, dozen": 14, "Hass avocado": 10, "Sunshine olive oil": 24}, []))
+
+    def test_change_window_ending_one_second_before_the_last_count_is_added_back(self):
+        self.assertEqual(self.window(T0 - timedelta(minutes=15, seconds=1))[0]["Sunshine olive oil"], 24)
+
+    def test_change_window_wholly_before_or_after_is_ignored(self):
+        self.assertEqual(self.window(T0 - timedelta(hours=3, minutes=45)), ({"Eggs, dozen": 14, "Hass avocado": 10, "Sunshine olive oil": 14}, []))   # window ends at the first count
+        self.assertEqual(self.window(T0), ({"Eggs, dozen": 14, "Hass avocado": 10, "Sunshine olive oil": 14}, []))    # starts at the last count
+        self.assertEqual(self.window(T0 + timedelta(hours=2)), ({"Eggs, dozen": 14, "Hass avocado": 10, "Sunshine olive oil": 14}, []))
+
+    def test_change_window_crossing_the_first_count_is_left_out_with_no_number(self):
+        for at in (T0 - timedelta(hours=3, minutes=44), T0 - timedelta(hours=3, minutes=30)):    # offered before the count, may have landed after it
+            self.assertEqual(self.window(at), ({"Eggs, dozen": 14, "Hass avocado": 10}, ["Sunshine olive oil"]))
+
+    def test_change_window_crossing_the_last_count_is_left_out_with_no_number(self):
+        self.assertEqual(self.window(T0 - timedelta(minutes=1)), ({"Eggs, dozen": 14, "Hass avocado": 10}, ["Sunshine olive oil"]))   # offered 11:59, count at 12:00, applied up to 12:01
+        self.assertEqual(self.window(T0 - timedelta(minutes=15)), ({"Eggs, dozen": 14, "Hass avocado": 10}, ["Sunshine olive oil"]))   # window ends exactly at the last count: not provably before it
+        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(minutes=1))
+        self.assertEqual(pos.drops(self.snapshot, self.snaps, self.deltas(), T0),
+                         f"Biggest count drops today: Eggs, dozen 14, Hass avocado 10 {NOTE} Left out: Sunshine olive oil (a Hass till change landed close to a count).")
 
     def test_week_and_the_note_is_always_present(self):
         self.assertEqual(pos.drops(self.snapshot, self.snaps, [], T0, days=7),
