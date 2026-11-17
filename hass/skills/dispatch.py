@@ -613,9 +613,9 @@ class Dispatcher:
             conv.requests.put(self._owner(), msg.provider_id, now, texts=req["texts"], request_id=req["request_id"], skill=skill.name,
                               slots=req["slots"], asked_slot=req["asked_slot"], question=got["again"], attachments=req["attachments"],
                               asks=req["asks"] + 1, calls=req["calls"], draft_code=req["draft_code"])
-            conv._reply(got["again"])
+            conv._reply(got["again"], long_ok=req["asked_slot"].startswith(item_intake.PREFIX + "photo_"))
             return "question"
-        shown = msg if got.get("public") else dataclasses.replace(msg, text="")  # a private answer is never one of his texts
+        shown = dataclasses.replace(msg, text=got.get("text", msg.text) if got.get("public") else "")
         self._note = got.get("note")  # a blank left after three tries is said once, before the next question
         try:
             return self._advance(shown, now, req, skill, got["slots"], None, ctx=ctx, resolved=True)
@@ -647,6 +647,8 @@ class Dispatcher:
         hook = skill_hook(skill, "intake_next")
         if hook is None or getattr(ctx, "intake", False) is not True:
             return None
+        if skill.name == "item.add" and (step := item_intake.photo_step(slots.get("intake") or {})):
+            return item_intake.PREFIX + step[0], step[1]
         if missing is not None and missing.name not in INTAKE_BEFORE:
             return None
         try:
@@ -661,7 +663,7 @@ class Dispatcher:
         self.conv.requests.put(self._owner(), msg.provider_id, now, texts=texts, request_id=req["request_id"] if req else None,
                                skill=skill.name, slots=given, asked_slot=key, question=question, attachments=attachments, asks=asks,
                                calls=req["calls"] if req else [], draft_code=(req["draft_code"] if req else None))
-        self.conv._reply(f"{note} {question}" if note else question)
+        self.conv._reply(f"{note} {question}" if note else question, long_ok=key.startswith(item_intake.PREFIX + "photo_"))
         return "question"
 
     def intake_applied(self, code, now) -> None:
@@ -690,6 +692,9 @@ class Dispatcher:
             self._logged(msg, "refused", "policy", skill)  # AVB-10: an ask to post, send or schedule
             return "refused"
         slots = dict(req["slots"]) if req else {}
+        if not req and prior and skill.name == "item.add" and getattr(ctx, "intake", False) is True:
+            if prior["slots"].get("intake"):
+                slots["intake"] = dict(prior["slots"]["intake"])
         if resolved:  # a cheap answer: already a checked value (an id the owner picked from our own list), not words to resolve
             filled = Filled()
             filled.slots = {**slots, **new_slots}
@@ -1131,11 +1136,16 @@ class Dispatcher:
         return "backlog"
 
     # a photo (spec 2.7) --------------------------------------------------------------------------------------
-    def photo(self, msg, now, sha, caption):
+    def photo(self, msg, now, sha, caption, intake_answers=None):
         """The stored original joins the owner's request. Returns a disposition, or None when the caption should now be read
         as an ordinary text of that request (``Conversation._request``)."""
         conv = self.conv
         how, req = conv.requests.bind_attachment(self._owner(), msg.provider_id, sha, now, self.registry)
+        if intake_answers and (how == "opened" or req["skill"] == "item.add" and req["state"] == "open"):
+            conv.requests.put(self._owner(), msg.provider_id, now, texts=req["texts"], request_id=req["request_id"],
+                              skill=req["skill"], slots={**req["slots"], "intake": {**req["slots"].get("intake", {}), **intake_answers}},
+                              attachments=req["attachments"], asked_slot=req["asked_slot"], question=req["question"], asks=req["asks"])
+            req = conv.requests.get(self._owner(), now)
         if how == "filled":
             if caption:
                 return None  # the caption may say more (a name, a description): the model reads it with this request
@@ -1146,7 +1156,7 @@ class Dispatcher:
         starter = self.registry.get("item.add")  # HASS-INTAKE-2: with the interview on, a bare photo starts it at once: fixed words, no model, no preview
         if (how == "opened" and starter is not None and skill_hook(starter, "intake_next") is not None
                 and (getattr(conv, "settings", None) or {}).get("itemIntake") is True):
-            conv.requests.put(self._owner(), msg.provider_id, now, texts=[], request_id=req["request_id"], skill=starter.name, slots={},
+            conv.requests.put(self._owner(), msg.provider_id, now, texts=[], request_id=req["request_id"], skill=starter.name, slots=req["slots"],
                               asked_slot="name", question=item_intake.START, attachments=req["attachments"], asks=1)
             if not item_intake.acknowledged(conv.db, msg.provider_id):  # on receipt it was already sent (Conversation._intake_receipt)
                 conv._reply(item_intake.START)
