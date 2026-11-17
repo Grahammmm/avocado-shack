@@ -138,6 +138,11 @@ def caption_answers(caption, extracted=None):
             if parsed: got.update(qty=parsed[0], qty_unit=parsed[1])
             elif unit in UNIT_WORDS and _parse_count(qty[2]) == 0:
                 got.update(qty=0, qty_unit=UNIT_WORDS[unit])
+        elif re.fullmatch(r"\$\d+(?:\.\d{1,2})?(?:/(?:lb|each)|\s+per\s+(?:lb|pound|item|each))?", text, re.I):
+            value = _parse_money(text)
+            if value is not None: got["price"] = value
+        elif match := re.fullmatch(r"(\d+)\s+(lb|pounds?|items?|each)\s+in\s+stock", text, re.I):
+            got.update(qty=int(match[1]), qty_unit=UNIT_WORDS.get(match[2].lower(), "each"))
         elif money:
             key = "cost" if re.match(r"bought|paid|cost", text, re.I) else "price"
             value = _parse_money(money[1])
@@ -153,7 +158,11 @@ def caption_answers(caption, extracted=None):
         for key, value in got.items():
             if key in answers and answers[key] != value: conflicts.add(key)
             answers[key] = value
-    return "; ".join(public), {k: v for k, v in {**answers, **model}.items() if k not in conflicts}
+    if re.search(r"(?:/|per\s+)(?:lb|pound)\b", caption, re.I): answers["sold_by"] = "pound"
+    elif re.search(r"(?:/|per\s+)(?:each|item)\b", caption, re.I): answers["sold_by"] = "item"
+    out = {k: v for k, v in {**answers, **model}.items() if k not in conflicts}
+    if "qty" in out and answers.get("qty_unit"): out["qty_unit"] = answers["qty_unit"]
+    return "; ".join(public), out
 
 
 def photo_description(intake):

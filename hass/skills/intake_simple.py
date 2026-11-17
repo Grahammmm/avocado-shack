@@ -160,14 +160,16 @@ def preview(slots, code=None):
     if size: lines.append("Size: " + voice.quote(size))
     lines.append("Description: " + voice.quote(description or slots.get("name") or "Not read yet"))
     if features: lines.append("Features: " + voice.quote(", ".join(dict.fromkeys(features))))
-    if got.get("price") is not None: lines.append("Price: " + ii.money_text(got["price"]))
+    unit = {"pound": " per lb", "item": " each"}.get(got.get("sold_by"), "")
+    if got.get("price") is not None: lines.append("Price: " + ii.money_text(got["price"]) + unit)
     category = slots.get("shelf") or "general"
     lines.append("Category: " + voice.quote(category.title()) + (" (say 'category X' to change)" if category == "general" else ""))
     if slots.get("availability"):
         lines.append("Availability: " + {"yes": "in stock", "no": "sold out", "limited": "low on stock"}[slots["availability"]])
     private = []
     if got.get("cost") is not None: private.append("cost " + ii.money_text(got["cost"]))
-    if got.get("qty") is not None: private.append("quantity " + str(got["qty"]))
+    if got.get("qty") is not None:
+        private.append("quantity " + str(got["qty"]) + (" lb" if got.get("qty_unit") == "lb" else ""))
     if private: lines.append("Private (not shown on the website): " + ", ".join(private))
     if got.get("price") is not None and got.get("cost") is not None and got["price"] != got["cost"]:
         from decimal import Decimal

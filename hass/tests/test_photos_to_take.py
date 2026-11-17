@@ -102,7 +102,7 @@ class PhotosTests(StoreMixin, ConversationTestCase):
                 self.assertEqual(self.photos(), [head(1), f"- {name} (Eggs)", GUIDE])
 
     def test_shelf_order_name_ties_and_global_cap(self):
-        order = ["fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers"]
+        order = ["fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers", "general"]
         self.assertEqual(list(CATEGORIES), order)
         labels = ["Fruit", "Vegetables", "Dairy & cheese", "Eggs", "Meat", "Pantry", "Drinks & coffee", "Bread", "Flowers"]
         rows = [("zed", "flowers", "active", None), ("Bee", "bread", "active", None), ("apple", "bread", "active", None),

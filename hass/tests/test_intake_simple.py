@@ -294,6 +294,40 @@ class SimpleIntake(unittest.TestCase):
         self.assertFalse(till.first.called)
         self.assertEqual(chat.asked, [])
 
+    def test_persimmon_text_extraction_and_photo_finance_preserve_per_lb_and_each(self):
+        from hass.skills import intake_simple
+        for suffix, expected in (("/lb", " per lb"), ("/each", " each")):
+            text = "add persimmons, Fuyu, $3.50" + suffix + ", 40 lb in stock, cost $1.75"
+            public, got = ii.caption_answers(text, {"price_cents": 350, "cost_cents": 175, "quantity": 40})
+            self.assertEqual(public, "add persimmons; Fuyu")
+            self.assertEqual((got["price"], got["cost"], got["qty"], got["qty_unit"]), ("3.50", "1.75", 40, "lb"))
+            shown = intake_simple.preview({"name": "Persimmons", "maker": "Producer not identified", "shelf": "fruit", "description": "Fuyu persimmons.", "intake": got})
+            self.assertIn("Price: $3.50" + expected, shown.splitlines())
+            self.assertIn("cost $1.75, quantity 40 lb", shown)
+            for when in ("before", "caption"):
+                with self.subTest(suffix=suffix, when=when):
+                    chat, _ = self.chat({"name": "Persimmons", "category": "fruit", "description": "Fuyu persimmons."})
+                    chat.script(public, base.reply(name="Persimmons", shelf="fruit"))
+                    if when == "before":
+                        _, waiting = chat.say(text)
+                        req = chat.live()
+                        assert req is not None
+                        slots = req["slots"]
+                        self.assertEqual(slots["name"], "Persimmons")
+                        self.assertEqual(slots["shelf"], "fruit")
+                        self.assertEqual((slots["intake"]["price"], slots["intake"]["cost"], slots["intake"]["qty"]),
+                                         ("3.50", "1.75", 40))
+                        self.assertIn("Price: $3.50" + expected, waiting[0].splitlines())
+                        self.assertNotIn("What price should it sell for?", waiting[0])
+                    _, said = chat.say(text if when == "caption" else "", base.JAR)
+                    req = chat.live()
+                    assert req is not None
+                    self.assertEqual(req["state"], "drafted", said)
+                    self.assertIn("Price: $3.50" + expected, said[0].splitlines())
+                    self.assertIn("cost $1.75, quantity 40 lb", said[0])
+                    self.assertIn("yes " + req["draft_code"], said[0])
+                    self.doCleanups()
+
     def test_category_uses_real_list_and_owner_context_in_the_existing_photo_read(self):
         from hass.content_model import CATEGORIES
         chat, transport = self.chat({**DETAILS, "category": "general"})

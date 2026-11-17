@@ -963,10 +963,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     def _read_intake(self, msg):
         """Bounded owner-text read before the write lock, never on photo output or approval commands."""
-        if (not self.dispatch or not self.dispatch.simple_intake() or not self.answer_reader
+        if (not self.dispatch or not getattr(self.dispatch, "simple_intake", lambda: False)() or not self.answer_reader
                 or msg.from_me or msg.kind != "new" or not self._is_owner(msg)
                 or not msg.text or len(msg.text) > MAX_OWNER_TEXT): return {}
-        if re.match(r"\s*(?:add|description|remove|delete|yes|no|cancel|stop)\b", msg.text, re.I): return {}
+        if re.match(r"\s*(?:(?:add|description)\s*:|(?:remove|delete|yes|no|cancel|stop)\b)", msg.text, re.I): return {}
         if not re.search(r"\b(?:bought|paid|cost|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$", msg.text, re.I): return {}
         if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone(): return {}
         req = self.requests.get(msg.chat, self._now())
@@ -1098,7 +1098,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         req = self.requests.get(msg.chat, now) if self.dispatch else None
-        intake_answer = bool(self.dispatch and self.dispatch.simple_intake(req) and (
+        intake_answer = bool(self.dispatch and getattr(self.dispatch, "simple_intake", lambda req: False)(req) and (
             self.dispatch.takes_answer(msg.text, now) if req else item_intake.caption_answers(msg.text)[1]))
         memory = None if command or msg.attachments > 0 or intake_answer else read_memory(msg.text)
         first = None if msg.attachments > 0 or self.till is None or intake_answer else self.till.first(msg.text, self._asker, msg.chat)  # HASS-CLOVER-4: till code words, before commands
