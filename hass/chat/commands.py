@@ -15,7 +15,7 @@ KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4
 NEAR_RE = re.compile(r"(ok|okay|yes please|yep|yeah|sure|go ahead|do it|sounds good|looks good)(?: ([0-9a-f]{4,12}))?")  # H05
 COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
                         r"|(status|did (?:it|that|my change) work\??)|(pause|stop)(?: changes)?"  # H17; SHOP-4 phrases
-                        r"|(resume)(?: changes)?|(help|commands|\?)"
+                        r"|(resume)(?: changes)?|(help|commands|\?|what can you do\??|what do you do\??|what can i say\??)"  # AV2007-04: capability questions are help; no new group
                         r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
                         r"|(show)(?:\s+(.*))?"  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
                         r"|((?:morning )?report)"  # AV1322-05 (F04): group 12; groups 1-11 keep their indices
