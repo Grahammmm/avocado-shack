@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from hass import owner_answers as answers, audit as audit_mod, editor as editor_mod, memory as memory_mod, morning_report as shelf, voice
-from hass.chat.shared import ALIAS_NAME_MAX, CANT_READ, CONTROL, COST_USAGE, _is_undo, _iso, load_content, NOTHING, q, STATUS_PLAIN
+from hass.chat.shared import ALIAS_NAME_MAX, CANT_READ, CONTROL, COST_USAGE, LOCAL_TZ, _is_undo, _iso, load_content, NOTHING, q, STATUS_PLAIN
 from hass.chat.wording import proposal_text, _record_lines
 from hass.content_model import _text as checked_text
 from hass.ops import catalog, hikes
@@ -20,6 +20,9 @@ ALIAS_LIST_MAX = 20  # AV0222-05: `memory` lists this many aliases apart from th
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 
 HISTORY_SEARCH_MAX, HISTORY_TEXT_MAX = 10, 60  # AV2152-02 (H06/H17): `history <words>`; docs/hass/COMMANDS.md
+TIME_UNKNOWN = "time unknown"  # AV0222-06: a history line whose approval row is missing or unreadable
+_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")  # fixed English names: no process-locale %a/%b/%p
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 HISTORY_USAGE = "Tell me a word or two to look for, like " + q("history opening hours") + "."
 
 AGAIN_WINDOW_DAYS = 7  # AV2152-03 (H05/H16): `again <code>` works for a proposal that expired at most this long ago; COMMANDS.md
@@ -31,9 +34,27 @@ AGAIN_DRIFT = "the site changed since {code}; send the change again"
 class CorePack:
     """Core pack commands, mixed into Conversation."""
 
+    def _history_when(self, r) -> str:
+        """AV0222-06: when this change's owner approval was recorded, in Pacific time ("Tue Nov 3 2:14 pm"), from the approval row
+        bound to the draft (change id, hash, base, expiry and chat); anything missing or unreadable says "time unknown", never a guess."""
+        try:
+            bind = tuple(r[k] for k in ("change_id", "draft_hash", "base", "expires_at", "chat"))
+            if any(not isinstance(v, str) or not v for v in bind): return TIME_UNKNOWN
+            row = self.db.execute("SELECT approved_at FROM approvals WHERE change_id = ? AND draft_hash = ? AND base = ? AND expires_at = ? "
+                                  "AND chat = ? ORDER BY id DESC LIMIT 1", bind).fetchone()
+            raw = row["approved_at"] if row is not None else None
+            if not isinstance(raw, str): return TIME_UNKNOWN
+            at = datetime.fromisoformat(raw[:-1] + "+00:00" if raw.endswith(("Z", "z")) else raw)
+            if at.tzinfo is None or at.utcoffset() is None: return TIME_UNKNOWN
+            at = at.astimezone(LOCAL_TZ)
+            hour = at.hour % 12 or 12
+            return f"{_DAYS[at.weekday()]} {_MONTHS[at.month - 1]} {at.day} {hour}:{at.minute:02d} {'am' if at.hour < 12 else 'pm'}"
+        except (ValueError, TypeError, OverflowError, OSError, KeyError, IndexError, sqlite3.Error): return TIME_UNKNOWN
+
     def _history_line(self, r) -> str:
         """One `history` line. HASS-OWNERS-2: with several owners it says whose change it was (`Mike's change`, `Your change`)."""
-        words = f"{q(r['summary'])}: {answers.history_words(dict(r), self._install(r))}"
+        when = self._history_when(r)
+        words = f"{q(r['summary'])}, {when if when == TIME_UNKNOWN else 'approved ' + when}: {answers.history_words(dict(r), self._install(r))}"
         return f"- {self._whose(r['chat'])}, {words}" if self._shared else f"- {words}"
 
     def _history_lines(self, limit) -> list:

@@ -117,7 +117,7 @@ class ConversationFullTextTests(ConversationTestCase):
         self.assertEqual(self.replies(), [f"Saved: {summary}\n{voice.plain(conversation.answers.NOT_LIVE)}"])
         self.assertEqual(self.say("history"), "history")
         [history] = self.replies()
-        self.assertIn(f"- {summary}: saved, but I'm not sure it's on the website", history)
+        self.assertIn(f"- {summary}, approved Mon Nov 2 9:00 am: saved, but I'm not sure it's on the website", history)
         self.assertNotIn(LONG[:60], history)
 
 
