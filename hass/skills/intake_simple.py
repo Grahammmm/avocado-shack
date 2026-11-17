@@ -59,8 +59,9 @@ def fill(slots, texts):
         out["description"] = " ".join(kept)
         if details: got["photo_applied"] = True
         if overflow: got["left_off_label"] = overflow
-    if not out.get("availability") and got.get("qty") is not None:
+    if (not out.get("availability") or got.get("availability_derived")) and got.get("qty") is not None:
         out["availability"] = "yes" if got["qty"] > 0 else "no"
+        got["availability_derived"] = True
     return out
 
 
@@ -97,6 +98,7 @@ def edit(slots, text, asked=None):
     stock = {"in stock": "yes", "sold out": "no", "low on stock": "limited"}.get(public.strip().lower())
     if stock:
         out["availability"] = stock
+        got["availability_derived"] = False
         return out, public
     copy = re.sub(r"^(?:add|description)\s*:\s*", "", public, flags=re.I)
     if asked == "name":

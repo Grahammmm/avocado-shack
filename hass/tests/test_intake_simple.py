@@ -152,6 +152,26 @@ class SimpleIntake(unittest.TestCase):
                 self.assertEqual(chat.asked, [])
                 self.doCleanups()
 
+    def test_quantity_edits_recompute_derived_stock_but_preserve_explicit_stock(self):
+        chat, _ = self.chat()
+        chat.say(FINANCE, base.JAR)
+        code = chat.live()["draft_code"]
+        for text, qty, stock, label in (("stock 0", 0, "no", "sold out"),
+                                        ("stock 7", 7, "yes", "in stock"),
+                                        ("low on stock", 7, "limited", "low on stock"),
+                                        ("stock 0", 0, "limited", "low on stock")):
+            with self.subTest(text=text, qty=qty):
+                disposition, said = chat.say(text)
+                self.assertEqual(disposition, "proposed", said)
+                self.assertEqual(chat.live()["draft_code"], code)
+                slots = chat.live()["slots"]
+                self.assertEqual(slots["intake"]["qty"], qty)
+                self.assertEqual(slots["availability"], stock)
+                self.assertIn("Availability: " + label, said[0])
+                operations = json.loads(chat.drafts()[0]["ops_json"])
+                selection, = [op for op in operations if op["op"] == "store.confirm_selection"]
+                self.assertEqual(set(selection["args"]), {stock})
+
     def test_model_cannot_supply_private_finances_or_fake_photo_provenance(self):
         chat, _ = self.chat()
         text = "new glue from Gorilla"
