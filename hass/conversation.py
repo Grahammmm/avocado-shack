@@ -1098,7 +1098,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         req = self.requests.get(msg.chat, now) if self.dispatch else None
-        intake_answer = bool(req and self.dispatch.simple_intake(req) and self.dispatch.takes_answer(msg.text, now))
+        intake_answer = bool(self.dispatch and self.dispatch.simple_intake(req) and (
+            self.dispatch.takes_answer(msg.text, now) if req else item_intake.caption_answers(msg.text)[1]))
         memory = None if command or msg.attachments > 0 or intake_answer else read_memory(msg.text)
         first = None if msg.attachments > 0 or self.till is None or intake_answer else self.till.first(msg.text, self._asker, msg.chat)  # HASS-CLOVER-4: till code words, before commands
         if first: command = memory = None

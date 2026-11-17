@@ -281,6 +281,19 @@ class SimpleIntake(unittest.TestCase):
         self.assertIn("Category: Flowers", said[0])
         self.assertEqual(chat.live()["draft_code"], code)
 
+    def test_separate_finance_messages_before_photo_do_not_become_memory_or_till_commands(self):
+        chat, _ = self.chat()
+        till = mock.Mock()
+        till.first.return_value = till.parse.return_value = None
+        chat.conv.till = till
+        for words in ("cost one dollar", "retail two dollars", "have 100"):
+            chat.say(words)
+        _, said = chat.say("", base.JAR)
+        self.assert_preview(chat, said)
+        self.assertFalse(till.parse.called)
+        self.assertFalse(till.first.called)
+        self.assertEqual(chat.asked, [])
+
     def test_category_uses_real_list_and_owner_context_in_the_existing_photo_read(self):
         from hass.content_model import CATEGORIES
         chat, transport = self.chat({**DETAILS, "category": "general"})
