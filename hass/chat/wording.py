@@ -4,7 +4,7 @@ AVB-12: moved verbatim out of hass/conversation.py, which imports every name bac
 unchanged). Pure functions; no state.
 """
 import json, re  # noqa: E401
-from datetime import datetime
+from datetime import date, datetime
 
 from hass import live_policy, sitegen, voice
 from hass.chat.shared import q
@@ -133,8 +133,39 @@ EVENT_ORDER = ("title", "startsAt", "meetingPoint", "trailId", "description", "d
                "accessNote", "rsvpEnabled", "capacity")  # HASS-CHAT-1: a new hike reads name, when, where first
 
 
+STORE_LABELS = {"notice": "Home notice", "selection_checked_on": "Shelf check"}  # AV0222-08
+
+
+def _iso_day(v):
+    """AV0222-08: a strict real YYYY-MM-DD string as a date, else None (compact/basic forms and datetimes are not days)."""
+    try: d = date.fromisoformat(v) if isinstance(v, str) else None
+    except ValueError: return None
+    return d if d is not None and d.isoformat() == v else None
+
+
+def _notice_value(v):
+    """AV0222-08: a {text, until} or {text, from, until} notice as 'Closed - [from <day> ]through <day>' in sitegen's day words; None if not that shape."""
+    if not isinstance(v, dict) or set(v) not in ({"text", "until"}, {"text", "from", "until"}): return None
+    text, until, first = v["text"], _iso_day(v["until"]), _iso_day(v["from"]) if "from" in v else None
+    if not isinstance(text, str) or not text.strip() or until is None or ("from" in v and (first is None or first > until)): return None
+    return f"{text} - " + (f"from {sitegen._day_text(first)} " if first else "") + f"through {sitegen._day_text(until)}"
+
+
+def _store_value(r: dict, k, v):
+    """AV0222-08: the store's notice window / shelf-check day in words, uncut; None for anything else (the generic wording applies)."""
+    if r.get("collection") != "store" or v is None: return None
+    if k == "notice": return _notice_value(v)
+    day = _iso_day(v) if k == "selection_checked_on" else None
+    return sitegen._day_text(day) if day else None
+
+
+def _phrase(r: dict, k) -> str:
+    return STORE_LABELS[k] if r.get("collection") == "store" and k in STORE_LABELS else voice.field_phrase(k)
+
+
 def _shown_in(r: dict, k, v, routes=None, cut=True) -> str:
     """HASS-CHAT-1: _shown for one record: a hike's start says its time zone, and a route link is the route's name, never its id."""
+    if (word := _store_value(r, k, v)) is not None: return word
     if k == "trailId" and isinstance(v, str):
         route = (routes or {}).get(v)
         return route["title"] if isinstance(route, dict) and isinstance(route.get("title"), str) and route["title"].strip() else "a saved route"
@@ -156,7 +187,7 @@ def _added(r: dict, routes=None) -> list:  # AV1737-06 (H05/H06): an added recor
     lines = [f"A new {word}" + (f": {q(name)}" if name else "")]
     for k, v in rows[:40]:
         photo = k == "image" and PHOTO_PATH_RE.fullmatch(str(v))
-        lines.append(f"  {voice.field_phrase(k)}: " + ("the photo from your message" if photo else q(_shown_in(r, k, v, routes, False)).replace("\n", "\n    ")))
+        lines.append(f"  {_phrase(r, k)}: " + ("the photo from your message" if photo else q(_shown_in(r, k, v, routes, False)).replace("\n", "\n    ")))
     return lines + (["  and a few more details"] if len(rows) > 40 else [])
 
 
@@ -178,7 +209,7 @@ def _change_line(r: dict, field, b, a, undo: bool, full_before: bool, routes=Non
 
 
 def _plain_change(r: dict, field, b, a, undo: bool, full_before: bool, routes=None) -> str:
-    who, phrase = _subject(r), voice.field_phrase(field)
+    who, phrase = _subject(r), _phrase(r, field)
     if field == "image" and (PHOTO_PATH_RE.fullmatch(str(a)) or undo and PHOTO_PATH_RE.fullmatch(str(b))):
         return f"{who}: the photo goes back to the previous one" if undo else f"{who}: the photo will be the one from your message"
     old, new = _shown_in(r, field, b, routes, not full_before), _shown_in(r, field, a, routes, False)

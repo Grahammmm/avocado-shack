@@ -218,3 +218,5 @@ Stop carrying a maker (a change request, needs `yes <code>`): `maker.hide` with 
 carrying Etto", hides the maker and all of its active products in one change. The proposal lists the maker and every
 product id it will hide. Hidden and held products are left exactly as they are. Without `withProducts`, a maker that
 still has active products is refused and the reply names them. `undo` brings the maker and every product back together.
+
+Notice windows and shelf checks in a proposal: when a change touches the home notice or the shelf check date, the proposal and a later `show` repeat both the old and the new value in words, for example `Home notice: from nothing to Closed Thanksgiving Day - through Thursday, November 26` (or `- from Wednesday, November 25 through Thursday, November 26` when a first day is set) and `Shelf check: from Monday, November 2 to Tuesday, November 3`, so a wrong day is visible before you say yes. `undo` reads the same way with the days reversed and still needs your yes.
