@@ -87,6 +87,78 @@ class PublishGate(unittest.TestCase):
         self.assertTrue(product_claims.protected('Label says: “Organic”.', product)[1])
         self.assertTrue(product_claims.protected('Call 805-555-1234.', {'category': 'flowers', 'labelSource': evidence})[1])
 
+    def test_nonfood_new_and_existing_claims_require_exact_label_wording(self):
+        for category in ('hardware', 'flowers', 'general'):
+            for before in (None, {'category': category, 'description': 'A product.'}):
+                for claim in ('Cures cancer.', 'Made in USA.', 'Organic.', 'Award-winning.'):
+                    with self.subTest(category=category, before=before, claim=claim):
+                        product = {'category': category, 'description': claim}
+                        draft = {'ops': [{'op': 'product.add' if before is None else 'product.edit', 'args': {}}],
+                                 'records': [{'collection': 'products', 'key': 'fixture', 'before': before, 'after': product}]}
+                        self.assertTrue(live_policy.check(draft))
+                        # Exact admitted label wording is the only non-food exception.
+                        product['labelSource'] = {'source': 'label', 'photo': 'a' * 64, 'text': [claim]}
+                        self.assertEqual(live_policy.check(draft), [])
+                        product['description'] += ' Made in Mexico.'
+                        self.assertTrue(live_policy.check(draft))
+                        product['description'] = claim.swapcase()
+                        self.assertTrue(live_policy.check(draft))
+                        product['description'] = claim
+                        product['labelSource']['source'] = 'owner'
+                        self.assertTrue(live_policy.check(draft))
+
+    def test_styled_image_and_failed_card_send_exact_frozen_pixels(self):
+        import io
+        from PIL import Image
+        picture = io.BytesIO()
+        Image.new('RGB', (800, 800), '#aabbcc').save(picture, 'JPEG')
+        wanted = picture.getvalue()
+        chat = self.chat(settings={'houseRender': True})
+        chat.conv.previewer.capture = mock.Mock(return_value={'ok': False, 'png': None, 'error': 'capture failed'})
+        with mock.patch.object(photos, '_verdict', return_value={'ok': True, 'jpeg': wanted}):
+            _, said = chat.say('sell for $2', base.JAR)
+            product, draft = self.product(chat)
+            rendered = chat.conv.editor.render_draft(draft['change_id'])
+            self.assertEqual(rendered['assets']['storefront-mockup/' + product['image']], wanted)
+            sha = chat.live()['slots']['photo']
+            self.assertNotEqual(Path(media.web_copy(chat.conv.settings['mediaRoot'], sha)['path']).read_bytes(), wanted)
+            self.assertEqual(Path(chat.out.sent[-1]['attachments'][0]).read_bytes(), wanted)
+            self.assertIn("couldn't render the website card", said[0])
+            self.assertIn('yes ' + chat.live()['draft_code'], said[0])
+            chat.say('yes ' + chat.live()['draft_code'])
+            self.assertEqual(chat.commits(), 1)
+            self.assertEqual((chat.kit.wt / 'storefront-mockup' / product['image']).read_bytes(), wanted)
+
+    def test_missing_or_changed_frozen_image_cannot_be_approved(self):
+        chat = self.chat()
+        chat.conv.previewer.capture = mock.Mock(return_value={'ok': False, 'png': None, 'error': 'capture failed'})
+        with mock.patch.object(chat.conv, '_listing_picture', return_value=None):
+            _, said = chat.say('sell for $2', base.JAR)
+        code = chat.live()['draft_code']
+        self.assertNotIn('yes ' + code, said[0])
+        self.assertEqual(chat.say('yes ' + code)[0], 'no-target')
+        self.assertEqual(chat.commits(), 0)
+        product, draft = self.product(chat)
+        rendered = chat.conv.editor.render_draft(draft['change_id'])
+        rendered['assets']['storefront-mockup/' + product['image']] = b'different pixels'
+        with mock.patch.object(chat.conv.editor, 'render_draft', return_value=rendered):
+            self.assertIsNone(chat.conv._listing_picture(draft, product))
+            self.assertFalse(chat.conv._capture(draft)['ok'])
+
+    def test_unsent_new_version_does_not_reuse_old_delivered_picture(self):
+        chat = self.chat()
+        chat.say('sell for $2', base.JAR)
+        code = chat.live()['draft_code']
+        old_hash = chat.drafts()[0]['draft_hash']
+        with mock.patch.object(chat.conv, 'flush', return_value=0):
+            chat.say('add: Useful for furniture.')
+            self.assertNotEqual(chat.drafts()[0]['draft_hash'], old_hash)
+            self.assertEqual(chat.say('yes ' + code)[0], 'no-target')
+            self.assertEqual(chat.commits(), 0)
+        chat.conv.flush(chat.out)
+        self.assertEqual(chat.say('yes ' + code)[0], 'approved')
+        self.assertEqual(chat.commits(), 1)
+
     def test_forged_label_text_without_photo_read_is_refused_by_editor(self):
         chat = self.chat()
         chat.say('sell for $2', base.JAR)

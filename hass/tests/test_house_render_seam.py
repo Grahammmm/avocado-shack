@@ -432,7 +432,7 @@ class EditorTests(unittest.TestCase):
         from hass.tests.test_set_photo import PID, _photo
         from hass.tests.test_catalog_ops import _req
         from hass.tests.test_product_add_photo import _add
-        self.flag(houseRender=True)
+        self.flag(houseRender=True, itemIntake=True)
         sha = self.repo.store(photo("jar-dark-wood"))
         for op in (_photo(PID, sha, ALT), _add(photo=sha, imageAlt=ALT)):
             with self.subTest(op=op[0]):

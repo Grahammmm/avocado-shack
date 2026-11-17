@@ -138,7 +138,8 @@ def _product_add(content, args, ctx):
     image = args.get("image")
     if "photo" in args:
         from hass.ops import photos  # lazy: photos imports this module
-        if isinstance(image := photos.install(ctx, args["photo"], args["imageAlt"], owner_fallback=True), Refused):
+        if isinstance(image := photos.install(ctx, args["photo"], args["imageAlt"],
+                                              owner_fallback=ctx.settings.get("itemIntake") is True), Refused):
             return image
     numbers = [int(m.group(1)) for p in content.products if (m := PRODUCT_ID_RE.fullmatch(p["id"]))]
     record = {"id": "photo-product-%03d" % (max(numbers, default=0) + 1)}

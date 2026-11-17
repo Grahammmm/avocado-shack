@@ -98,7 +98,7 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
             if store is not None and not ("before" in record and before is None and "available" not in after):
                 from hass.sitegen import availability_label  # the one place the word and the stale rule live
                 target["availability"] = availability_label(after, store, today or shop_today())
-            if (before is None or isinstance(before, dict) and before.get("image") != after.get("image")) and isinstance(after.get("image"), str):
+            if isinstance(before, dict) and before.get("image") != after.get("image") and isinstance(after.get("image"), str):
                 target["image"] = after["image"]
         return target
     if collection == "makers":

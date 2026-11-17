@@ -13,7 +13,7 @@ FOOD_KINDS = frozenset({'origin/organic', 'health/awards/endorsements'})
 
 
 def food(product):
-    # Unknown/missing category stays conservative; only explicit non-food shelves opt out.
+    # Food label wording is attributed; every category still screens unsupported claims.
     return product.get('category') not in {'general', 'flowers', 'hardware'}
 
 
@@ -89,15 +89,10 @@ def protected(text, product, names=()):
                 continue
             if food(product):
                 # Food claims are attributed, never a bare assertion or badge.
-                rest = re.sub(r'Label says:\s*[“\"]' + re.escape(phrase) + r'[”\"]', '', rest, flags=re.I)
+                rest = re.sub(r'Label says:\s*[“\"]' + re.escape(phrase) + r'[”\"]', '', rest)
             else:
-                rest = re.sub(r'(?<!\w)' + re.escape(phrase) + r'(?!\w)', '', rest, flags=re.I)
-    found, kinds = live_policy._protected(rest, 'products', names)
-    if not food(product):
-        kinds -= FOOD_KINDS
-        # Preserve the sentence counter only when some still-protected kind remains.
-        found = type(found)({s: n for s, n in found.items() if live_policy._protected(s)[1] - FOOD_KINDS})
-    return found, kinds
+                rest = re.sub(r'(?<!\w)' + re.escape(phrase) + r'(?!\w)', '', rest)
+    return live_policy._protected(rest, 'products', names)
 
 
 def sanitize(slots, details):

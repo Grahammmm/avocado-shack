@@ -770,11 +770,19 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
     def _capture(self, draft):
         """The proposal screenshot of ``draft`` (H06): {"ok", "png", "error"}; never raises past the previewer's own guard."""
         rendered = self.editor.render_draft(draft["change_id"])
+        for path, digest in draft.get("assets", {}).items():
+            data = rendered.get("assets", {}).get("storefront-mockup/" + path)
+            if data is None or "sha256:" + hashlib.sha256(data).hexdigest() != digest:
+                return {"ok": False, "png": None, "error": "draft picture changed"}
         extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
         record = preview_mod.proposal_record(draft["records"])
         if record.get("collection") == "products":
             record = next((r for r in reversed(draft["records"]) if r.get("collection") == "products" and r.get("key") == record.get("key")), record)
-        return self.previewer.capture(rendered["files"], preview_mod.target_for(record, shop_today(), store=rendered.get("store")),
+        target = preview_mod.target_for(record, shop_today(), store=rendered.get("store"))
+        if (self.settings.get("itemIntake") is True and target.get("kind") == "product"
+                and any(call.get("op") == "product.add" for call in draft.get("ops", []))):
+            target.update(cardOnly=True, image=record["after"].get("image"))
+        return self.previewer.capture(rendered["files"], target,
                                       self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
             if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
 
@@ -811,7 +819,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             listing = {**listing, "name": product.get("name", listing.get("name")),
                        "maker": product.get("brand", listing.get("maker")),
                        "description": product.get("description", listing.get("description"))}
-            picture = self._listing_picture(listing, product)
+            picture = self._listing_picture(draft, product) if not shots else None
             if not shots and picture:
                 shots = [picture]
                 head = "I couldn't render the website card. The product picture is attached; the text below is the listing."
@@ -830,13 +838,32 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             text += tail
         if self._paused(): text += "\n" + PAUSED_LINE
         self._reply(text, shots, long_ok=True)
+        if listing:
+            self.db.execute(self.LISTING_PREVIEW)
+            outbox_id = self.db.execute("SELECT MAX(id) FROM outbox").fetchone()[0] if shots else None
+            self.db.execute("INSERT OR REPLACE INTO listing_preview(row_id, draft_hash, outbox_id) VALUES (?, ?, ?)",
+                            (row["row_id"], draft["draft_hash"], outbox_id))
 
-    def _listing_picture(self, listing, product):
-        """An admitted metadata-free owner photo; never an arbitrary attachment path."""
-        sha = listing.get("photo")
-        if not isinstance(sha, str) or not media.SHA_RE.fullmatch(sha): return None
+    LISTING_PREVIEW = ("CREATE TABLE IF NOT EXISTS listing_preview (row_id INTEGER PRIMARY KEY,"
+                       " draft_hash TEXT NOT NULL, outbox_id INTEGER)")
+
+    def _listing_picture(self, draft, product):
+        """Attach only the product pixels bound into this frozen draft, never reselect the original."""
+        image = product.get("image")
+        digest = draft.get("assets", {}).get(image)
+        if not isinstance(digest, str): return None
         try:
-            return str(media.web_copy(self.settings["mediaRoot"], sha)["path"])
+            rendered = self.editor.render_draft(draft["change_id"])
+            data = rendered.get("assets", {}).get("storefront-mockup/" + image)
+            if rendered.get("result") != "ok" or data is None or "sha256:" + hashlib.sha256(data).hexdigest() != digest:
+                return None
+            folder = self.sdir / "screenshots"
+            media._private_dir(folder)
+            path = folder / (digest[7:] + Path(image).suffix)
+            have = media._existing(path)
+            if have is None: media._write_new(path, data)
+            elif have != data: return None
+            return str(path)
         except (OSError, KeyError, media.Refused, editor_mod.UnsafeState):
             return None
 
@@ -1299,6 +1326,14 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._save_private(target, reasons)  # HASS-LIVE-PLAN-1: refused for the website, kept for Graham, never lost
             self._audit("refused", target, "policy")  # AVB-10: the draft stays waiting; the live gate said no
             self._reply(live_policy.refusal(reasons, understood=q(target["summary"])))
+            self._record(msg, "no-target")
+            return "no-target", None
+        self.db.execute(self.LISTING_PREVIEW)
+        shown = self.db.execute("SELECT * FROM listing_preview WHERE row_id = ?", (target["row_id"],)).fetchone()
+        if shown is not None and (shown["draft_hash"] != target["draft_hash"] or not self.db.execute(
+                "SELECT 1 FROM outbox WHERE id = ? AND chat = ? AND sent_at IS NOT NULL AND attachments != '[]'",
+                (shown["outbox_id"], self._chat())).fetchone()):
+            self._reply("I haven't sent the picture for this version yet. Please wait for the picture before confirming.")
             self._record(msg, "no-target")
             return "no-target", None
         self.db.execute(

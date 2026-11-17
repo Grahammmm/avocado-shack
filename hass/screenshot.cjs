@@ -148,7 +148,7 @@ const allowed=req=>{
           const count=await card.count();
           checks.productShown=count===(target.status==='active'?1:0);
           if(count===1){
-            cardShot=card;
+            if(target.cardOnly)cardShot=card;
             await card.scrollIntoViewIfNeeded();
             await card.locator('details').evaluateAll(els=>els.forEach(e=>e.open=true));
             await card.locator('img').first().evaluate(e=>e.decode()).catch(()=>{});

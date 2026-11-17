@@ -43,7 +43,7 @@ class TableShape(unittest.TestCase):
         self.assertEqual(policy.LIVE["product.edit"], {"id", "description", "category"})
         self.assertEqual(policy.LIVE["maker.edit"], {"key", "story"})
         self.assertEqual(policy.LIVE["product.add"], {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey",
-                                                      "displayBrand"})  # never `image`
+                                                      "displayBrand", "labelText", "ownerText"})  # never `image`; private photo-bound receipts
         self.assertEqual(policy.LIVE["maker.add"], {"key", "name", "place", "story"})  # never `url`
         self.assertEqual(policy.LIVE["product.set_photo"], {"id", "photo", "imageAlt"})
 
