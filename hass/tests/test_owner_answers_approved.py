@@ -70,7 +70,7 @@ class ApprovedHistoryTests(ConversationTestCase):
         self.assertEqual(self.say("history"), "history")
         [reply] = self.replies()
         self.assertEqual(reply.splitlines(), ["Here's what we changed lately:",
-                                              f"- {draft['summary']}: you said yes, but it isn't saved yet"])
+                                              f"- {draft['summary']}, approved Mon Nov 2 9:00 am: you said yes, but it isn't saved yet"])
         self.assertNotIn('waiting for your yes', reply)
 
 

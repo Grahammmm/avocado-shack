@@ -340,7 +340,7 @@ class ConversationAuditTests(H06TestCase):
         till.record("applied", action=act, strict=True, **TILL)
         self.assertEqual(self.say("history"), "history")
         [reply] = self.replies()
-        self.assertEqual(reply.splitlines()[:2], ["Here's what we changed lately:", "- A change on the test till: saved."])
+        self.assertEqual(reply.splitlines()[:2], ["Here's what we changed lately:", "- A change on the test till, approved Mon Nov 2 9:00 am: saved."])
         self.assertEqual(len(reply.splitlines()), 3)
         self.assertIn(a["summary"], reply.splitlines()[2])
         run = subprocess.run([sys.executable, str(SCRIPT), "history", "--state", str(self.repo.state)], capture_output=True, text=True)
@@ -373,8 +373,22 @@ class ConversationAuditTests(H06TestCase):
         self.assertEqual(self.say("history"), "history")
         [reply] = self.replies()
         self.assertEqual(reply.splitlines(), ["Here's what we changed lately:",
-                                              "- A change on the test till: saved, but I couldn't check it, so please look at it.",
-                                              "- A change on the test till: saved and checked."])
+                                              "- A change on the test till, approved Mon Nov 2 9:00 am: saved, but I couldn't check it, so please look at it.",
+                                              "- A change on the test till, approved Mon Nov 2 9:00 am: saved and checked."])
+
+    def test_till_history_uses_approval_not_later_time_and_handles_bad_time(self):
+        till = audit.AuditLog(self.repo.state, lambda: self.now)
+        act = audit.new_action("till", "time-test")
+        till.record("approved", action=act, approval="A1", approved_by="owner", strict=True, **TILL)
+        self.now += timedelta(hours=2)
+        till.record("applied", action=act, strict=True, **TILL)
+        self.assertEqual(self.say("history"), "history")
+        self.assertEqual(self.replies(), ["Here's what we changed lately:\n- A change on the test till, approved Mon Nov 2 9:00 am: saved."])
+        [entry] = self.conv.audit.approved(5)
+        for bad in (None, "", "invalid", "2026-11-02T17:00:00"):
+            with self.subTest(at=bad), mock.patch.object(self.conv.audit, "approved", return_value=[{**entry, "at": bad}]):
+                self.assertEqual(self.say("history"), "history")
+                self.assertEqual(self.replies(), ["Here's what we changed lately:\n- A change on the test till, time unknown: saved."])
 
 
 def _refuse(slots, ctx):

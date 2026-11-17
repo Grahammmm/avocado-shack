@@ -18,6 +18,7 @@ SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
 SITE, ASSETS = "storefront-mockup", "storefront-mockup/assets"
 VIEWPORTS = ("phone", "desktop")
 PASS_THROUGH = ("PLAYWRIGHT_MODULE", "CHROMIUM_PATH")
+PLAYWRIGHT_VERSION = "1.64.1"  # same immutable host tool as .github/workflows/check.yml
 START_TIMEOUT, CAPTURE_TIMEOUT = 10.0, 90
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"  # the eight-byte signature only; not a decode or integrity check
 
@@ -292,6 +293,14 @@ class Previewer:
         self.viewports = tuple(viewports)
         self.worktree = Path(worktree).resolve()
         self.env = dict(os.environ if env is None else env)
+        # The service is not a CI job: it has no exported PLAYWRIGHT_MODULE.
+        # Reuse only the existing pinned ready install; never npm-install at runtime.
+        tool = Path(self.env.get("HOME", str(Path.home()))) / ".cache" / "avo-ci-playwright" / PLAYWRIGHT_VERSION
+        if env is None and not self.env.get("PLAYWRIGHT_MODULE") and (tool / ".ready").is_file():
+            module = tool / "node_modules" / "playwright"
+            shells = list((tool / "browsers").glob("chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"))
+            if (module / "package.json").is_file() and len(shells) == 1 and os.access(shells[0], os.X_OK):
+                self.env.update(PLAYWRIGHT_MODULE=str(module), CHROMIUM_PATH=str(shells[0]))
         self.last_server = None  # {"pid", "port"} of the most recent preview server (for checks)
 
     def capture(self, files, target, out_png, assets=None) -> dict:
@@ -336,6 +345,7 @@ class Previewer:
             self.last_server = {"pid": server.pid, "port": port}
             unshown = False
             runs = []  # (viewport, admitted screenshot bytes, checks or None when the run failed, failure text); phone first
+            card_text = None
             try:
                 deadline = time.monotonic() + START_TIMEOUT
                 while not _get_ok(port):
@@ -354,6 +364,10 @@ class Previewer:
                         data = shot.read_bytes() if ran else b""  # admitted once; these bytes are what gets copied
                         bad_png = ran and not data.startswith(PNG_SIGNATURE)
                         checks = _checks(proc.stdout) if ran and not bad_png else None
+                        if name == "phone" and checks is not None:
+                            text = json.loads(proc.stdout.strip().splitlines()[-1]).get("cardText")
+                            if isinstance(text, str) and len(text) <= 10000:
+                                card_text = text
                         unshown = unshown or (name == "phone" and ran and not bad_png and _unshown(proc.stdout))
                         failure = None if checks is not None else (
                             "bad screenshot PNG" if bad_png else "bad checks output" if ran
@@ -387,4 +401,5 @@ class Previewer:
         failed = sorted(name for name, passed in checks.items() if passed is not True)
         error = error or (("check failed: " + ", ".join(failed)) if failed else None)
         return {"ok": error is None, "png": str(out_png), "checks": checks, "error": error, **extra,
+                **({"cardText": card_text} if card_text is not None else {}),
                 **({"unshown": True} if unshown and error is None else {})}

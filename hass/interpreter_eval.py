@@ -1,10 +1,11 @@
 """NB-AV-04 (H09): interpreter eval set and offline scorer (AV1322-14: eval set v3 adds the home-page ops, route.add/hide/
 restore and a no-source route.add question; AV1102-10: v4 adds brand, home-text, design and saved-note cases, and a
 case may carry `notes`; AV1222-09: v5 adds store phone and partial hike text-edit cases; AV2152-13: v8 adds a whole shelf, a whole maker, a
-partial product description, a cancel note, a notice first day and a club intro; AV0007-10: v9 adds undo guidance, a brand-only new product, an
+partial product description, a cancel note, a notice first day and a club intro; AV1622-12: v6 adds hike.samples,
+store.clear_home_image and availability cases; AV0007-10: v9 adds undo guidance, a brand-only new product, an
 owner alias and a missing-field photo answer, and a case may carry `aliases`). `score --cases C --replies R` prints one JSON summary (ids
 and short reasons, never a case text or reply); exit 0 when every case was scored, even if some failed; 2 for an
-unreadable file, malformed line, duplicate id, a case file without exactly 75 cases or an unscorable case (RF0550-4:
+unreadable file, malformed line, duplicate id, a case file without exactly 84 cases or an unscorable case (RF0550-4:
 bad/repeated pending code, `revises` naming no pending draft, > MAX_OPS expected ops). `--live --url U --model M
 --out FILE` is OPERATOR ONLY, never run in CI or tests (they inject a fake transport): it builds the NB-AV-03 prompt
 from the real registry and catalog, asks the existing local model (NB-AV-02, loopback only) once per case and writes
@@ -24,7 +25,7 @@ from hass.ops import load_registry  # noqa: E402
 REPO = Path(__file__).resolve().parents[1]
 CASES = REPO / "hass" / "tests" / "fixtures" / "interpreter-eval.jsonl"
 EVENTS = CASES.with_name("interpreter-eval-events.json")  # AV1222-09: hikes laid over the prompt content, never written
-CASE_COUNT, ID_RE, NOTE_KEY = 79, re.compile(r"[A-Za-z0-9_-]{1,16}"), "_note"
+CASE_COUNT, ID_RE, NOTE_KEY = 84, re.compile(r"[A-Za-z0-9_-]{1,16}"), "_note"
 CLAIM_ARGS = frozenset({"organic", "producerKey"})  # an extra arg the case did not expect fails only for these
 
 
