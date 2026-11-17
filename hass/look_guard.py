@@ -93,12 +93,21 @@ def check(diff: str, owner_text: str) -> str | None:
                 # Before the first '<', a hunk may start inside a tag whose opening
                 # and URL attribute are outside diff context. Refuse ambiguous URL
                 # tokens in changed prefix lines rather than trusting that fragment.
-                prefix = []
+                prefix, context, following = [], [], ""
                 for added_line, line in hunk:
-                    fragment, sep, _ = _decode(line).partition("<")
+                    fragment, sep, rest = _decode(line).partition("<")
+                    context.append(fragment)
                     if added_line and (fragment or not sep): prefix.append(fragment)
-                    if sep: break
-                if prefix:
+                    if sep:
+                        following = rest
+                        break
+                # Plain prose ending at a closing element is visible text, not
+                # an attribute fragment. Keep the ambiguous-tag refusal for
+                # assignments, quoted values and any URL-like syntax.
+                prose = (re.match(r"/\s*[a-z][\w-]*\s*>", following, re.I)
+                         and all(re.fullmatch(r"[\w\s.,!?'-]*", part) for part in context)
+                         and not any(ORPHAN_URL.search(part) for part in context))
+                if prefix and not prose:
                     # Without the opening tag the fragment's role is unknown. Only
                     # a complete, quoted relative value is provably safe here.
                     for fragment in prefix:

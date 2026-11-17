@@ -169,6 +169,12 @@ class LookChangeTest(unittest.TestCase):
                 self.assertNotIn("<img", patch)
                 self.assertEqual(look_guard.check(patch, "change the picture"), expected)
 
+    def test_guard_allows_multiline_owner_requested_text_edit(self):
+        old = '<p>\nline one\nline two\nline three\nline four\nWelcome to our shop\n</p>\n'
+        patch = diff("hass/templates/index.html", old, old.replace("Welcome to our shop", "Welcome to our garden"))
+        self.assertNotIn('<p>', patch)
+        self.assertIsNone(look_guard.check(patch, "Change Welcome to our shop to Welcome to our garden"))
+
     def test_guard_refuses_ambiguous_incomplete_tag(self):
         old = '<img\n a=1\n b=2\n c=3\n d=4\n data-src=\n \n \n \n \n"https://evil.example/x.png"\n>\n'
         patch = diff("hass/templates/index.html", old, old.replace("data-src=", "src="))
