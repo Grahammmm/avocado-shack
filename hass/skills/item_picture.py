@@ -211,7 +211,7 @@ def _home_only_rejected(turn, name) -> bool:
     rest = _HOME_REJECTED.sub(" ", turn)
     if HOME_PAGE.search(rest) or _HOME_REJECTED.search(turn) is None:
         return False
-    return _picks(rest, _words(name)) is True
+    return _picks(rest, _words(name), name) is True
 
 
 def _crowded(turn, name="", alt="") -> str | None:

@@ -1,0 +1,572 @@
+{
+  "schema_version": 1,
+  "base_sha": "b302d26bee6a4d8993f9da324d743bf206c56aca",
+  "captured_at": "2026-11-16T03:39:16.821759+00:00",
+  "sources": [
+    {
+      "id": "operations",
+      "locator": "docs/hass/OPERATIONS.md",
+      "sha256": "61f9f382a963c0b6dffd958a8aeeb97bb5a45d58a9c12b087d48173a4f860a5f",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 3,
+          "end": 5,
+          "text": "Unit templates live in `deploy/hass/`. **Installing and enabling them is G's runbook step, not code.** Nothing runs automatically.\nThe explicitly attended [runtime release tool](RUNTIME-RELEASE.md) can stop/start the three existing runtime units only;\nit never installs/enables units or changes their definitions. Workers must not run its apply command."
+        },
+        {
+          "start": 16,
+          "end": 17,
+          "text": "All four use `%h` paths, `UMask=0077`, `NoNewPrivileges=true` and `PrivateTmp=true`; the long-running ones use\n`Restart=on-failure`. After 5 failed starts in 5 minutes (`StartLimitIntervalSec=300`, `StartLimitBurst=5`) the receiver or worker stays `failed` instead of looping: fix the cause, then `systemctl --user reset-failed <unit>` and start it (operator step). No unit holds a secret (the key is a 0600 file read by the program)."
+        },
+        {
+          "start": 71,
+          "end": 86,
+          "text": "## Retention proposal (H21, G decides; nothing enforces it yet)\n\n| Data | Proposed period |\n| --- | --- |\n| Inbox payloads | erased when handled (already) |\n| Inbox ids and times | 90 days |\n| Mac spool | 7 days after delivery |\n| Relay rows | 30 days after ack (picture bytes cleared at ack) |\n| Proposal and result screenshots | 90 days |\n| Conversation messages and outbox | 1 year |\n| Approvals, change records, release journals | 2 years (the audit trail of live changes) |\n| Photo originals | 1 year after last use |\n| State backups | 30 daily |\n| Messages app on the Mac | \"Keep messages: 1 Year\" |\n\nEnforcement is a later unit (HASS-RETAIN-1). `python3 hass/retention.py report --days N` measures it and deletes nothing."
+        }
+      ]
+    },
+    {
+      "id": "options",
+      "locator": "docs/hass/RETENTION-OPTIONS.md",
+      "sha256": "bc7a4acf179cec7d093dda3058cd8306d1b06c401e11e62806de229d214a1136",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 1,
+          "end": 16,
+          "text": "# How long to keep private data (H21) - options and questions\n\n**Open decision for Michael and G. This page records no decision, selects no period, deletes nothing and authorizes no cleanup.** 7, 30 and 90 days are three comparison points, not chosen defaults and not limits that anything enforces. The row stays open in [HANDOVER.md](HANDOVER.md) and in [FEATURES.md line 49](FEATURES.md#L49) (\"Needs G: owner retention periods; no deletion step enforces them yet\") until Michael and G answer privately.\n\nThe page shows, for each kind of private data the retention report counts, what it holds, what reads it today and what would stop working if it were later deleted after 7, 30 or 90 days. It names kinds of field only, never examples, and it contains no private value, id, contact, message, photo or state path. Product source paths and field names are allowed.\n\n## What the retention report is\n\n`python3 hass/retention.py report --state DIR --days N` ([retention.py](../../hass/retention.py), owner action 4 at [line 11](../../hass/retention.py#L11)) is a read-only count. It opens the databases read-only, creates and writes nothing, and always prints `deletes: 0`. No deletion step enforces a retention period on any class it counts. N is a whole number from 1 to 36500.\n\n- **Cutoff.** A row or file counts when it is strictly older than the report time minus N elapsed days. This is a count of 24-hour days, not a Pacific calendar-day policy.\n- **What each class is dated by.** Inbox and message rows: the time the message was received. Outbox and draft rows: the time the row was created. Approvals: the approval time. Closed memory rows: the time it was forgotten, else the time it was replaced. Screenshots: the file's last-changed time. Photo originals: the receipt time in the small description file beside each original. Backups: the UTC time in the backup folder's name. A web copy is counted through its original's date.\n- **`oldest`** is the oldest dated item the report found, not the oldest item past the cutoff, so it can be younger or older than N days and does not say that anything is overdue. Drafts print no `oldest`; they print an open count and a closed count.\n- **Open and closed drafts.** \"Open\" means the draft can still change state, so it includes drafts waiting for a yes, waiting for details, approved, applied and checked (an applied or checked change can still be undone). \"Closed\" means rejected, expired, failed or undone. An open draft can be old; age alone never makes open work safe to remove.\n- **Times that cannot be read.** A missing, zone-less or malformed time counts nowhere, and a backup name that is not a real calendar time is ignored. Some message rows are stored with no receipt time at all and are never aged. Photo originals whose description file has no usable time are counted as `undated`, and web copies whose original is gone are counted as `webOrphans`. Neither is ever given a guessed age, and each needs its own decision.\n- **Absent is not zero.** The photo folder and the backup folder are optional arguments. When one is not given its entry is empty, which is not a count of zero. When a store cannot be read its entry says `unavailable` and the report exits 1. A backup counted as complete has a finished manifest; that is not a verified restore point, which needs `statebackup.py verify`."
+        },
+        {
+          "start": 35,
+          "end": 51,
+          "text": "## Stores the report does not count\n\nAnything below would need its own look, field list and decision before any cleanup. This page did not assess their readers beyond what is stated.\n\n- **The audit log files** (one file per UTC day, ids and codes only, no message text): the first thing `history` reads. They are part of every backup ([audit.py](../../hass/audit.py)).\n- **The editor draft and change files** described in the Drafts row.\n- **Other tables in the two databases:** the chat each message came from, open requests (the owner's recent words while a question is open), the interpreter call log, usage counts, the pause marker, picture retries, the backlog notes, and the inbox start point and nonces.\n- **The reply relay file** that the health check reads for unacknowledged replies.\n- **Git history and the committed site photos** in the writer worktree, and the site content bundle inside each backup.\n\n## Limits when data sits in more than one place\n\n- Deleting one table or file on its own can leave dangling references (a row that names a picture that is gone, a history line with no draft behind it), weaken duplicate protection or make a restore inconsistent. Neither the retention report nor this page coordinates a cleanup across stores.\n- Backups keep copies of what the current state no longer holds. Removing or forgetting something in the current state does not remove it from older backups.\n- Committed photos and Git history, the owner's phone, the messaging provider and the language model host may hold their own copies. Deleting private cache does not erase those, and nothing here is a claim of global erasure or of meeting any legal or compliance standard.\n- The backup lists photo originals and their description files only. When a media folder is given, a backup is refused if that folder holds a web-copy folder beside the originals ([statebackup.py](../../hass/statebackup.py)). How private web copies and the backup fit together is an open operator question.\n- Support rules apply to any later cleanup: pause changes first, stop and ask before deleting or editing a database or a backup, never delete or rotate backups to make room without the owner, and run restores only into an isolated drill folder ([SUPPORT.md](SUPPORT.md#disk-low), [restore steps](SUPPORT.md#restore)). This page gives no deletion command, query, timer or live-state recipe."
+        },
+        {
+          "start": 57,
+          "end": 71,
+          "text": "## Questions Michael and G must answer\n\nAll of these are unanswered. Answers stay private and are never written into Git.\n\n1. **Which period for which class?** Is the answer one period for everything or different periods for the classes above, and counted from what event (receipt, approval, close, backup time)?\n2. **What is protected whatever the age?** How are waiting inbox rows, unsent replies, open drafts (including applied and checked changes that can be undone) and current memory kept out of any cleanup?\n3. **How far back must undo, history and the audit log reach?** Is a change that is a month or a quarter old still expected to be undoable, and how far back should `history` and `status` reach?\n4. **How long must the trial review be able to look back?** Does the retention period have to outlast the agreed trial, including the longest review range of 31 days?\n5. **Originals versus reusable and site copies.** Are private photo originals kept longer, shorter or the same as private web copies, and what happens to photos already committed to the site?\n6. **Undated and stray items.** What happens to originals with no usable receipt time, and to web copies with no original? Neither is ever given a guessed age.\n7. **Backups.** How often are backups made, how long is the recovery window, how many verified recovery points are kept, and when is an older backup removed so that something removed from current state does not live on in it?\n8. **Other copies.** How is a later authorized cleanup handled for backups and for the other copies named above?\n9. **Who is responsible?** Who approves a cleanup, who has access to the private data, who runs it, and who handles an incident if it goes wrong?\n\nNothing on this page is a policy, a default, a sign-off or a decision date."
+        }
+      ]
+    },
+    {
+      "id": "retention",
+      "locator": "hass/retention.py",
+      "sha256": "78afe7ccad5627727f5e439435d51cfc43136c0394b242c6ed608d8830961d88",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 1,
+          "end": 14,
+          "text": "\"\"\"Hass retention report (H21, read-only): how much kept data is older than --days N. Deletes nothing.\n\n    python3 hass/retention.py report --state DIR --days N [--media ROOT] [--backups DIR] [--now ISO]  (N: 1-36500)\n\nOne JSON line: per data class, the count strictly older than now - N days and the oldest kept UTC date (or null), dated\nby inbox/messages received_at, outbox/drafts created_at (closed draft: no further transition), screenshot mtime, the\nphoto sidecar received_at (none usable: undated, never guessed), the backup name's stamp (other names ignored),\napprovals approved_at and closed memory rows by forgotten_at, else superseded_at (active memory is not counted).\nwebOrphans: web copies whose original is gone (counted, never dated).\nZone-less or malformed times, and backup stamps that are no real calendar time, count nowhere. No ids, text or file\nnames print. SQLite opens mode=ro; nothing is created or written; the owner picks the period (owner action 4). Exit 1:\na store is missing or unreadable (its keys say \"unavailable\"); exit 2, before anything opens: bad usage (incl. a\n--days reaching before year 1 from --now), a missing dir, a dir that is or sits below a symlink, or a symlinked or\nnon-regular database; else 0."
+        },
+        {
+          "start": 48,
+          "end": 52,
+          "text": "def _rows(path: Path, queries: dict) -> dict:\n    \"\"\"{name: rows} over one read-only connection; a missing table gives no rows. Raises sqlite3.DatabaseError.\"\"\"\n    with contextlib.closing(sqlite3.connect(f\"{path.absolute().as_uri()}?mode=ro\", uri=True)) as db:\n        tables = {r[0] for r in db.execute(\"SELECT name FROM sqlite_master WHERE type = 'table'\")}\n        return {name: db.execute(sql).fetchall() if table in tables else [] for name, (table, sql) in queries.items()}"
+        },
+        {
+          "start": 153,
+          "end": 160,
+          "text": "    for key, folder, scan in ((\"screenshots\", sdir / \"screenshots\", _shots), (\"media\", mroot, _media),\n                              (\"backups\", bdir, _backups)):\n        try: doc[key] = None if folder is None else scan(folder, cutoff)\n        except OSError: doc[key] = UNAVAILABLE\n    try: doc[\"webOrphans\"] = None if mroot is None else _web_orphans(mroot)\n    except OSError: doc[\"webOrphans\"] = UNAVAILABLE\n    doc[\"deletes\"] = 0\n    return doc"
+        }
+      ]
+    },
+    {
+      "id": "inbox",
+      "locator": "hass/inbox.py",
+      "sha256": "bd814288f7bf6339ccf2273250bb70e9e5599bd2eebe7fc77025112e010de95a",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 167,
+          "end": 175,
+          "text": "    def _mark(self, provider_id: str, disposition: str) -> None:\n        with self._tx():\n            self.db.execute(\"UPDATE inbound SET state = 'done', disposition = ?, done_at = ?, payload = NULL\"\n                            \" WHERE provider_id = ? AND state = 'pending'\",\n                            (disposition, _iso(self.clock()), provider_id))\n\n    def drain(self, conversation) -> list:\n        \"\"\"Hand each pending message to conversation.handle in order, marking it done afterwards. An exception from\n        handle (or the mark) propagates and leaves that message and every later one pending for the next drain;"
+        }
+      ]
+    },
+    {
+      "id": "relay",
+      "locator": "hass/relay.py",
+      "sha256": "01b9fba322525c2ff040643d030974dcc4f833fc7d050358d2130e8515ecd529",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 128,
+          "end": 131,
+          "text": "class RelayStore:\n    \"\"\"relay.sqlite3 in the host dir (0600): replies waiting for the Mac to pull and acknowledge them.\"\"\"\n    def __init__(self, host_dir):\n        self.db = sqlite3.connect(memory.private_db(host_dir, \"relay.sqlite3\"), isolation_level=None, timeout=30)"
+        },
+        {
+          "start": 182,
+          "end": 189,
+          "text": "    def ack(self, ids, now) -> int:\n        \"\"\"Idempotent; unknown ids are ignored. Returns how many rows this call newly acknowledged.\"\"\"\n        n = 0\n        for i in ids:\n            n += self.db.execute(\"UPDATE relay SET acked_at = ? WHERE id = ? AND acked_at IS NULL\", (int(now), i)).rowcount\n            self.db.execute(\"UPDATE picture SET data = NULL WHERE relay_id = ?\", (i,))\n        self.db.execute(\"DELETE FROM picture WHERE relay_id IN (SELECT id FROM relay WHERE acked_at < ?)\", (int(now) - 30 * 86400,))\n        return n"
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "locator": "hass/media.py",
+      "sha256": "a14b677004c07a567d68f2ddf6b3074a2acd9df871b003eac8bc0307581a6b0a",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 92,
+          "end": 104,
+          "text": "def _private_dir(path: Path) -> None:\n    try: os.mkdir(path, 0o700)\n    except FileExistsError: pass\n    if not stat.S_ISDIR(os.lstat(path).st_mode): raise Refused(\"corrupt-store\")\n\ndef _existing(path: Path):\n    \"\"\"None if nothing is at path; the bytes of a regular file; Refused for any other entry (symlink included).\"\"\"\n    try: st = os.lstat(path)\n    except FileNotFoundError: return None\n    if not stat.S_ISREG(st.st_mode): raise Refused(\"corrupt-store\")\n    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)  # a FIFO swapped in after lstat never blocks open\n    with os.fdopen(fd, \"rb\") as fh:\n        if not stat.S_ISREG(os.fstat(fd).st_mode): raise Refused(\"corrupt-store\")"
+        }
+      ]
+    },
+    {
+      "id": "memory",
+      "locator": "hass/memory.py",
+      "sha256": "127abdac443b9b6d1fb640812b527bd922a0c8f90a0c2e7b0bb3f0bf77a90276",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 55,
+          "end": 68,
+          "text": "def private_db(sdir, name) -> Path:\n    path = sdir / name\n    try:\n        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)\n    except OSError as exc:\n        if exc.errno in (errno.ELOOP, errno.ENXIO, errno.EISDIR): raise editor_mod.UnsafeState(\n            f\"{name} must be a regular file, not a link\") from exc\n        raise\n    try:\n        if not stat.S_ISREG(os.fstat(fd).st_mode): raise editor_mod.UnsafeState(f\"{name} must be a regular file, not a link\")\n        os.fchmod(fd, 0o600)\n    finally: os.close(fd)\n    # SQLite reopens by path; the intervening window is accepted for the owned 0700 state dir.\n    return path"
+        }
+      ]
+    },
+    {
+      "id": "conversation",
+      "locator": "hass/conversation.py",
+      "sha256": "7f1de0dc7a7519badf0390962c49c31ca292402735daefcaaf0a64ec667e60a1",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 831,
+          "end": 838,
+          "text": "    def handle(self, msg: Inbound, last_try=False, apply=True, forwarded_at=None) -> str:\n        self._answering, self._forwarded = msg.received_at, forwarded_at\n        self._to = msg.chat if self._is_owner(msg) else None\n        self._asker = sender_key(msg.sender)\n        self.outbox.msg_id, self.outbox.emoji_ok = msg.provider_id, voice.has_emoji(msg.text)\n        try: return self._handle_message(msg, last_try, apply)\n        finally:\n            self._answering, self._forwarded, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, None, False"
+        }
+      ]
+    },
+    {
+      "id": "forwarder",
+      "locator": "mac/hass_forwarder.py",
+      "sha256": "8a381d62f79c070e0f451129daaef28345de9fa51bb9c0388546eb503b594606",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 136,
+          "end": 160,
+          "text": "class Spool:\n    def __init__(self, directory, now, ready=False):\n        \"\"\"ready=True: the file and its tables already exist (an ack worker's own connection): no schema or meta writes.\"\"\"\n        self.clock = time.time\n        self.directory = directory\n        path = Path(directory) / \"spool.sqlite3\"\n        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)\n        try:\n            st = os.fstat(fd)\n            if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o177: raise ValueError(\"spool-file\")\n        finally: os.close(fd)\n        self.db = sqlite3.connect(path, isolation_level=None)\n        self.stage = stagelog.off  # HASS-FAST-1: the Forwarder swaps in a StageLog\n        if ready: return\n        self.db.executescript(\n            \"CREATE TABLE IF NOT EXISTS inbound(provider_id TEXT PRIMARY KEY,payload TEXT,state TEXT,tries INTEGER,\"\n            \"next_try_at REAL,created_at REAL,done_at REAL);\"\n            \"CREATE TABLE IF NOT EXISTS fetch(guid TEXT,event TEXT,created_at REAL,tries INTEGER DEFAULT 0,next_try_at REAL DEFAULT 0,PRIMARY KEY(guid,event));\"\n            \"CREATE TABLE IF NOT EXISTS meta(name TEXT PRIMARY KEY,value REAL);\"\n            \"CREATE TABLE IF NOT EXISTS sent(reply_id INTEGER PRIMARY KEY,sent_at REAL);\"\n            \"CREATE TABLE IF NOT EXISTS sent_pics(reply_id INTEGER,idx INTEGER,sent_at REAL,PRIMARY KEY(reply_id,idx));\"\n            \"CREATE TABLE IF NOT EXISTS pic_tries(reply_id INTEGER,idx INTEGER,tries INTEGER,next_try_at REAL,PRIMARY KEY(reply_id,idx));\"\n            \"CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY,seen_at REAL);\"\n            \"CREATE TABLE IF NOT EXISTS drops(reason TEXT PRIMARY KEY,count INTEGER);\"\n            \"CREATE TABLE IF NOT EXISTS ack(provider_id TEXT PRIMARY KEY,state TEXT,created_at REAL,done_at REAL);\""
+        }
+      ]
+    },
+    {
+      "id": "backup-doc",
+      "locator": "hass/README.md",
+      "sha256": "1073680cd7fff20b9ba8e41d3f6d0a88a04649578d9990a612d255cb69e2f469",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 179,
+          "end": 185,
+          "text": "- `create` writes `<out>/hass-state-<UTC stamp>/`: `config.json`, `drafts/`, `changes/`, `screenshots/`, `audit/` (the AVB-10 audit log; 0600/0700), SQLite online-backup snapshots of `inbox.sqlite3` (the H16 queue, when present; taken first) and then `conversation.sqlite3`, and `MANIFEST.json` (SHA-256 per file) last; `writer.lock` is never copied. Refused: `out` missing, not 0700, or inside the state dir, the repository or the writer worktree (exit 2); a symlinked or odd `config.json`/`writer.lock` before either is opened, any symlink or unknown entry (`refused`, each named); a held writer lock (`busy`); a pending journal (`unsettled`, run `editor.py recover` first); an existing backup dir of the same stamp (`exists`).\n- `create` builds in a dot-named `.hass-state-<stamp>.partial-<pid>` folder and renames it to `hass-state-<stamp>` only after `MANIFEST.json` is written, so a failed run leaves no `hass-state-*` folder and the stamp stays free.\n- `verify` checks the manifest layout, every hash and mode, unlisted files and symlinks and `PRAGMA integrity_check`; damage gives `corrupt` naming the file.\n- `restore` verifies first, refuses an existing `--into` (left untouched), the recorded writer worktree (an attended operation) and a worktree that fails the editor checks, builds the new state dir beside `--into` and renames it into place. Only `config.json` `worktree` is rewritten.\n- `drill` prints check ids and counts only (`ok`, `corrupt` with `step: verify`, or `drill-failed` with its step, keeping the restored dir); it never restores onto the writer worktree.\n\nNo network, no Git writes, no deletion of source data. Limits: drill on isolated copies only; no live restore, scheduling, retention, off-box copy or encryption."
+        },
+        {
+          "start": 198,
+          "end": 204,
+          "text": "`hass/inbox.py` `Inbox(state_dir, start_at=None)` keeps `<state>/inbox.sqlite3` (0600) next to the conversation store. Every inbound message is written there before any processing; nothing is backfilled as a command.\n\n- **Start point.** The first open must pass `start_at` (timezone-aware ISO-8601) and records it; later opens reuse it, and a different value raises `start point already recorded as <iso>`. The module never moves it.\n- `enqueue(msg)` → `queued`, `duplicate` (id already stored, nothing changes) or `history` (received before the start point; only id and time are kept, it never becomes a command). A `received_at` that is empty, has no zone or is not a date raises `ValueError` and stores nothing.\n- `drain(conversation)` hands pending messages to `Conversation.handle` in `(received_at, provider_id)` order and marks each `done` with its disposition only afterwards. A crash in between re-delivers the message and `Conversation` answers `duplicate` without a second write; an exception stops the drain and leaves that message and later ones pending.\n- Payloads are erased once a message is done (history rows never store one); retention periods stay H21.\n- `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart; nonces older than one day are pruned when a new one is recorded."
+        }
+      ]
+    },
+    {
+      "id": "live-audit",
+      "locator": "reports/hass/HASS-LIVE-AUDIT-1.md",
+      "sha256": "37605ccf4ce18eb1aefe317a296b2d763910f5b1c8fd537001ff8bcc44b79c0d",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 3,
+          "end": 3,
+          "text": "Date: 2026-11-07, 14:35-14:50 PST, on AgentOrange. Author: opus-coder (card t_d5a579b9)."
+        },
+        {
+          "start": 102,
+          "end": 102,
+          "text": "| H08 | Owner-only text channel | pass (43) | WORKS-LIVE (partly) | Owner chat and echo guard live (L1 `echo: 6`). Stranger, group and duplicate delivery never exercised live (no `ignored` disposition); synthetic PASS. |"
+        },
+        {
+          "start": 114,
+          "end": 115,
+          "text": "| H20 | Backups and recovery | pass (25) | NOT-RUN | Backup timer never ran; `backups/` empty (L3 `backup-age`, L4). Restore drill fixtures only. |\n| H21 | Privacy, retention, access | pass (9) | TESTED-ONLY | Logs carry counts and class names only (checked in L4 journal). Retention periods not decided; nothing deletes. |"
+        },
+        {
+          "start": 271,
+          "end": 271,
+          "text": "| 18 | Retention: decide periods (OPERATIONS.md proposal) and build HASS-RETAIN-1 | safety | M | medium (deletion) | G (periods), then operator |"
+        }
+      ]
+    },
+    {
+      "id": "mac-runbook",
+      "locator": "docs/hass/MAC_RUNBOOK.md",
+      "sha256": "b1ba7b5ecf8a7f2736628da96d4049431827850e1bfe2351cf917ad864a5cf21",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 17,
+          "end": 18,
+          "text": "3. **G / Mac:** Run `sudo pmset -a sleep 0 disksleep 0 autorestart 1`; the display may sleep. Set Messages → Keep messages: 1 Year (UNVERIFIED until step 18), H21.\n   Expected: Mac stays awake and restarts after power loss; message retention is one year."
+        }
+      ]
+    },
+    {
+      "id": "handover",
+      "locator": "docs/hass/HANDOVER.md",
+      "sha256": "f006062750c0a845e3fc742fa080b2670891a29648f75bca3407d41e8f805c2f",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 27,
+          "end": 27,
+          "text": "| H21 | Message and media retention periods | Owner / G | [FEATURES.md line 49](FEATURES.md#L49), [Retention options](RETENTION-OPTIONS.md) |"
+        }
+      ]
+    },
+    {
+      "id": "features",
+      "locator": "docs/hass/FEATURES.md",
+      "sha256": "41c6edb7f5c22a70772fba88ea943829544ae93305e1d15ea771d6a8c1ae67d5",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "repo-source",
+      "excerpts": [
+        {
+          "start": 49,
+          "end": 49,
+          "text": "| H21 | Privacy, retention and access | H18 | Owner-approved sender list, message/media retention and deletion rules are enforced; credentials and participant/message data stay out of Git, screenshots and routine logs. | Needs G: owner retention periods; no deletion step enforces them yet |"
+        }
+      ]
+    },
+    {
+      "id": "g1606",
+      "locator": "operator-local/decisions/G-DECISIONS.log:L1606 (sanitized excerpt)",
+      "sha256": "26bfb1ad5dfd8ad9028efc8884c43e65922b17deaffb9557c8867b20f6e0f100",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "decision-excerpt",
+      "excerpts": [
+        {
+          "start": 1606,
+          "end": 1606,
+          "text": "2026-11-06 G: (3) Hass: use the recommended answers for H07/H19/H21/H22/H25 once the spec lists them;"
+        }
+      ]
+    },
+    {
+      "id": "g1931",
+      "locator": "operator-local/decisions/G-DECISIONS.log:L1931 (sanitized excerpt)",
+      "sha256": "dff9c8226bc077113d8e2da5a890808a9e5ee0cd300df7a08be49a347f8bedf0",
+      "captured_at": "2026-11-16T03:39:16.821759+00:00",
+      "kind": "decision-excerpt",
+      "excerpts": [
+        {
+          "start": 1931,
+          "end": 1931,
+          "text": "2026-11-15 G: approve ALL 295 NOT-STARTED audit rows (7 review files); NEEDS-G groups: signing HOLD till trust anchor; retire/delete HOLD; publish/launch: approve 45-unit approve/deny draft pass only (UNITS45-DECIDE-1); setup: show each as card"
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "date": "2026-11-06T00:00:00-08:00",
+      "ref": "g1606",
+      "meaning": "Date only (midnight placeholder, not measured approval time): G approved use of recommended H21 answers once the spec lists them. This is not observed enforcement or undated owner acceptance."
+    },
+    {
+      "date": "2026-11-15T00:00:00-08:00",
+      "ref": "g1931",
+      "meaning": "Date only (midnight placeholder): audit-row work approved; retire/delete HOLD and other explicit holds retained. This report is not deletion authority."
+    }
+  ],
+  "rows": [
+    {
+      "class": "inbox-payloads",
+      "period": "erased when handled",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "Inbox._mark sets payload NULL on completion; history never stores payload. Code is not erasure observation.",
+      "layers": {
+        "counts": "NOT-COUNTED",
+        "configured": "UNKNOWN",
+        "code": "SOURCE",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Private state design: 0700 directories / 0600 databases; current permissions, principals and ACLs UNKNOWN",
+      "missing": "Current completion-to-payload-clear receipt; pending/retry exclusions; backup copies and SQLite residual-byte treatment",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "inbox",
+        "memory",
+        "backup-doc"
+      ]
+    },
+    {
+      "class": "inbox-ids",
+      "period": "90 days",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "Read-only retention counts by received_at; completed IDs retained for dedup; no 90-day purge established.",
+      "layers": {
+        "counts": "SOURCE",
+        "configured": "UNKNOWN",
+        "code": "UNKNOWN",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Private state design: 0700 directories / 0600 databases; current permissions, principals and ACLs UNKNOWN",
+      "missing": "Dated ID-expiry enforcement receipt and dedup/replay boundary; nonces/start point have separate semantics",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "retention",
+        "backup-doc"
+      ]
+    },
+    {
+      "class": "mac-spool",
+      "period": "7 days after delivery",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "Forwarder spool stores payload/state/done_at and sent metadata; inspected source does not establish 7-day retention enforcement.",
+      "layers": {
+        "counts": "NOT-COUNTED",
+        "configured": "UNKNOWN",
+        "code": "UNKNOWN",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Mac spool owned private design; effective Mac user/file permissions and transport access UNKNOWN",
+      "missing": "Delivered-row pruning receipt at 7 days, pending protection and installation/version mapping",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "forwarder"
+      ]
+    },
+    {
+      "class": "relay-rows",
+      "period": "30 days after ack",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "RelayStore.ack records acked_at but deletes picture metadata only, not relay rows. Ack delivery is not row retention enforcement.",
+      "layers": {
+        "counts": "NOT-COUNTED",
+        "configured": "UNKNOWN",
+        "code": "SOURCE",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "RelayStore uses memory.private_db (0600); effective host/peer ACLs UNKNOWN",
+      "missing": "30-day relay-row purge receipt; current install and acknowledged-row age distribution",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "relay",
+        "memory",
+        "live-audit"
+      ]
+    },
+    {
+      "class": "relay-pictures",
+      "period": "picture bytes cleared at ack; picture metadata cleanup after 30 days",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "RelayStore.ack sets picture.data NULL and removes old acknowledged picture rows. No secure/global erasure claim.",
+      "layers": {
+        "counts": "NOT-COUNTED",
+        "configured": "UNKNOWN",
+        "code": "SOURCE",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Private relay database; authenticated transport intended; actual current peer boundary UNKNOWN",
+      "missing": "Observed per-picture clearing receipt and copied screenshot/backup scope; metadata cleanup only runs when ack is called",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "relay",
+        "live-audit"
+      ]
+    },
+    {
+      "class": "screenshots",
+      "period": "90 days",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "Read-only PNG count uses file mtime; no 90-day deletion enforcement receipt.",
+      "layers": {
+        "counts": "SOURCE",
+        "configured": "UNKNOWN",
+        "code": "UNKNOWN",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Private state design: 0700 directories / 0600 databases; current permissions, principals and ACLs UNKNOWN",
+      "missing": "Dated screenshot expiry receipt; unsent/open proposal protection; relay and backup copies",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "retention",
+        "options"
+      ]
+    },
+    {
+      "class": "conversation-outbox",
+      "period": "1 year",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "Read-only counts use received_at for messages and created_at for outbox; count is not erasure.",
+      "layers": {
+        "counts": "SOURCE",
+        "configured": "UNKNOWN",
+        "code": "UNKNOWN",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Owner-channel filter code; private database design. Historical 2026-11-07 H08 partly live on G phone, not current owner/ACL acceptance",
+      "missing": "One-year coordinated message/outbox retention receipt; unsent and dedup exclusions; actual access review",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "retention",
+        "conversation",
+        "memory",
+        "live-audit"
+      ]
+    },
+    {
+      "class": "approval-change-release",
+      "period": "2 years",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "Read-only approval count exists; separate change files, audit logs and release journals are not a coordinated counted/purged set.",
+      "layers": {
+        "counts": "SOURCE",
+        "configured": "UNKNOWN",
+        "code": "UNKNOWN",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Private state design: 0700 directories / 0600 databases; current permissions, principals and ACLs UNKNOWN",
+      "missing": "Per-store 2-year enforcement receipts, audit continuity and undo protection; change/release coverage missing",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "retention",
+        "options",
+        "backup-doc"
+      ]
+    },
+    {
+      "class": "photo-originals",
+      "period": "1 year after last use",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "Retention report ages by sidecar received_at, NOT last use: age-basis conflict. Private web copies have separate coverage.",
+      "layers": {
+        "counts": "SOURCE",
+        "configured": "UNKNOWN",
+        "code": "UNKNOWN",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Media private-root and no-symlink code; originals may contain metadata; actual access and last-use inventory UNKNOWN",
+      "missing": "Last-use basis agreement/evidence; expiry receipt; undated/orphan decisions and backup/Git/phone copy coverage",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "retention",
+        "media",
+        "options"
+      ]
+    },
+    {
+      "class": "backups",
+      "period": "30 daily",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "Report counts timestamp-named backup folders; configured scheduling or folder count is not verified rotation. Historical 2026-11-07 backup timer had not run.",
+      "layers": {
+        "counts": "SOURCE",
+        "configured": "UNKNOWN",
+        "code": "UNKNOWN",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Backup design enforces private output/manifest modes; effective access, encryption and off-box scope UNKNOWN",
+      "missing": "Current 30-daily rotation receipt plus verified recovery window; deletion remains held",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "retention",
+        "backup-doc",
+        "live-audit"
+      ]
+    },
+    {
+      "class": "mac-messages",
+      "period": "Keep messages: 1 Year",
+      "basis": "H21 recorded proposal; dated recommendation approval conditional, owner agreement unverified",
+      "mechanism": "Mac runbook proposes UI setting, explicitly UNVERIFIED until attended step 18; not a setting read or expiry measurement.",
+      "layers": {
+        "counts": "NOT-COUNTED",
+        "configured": "UNKNOWN",
+        "code": "UNKNOWN",
+        "installed": "UNKNOWN",
+        "observed": "UNKNOWN"
+      },
+      "measured": "Current live scope/date UNKNOWN; source inspection 2026-11-16T03:39:16.821759+00:00; historical H21 audit 2026-11-07 only",
+      "access": "Mac Messages account/device/provider access UNKNOWN; no account or device inspection",
+      "missing": "Sanitized dated actual setting and observed device/provider expiry coverage; owner phone copies independent",
+      "verdict": "UNVERIFIED/HOLD",
+      "refs": [
+        "operations",
+        "g1606",
+        "mac-runbook",
+        "options"
+      ]
+    }
+  ],
+  "limits": [
+    "This is source inspection plus reused sanitized historical receipts, not a current transport/storage measurement. No live store, credential, config, service or Mac was read.",
+    "HASS-RETAIN-1 is referenced as later enforcement in OPERATIONS.md:86 and as planned work in HASS-LIVE-AUDIT-1:271; a reference is not a completion receipt.",
+    "The 2026-11-07 H21 receipt says retention periods not decided/nothing deletes. Preserve its date and scope: inbox/relay partial clearing code exists, so that historical shorthand is not proof of universal absence of clearing.",
+    "RETENTION-OPTIONS.md and HANDOVER.md still leave owner decisions open; comparison periods 7/30/90 days are not selected defaults. They do not silently supersede the dated G recommendation approval.",
+    "Configured periods are UNKNOWN here, not read from host configuration. Implemented clearing, installed/enabled mechanisms and observed enforcement remain distinct.",
+    "Photo last-use versus received-at and relay-row versus picture-metadata coverage conflicts remain HOLD; missing evidence is not zero retained items.",
+    "Read-only counts do not prove expiry. SQL NULL is not proof of erasure from SQLite free pages, backups, Git, Messages, provider or device copies. No legal/compliance/global-erasure conclusion is supplied.",
+    "Existing historical audit locator reports/AUDIT-AVOCADO-HASS-2026-11-01.md:99 is inventory context; that path is absent from inspected repo main, so no current digest or independent receipt is invented.",
+    "Decision locators are operator-local sanitized excerpts; digests bind retained excerpt bytes, not the whole log. Repo-source digests bind full inspected files; capture time is not enforcement time.",
+    "No live enforcement, owner contact, access/credential change, send, restart or deletion occurred. Actual policy agreement and acceptance remain with the owner; missing facts remain with existing custodians. Stop after this report.",
+    "Mechanical validation is REVIEW_REQUIRED, not semantic acceptance or permission to install/apply. No ongoing framework or production CI registry is changed."
+  ]
+}

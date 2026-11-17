@@ -544,17 +544,18 @@ def plan_contact(slots, ctx):
         if (stop := CONTACT_CHECKS["phone-ten-digits"](clean, texts_of(ctx), ctx)):
             raise stop
         clean["phone"] = phone_digits(phone)
-    if clear and store is not None and not store.get("phone"):
+    new_address = {k: v for k, v in (("streetAddress", street), ("town", town))
+                   if v and not (store is not None and _spaced(store.get(k, "")) == _spaced(v))}  # a part that is already there is left out
+    no_phone = store is not None and not store.get("phone")
+    if clear and no_phone and not new_address:
         raise SkillStop("There is no phone number on the site, so there is nothing to take off.")
     if (stop := CONTACT_CHECKS["not-already-true"](clean, texts_of(ctx), ctx)):
         raise stop
     ops = []
     if phone and not (store is not None and store.get("phone") == clean["phone"]):
         ops.append({"op": "store.set_phone", "args": {"phone": clean["phone"]}})
-    if clear:
+    if clear and not no_phone:  # an already-absent phone has nothing to clear; the address change still goes ahead
         ops.append({"op": "store.clear_phone", "args": {}})
-    new_address = {k: v for k, v in (("streetAddress", street), ("town", town))
-                   if v and not (store is not None and _spaced(store.get(k, "")) == _spaced(v))}  # a part that is already there is left out
     if new_address:
         ops.append({"op": "store.set_address", "args": new_address})
     return ops

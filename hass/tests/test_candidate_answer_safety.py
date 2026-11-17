@@ -107,8 +107,11 @@ class CandidateConversationTests(fixtures.SkillCase):
         if expired:
             self.now += timedelta(minutes=openreq.TTL_MINUTES, seconds=1)
         else:
-            self.assertEqual(self.say("no"), "no-target")
-            self.replies()
+            calls = len(self.asked)
+            self.assertEqual(self.say("no"), "cancelled")
+            self.assertEqual(self.replies(), ["Okay, I've dropped that question"])
+            self.assertEqual(len(self.asked), calls)
+            self.assertIsNone(self.live())
         calls = len(self.asked)
         self.script("2", {"question": "Which product should I change?"})
         self.assertEqual(self.say("2"), "question")
