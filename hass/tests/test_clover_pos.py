@@ -97,6 +97,22 @@ class ViewTests(PosCase):
         self.assertNotIn("Sunshine olive oil 5", pos.drops(snapshot, snaps, T0))
         self.assertIn("Sunshine olive oil", pos.drops(snapshot, snaps, T0).split("Left out:")[1])
 
+    def test_an_item_whose_latest_count_is_missing_is_left_out_not_zero_sold(self):
+        # oil 10 -> no count in the latest read (terminal): left out and incomplete, never "0 sold" and never a complete total.
+        snapshot, snaps = self.with_series((3, ["10", "50", "14", "0", "7.5", None]), (0.0, [None, "50", "14", "0", "7.5", None]))
+        left = []
+        names = [i.name for i, _ in pos.drop_rows(snapshot, snaps, T0, 1, left)]
+        self.assertEqual((left, "Sunshine olive oil" in names), (["Sunshine olive oil"], False))
+        self.assertIn("Left out: Sunshine olive oil", pos.drops(snapshot, snaps, T0))
+        self.assertIn("incomplete", pos.summary(snapshot, snaps, T0, CONTENT, LINKS))
+
+    def test_an_item_missing_in_the_middle_and_back_later_is_still_left_out(self):
+        snapshot, snaps = self.with_series((3, ["10", "50", "14", "0", "7.5", None]), (2, [None, "50", "14", "0", "7.5", None]),
+                                           (0.0, ["5", "50", "14", "0", "7.5", None]))
+        left = []
+        pos.drop_rows(snapshot, snaps, T0, 1, left)
+        self.assertEqual(left, ["Sunshine olive oil"])
+
     def test_summary_and_totals_say_incomplete_when_items_are_left_out(self):
         mid = ["25", "50", "14", "0", None, None]
         snapshot, snaps = self.with_series((3, ["25", "50", "14", "0", "9", None]), (2, mid), (0.0, ["11", "40", "0", "0", "7.5", None]))
@@ -110,7 +126,7 @@ class ViewTests(PosCase):
         self.assertNotIn("incomplete", pos.summary(self.snapshot, self.snaps, T0, CONTENT, LINKS))
 
     def test_label_in_every_reply_shape(self):
-        for snaps, text in (([], GONE), (self.snaps[-1:], GONE), ([(T0 - timedelta(hours=2), {i: Decimal(c or 0) for i, c in zip(IDS, NOW_COUNTS)})],
+        for snaps, text in (([], GONE), (self.snaps[-1:], GONE), ([(T0 - timedelta(hours=2), {i: Decimal(c) for i, c in zip(IDS, NOW_COUNTS) if c is not None})],
                                                                    f"Sold today ({LABEL}): nothing, no count dropped")):
             self.assertEqual(pos.drops(self.snapshot, snaps, T0), f"{text} {NOTE}")
         self.assertIn(LABEL, GONE)

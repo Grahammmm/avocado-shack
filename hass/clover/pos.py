@@ -33,7 +33,7 @@ def since_day(now, days):
 def drop_rows(snapshot, snaps, now, days, unsure=None):
     """[(item, units)] biggest first, or None when no earlier count covers the period. units = the sum of the positive drops of the item's count
     between consecutive reads from one hour before Pacific midnight of the first day up to the read now (a rise is a restock: ignored, never
-    negative). An item with a count now that is missing from some read of the period has no number and is appended to `unsure`: never guessed."""
+    negative). An item seen in an earlier read that is missing a count in any read, the latest included, of the period has no number and is appended to `unsure`: never guessed."""
     start = datetime.combine(since_day(now, days), time.min, reads.PACIFIC) - timedelta(hours=1)
     series = [c for t, c in sorted(snaps, key=lambda s: s[0]) if start <= t < snapshot.fetched_at]
     if not series:
@@ -41,9 +41,9 @@ def drop_rows(snapshot, snaps, now, days, unsure=None):
     series.append({i.id: i.stock for i in snapshot.items if i.stock is not None})
     rows, vague = [], []
     for item in snapshot.items:
-        if item.stock is None or not any(item.id in c for c in series[:-1]):
+        if not any(item.id in c for c in series[:-1]):
             continue
-        if not all(item.id in c for c in series):
+        if not all(item.id in c for c in series):   # also the case when the latest read has no count (item.stock is None)
             vague.append(item.name)
             continue
         counts = [c[item.id] for c in series]
