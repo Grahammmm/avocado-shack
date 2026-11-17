@@ -259,6 +259,6 @@ def read(state, identity):
             return None, reachable
         try:
             items = tuple(_item(r) for r in db.execute(f"SELECT {', '.join(COLUMNS)} FROM items ORDER BY name, id"))
-        except (sqlite3.Error, ValueError, ArithmeticError):
+        except (sqlite3.Error, ValueError, ArithmeticError, TypeError):   # TypeError: valid JSON that is not a list (null, number, bool)
             return None, False
     return Snapshot(items, as_of), reachable
