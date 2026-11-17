@@ -10,13 +10,64 @@ nothing changes. A question about something else (a hike, sign-ups, the website,
 the message goes on to the usual handling. "how many <x>" / "is <x> in stock" are claimed only when they use stock words or <x> names
 a till item.
 """
-import re
+import json, re, secrets  # noqa: E401
+from dataclasses import replace
+from decimal import Decimal
 
 from hass import voice
-from hass.clover import cache, reads
+from hass.clover import cache, drafts as d, reads, reports
+from hass.clover.apply import ApplyEngine
 from hass.clover.config import from_settings
+from hass.clover.mapper import (CATEGORIES, MapError, cents_from_text, format_money, norm_name, parse_item, parse_items,
+                                parse_site_product, resolve_exact)
 
 WRITE_REPLY = "I can read the till but I can't change it yet."
+# HASS-CLOVER-4: the owner's till changes by fixed words (docs/hass/CLOVER.md section 5), tried only with a write engine attached.
+TILL_WRITES = (("received", re.compile(r"(?:we )?received (?P<n>\d+(?:\.\d+)?) (?:of )?(?P<q>.+)", re.I)),
+               ("price", re.compile(r"change (?:the )?price (?:of|for) (?P<q>.+?) to (?P<n>\$?[\d,]+(?:\.\d+)?)", re.I)),
+               ("set", re.compile(r"set (?!(?:the )?price\b)(?:the count of )?(?P<q>.+?) to (?P<n>\d+(?:\.\d+)?)", re.I)),
+               ("sold_out", re.compile(r"(?P<q>.+?) (?:is |are )?(?:now )?sold out", re.I)),
+               ("new", re.compile(r"new (?:till )?item ?: ?(?P<q>.+)", re.I)),
+               ("hide", re.compile(r"(?P<v>hide|show) (?P<q>.+?) on the till", re.I)))
+CODED, SITE_OPS = re.compile(r"(yes|no|undo) ([0-9a-f]{8})"), frozenset({"product.set_availability", "product.clear_availability"})
+HOW = "I change the till only with a few fixed sentences, like " + voice.quote("set Sunshine olive oil to 7") + ". Say help to see them all."
+NOT_OWNER = "I only change the till for the owner, in his own chat. Nothing was changed."
+TILL_DOWN, SITE_UNKNOWN = "I can't reach the till, so nothing was changed.", "I couldn't check the website for that item, so nothing was prepared."
+NOT_DONE = {"failed": "I sent that to the till, but when I read it back it did not show the change. I stopped there; nothing else was changed.",
+            "uncertain": "I couldn't tell whether the till took that change. I won't send it again; please check that item on the till."}
+SITE_NOT_YET = "The till is updated; the website is not yet. Tell me again if the website still needs it."
+HELP = "Till (each needs your yes and its code): " + "; ".join(map(voice.quote, (
+    "received 12 Sunshine olive oil", "set Sunshine olive oil to 7", "Sunshine olive oil is sold out", "new item: Sunshine olive oil, 12.50, pantry",
+    "change price of Sunshine olive oil to 14.00", "hide Sunshine olive oil on the till", "show Sunshine olive oil on the till", "undo <code>"))) + "."
+
+
+class BundleEngine(ApplyEngine):
+    """HASS-CLOVER-4: CLOVER-3's engine plus a website word riding on a count (to 0, or up from 0): never a till field, never read back."""
+
+    def offer(self, draft, *, sender, chat):
+        if (sender, chat) not in self.owners or ";+;" in chat or any(o.get("op") not in SITE_OPS for o in draft.site_ops):
+            raise d.DraftRefused(NOT_OWNER)
+        if draft.kind == "set_hidden":   # wording only (not hashed): drafts.build_set_hidden states the 'before' backwards
+            w = ("showing", "hidden")
+            draft = replace(draft, lines=(draft.lines[0], f"  On the till: {w[draft.before['hidden']]} -> {w[draft.after['hidden']]}", *draft.lines[2:]))
+        with self.journal.locked() as db:
+            self._gate(db, draft.undo_of)
+            code = secrets.token_hex(4)
+            db.execute("INSERT INTO changes VALUES(?,?,?,?,?,'draft',NULL,NULL)", (code, json.dumps(draft.to_dict()), sender, chat, self.clock() + 600))
+        return code, draft.render(code)
+
+    _matches = staticmethod(lambda entry, raw: ApplyEngine._matches({**entry, "after": {k: v for k, v in entry["after"].items() if k != "site"}}, raw))
+
+    def undo(self, code, *, sender, chat, site=lambda item_id: None):
+        with self.journal.locked() as db:   # CLOVER-3's undo, given the linked website product so its word goes back too
+            row = db.execute("SELECT result FROM changes WHERE code=? AND status='applied' AND sender=? AND chat=?", (code, sender, chat)).fetchone()
+            if not row:
+                raise d.DraftRefused("That code is not a till change I made, so there is nothing to undo.")
+            e = json.loads(row[0])
+            draft = d.build_undo(e, parse_item(self._client().get_item(e["result_item_id"])), self.config, site_product=site(e["result_item_id"]))
+        return self.offer(draft, sender=sender, chat=chat)
+
+
 NEVER_READ = "I haven't been able to read the till yet, so I don't have a count to give you. Ask me again in a little while."
 DOWN_NO_DATA = "I can't reach the till right now, so I don't have a count to give you."
 
@@ -58,14 +109,24 @@ def _query(q):
 
 
 class TillDesk:
-    """Reads the cache under `state`; holds no token and makes no network call."""
+    """Reads the cache under `state`; holds no token and makes no network call (HASS-CLOVER-4 writes go through `engine` only)."""
+    HELP, SITE_NOT_YET = HELP, SITE_NOT_YET
 
-    def __init__(self, state, settings, read=cache.read):
-        self.state, self.config, self._read = state, from_settings(settings), read
+    def __init__(self, state, settings, read=cache.read, engine=None):
+        self.state, self.config, self._read, self.engine = state, from_settings(settings), read, engine   # engine: a BundleEngine, or None (read-only)
         self.identity = cache.identity_of(self.config)   # only this till's cache is read (RETURN t_54d7c993)
 
     def __repr__(self):
         return "TillDesk(read-only)"
+
+    def first(self, text, sender, chat):
+        """Till words before the commands: (yes|no|undo, code) of this sender's till change here, or `show <item> on the till`."""
+        t = _clean(text) if self.engine is not None else ""
+        if t.startswith("show ") and t.endswith(" on the till"):
+            return self._till_write(text)
+        if m := CODED.fullmatch(t):
+            with self.engine.journal.locked() as db:
+                return (m[1], m[2]) if db.execute("SELECT 1 FROM changes WHERE code=? AND sender=? AND chat=?", (m[2], sender, chat)).fetchone() else None
 
     def parse(self, text):
         """("low",), ("how_many", query), ("in_stock", query), ("sold_out", query), ("write",) or None (not a till message).
@@ -83,9 +144,21 @@ class TillDesk:
                 if "pred" in m.re.groupindex and m.group("pred") == "sold out":
                     kind = "sold_out"
                 return self._claim(t, kind, q)
+        if self.engine is not None and (till := self._till_write(text)):
+            return till
         if not SITE_WORDS.search(t) and (PRICE_WRITE.search(t) or TILL_WRITE.search(t) or STOCK_WRITE.search(t)):
             return ("write",)
         return None
+
+    def _till_write(self, text):
+        """("till", kind, query, value) for a fixed sentence; `X is sold out` only when X is exactly a till item (else the site's words)."""
+        o = re.sub(r"\s+", " ", (text or "").replace("\u2019", "'").strip()).rstrip(".!")
+        for kind, pattern in TILL_WRITES:
+            if m := pattern.fullmatch(o):
+                q = _query(m["q"].lower()) if kind != "new" else m["q"].strip()
+                if kind == "sold_out" and not ((snap := self._snapshot()[0]) is not None and reads.exact(q, snap)):
+                    return None
+                return ("till", kind, q, m["v"].lower() if kind == "hide" else m.groupdict().get("n"))
 
     def _claim(self, text, kind, query):
         if not query:
@@ -124,10 +197,12 @@ class TillDesk:
         except Exception:  # no names, prices, paths or input exceptions in the reply
             return "I couldn't compare the till with the website. Nothing changed."
 
-    def answer(self, intent, now):
+    def answer(self, intent, now, *, sender=None, chat=None, worktree=None):
         """The reply text for a parsed intent at `now` (timezone-aware). Till names and SKUs are quoted (shown as the till has them)."""
         if intent[0] == "write":
-            return WRITE_REPLY
+            return WRITE_REPLY if self.engine is None else HOW
+        if intent[0] in ("till", "no", "undo", "yes"):
+            return voice.till(self._change(intent, sender, chat, worktree))
         snapshot, reachable = self._snapshot()
         if snapshot is None:
             return NEVER_READ if reachable else DOWN_NO_DATA
@@ -138,3 +213,61 @@ class TillDesk:
         if intent[0] == "sold_out":
             return reads.in_stock(intent[1], snapshot, now, reachable, show=voice.quote, sold_out=True)
         return reads.how_many(intent[1], snapshot, now, reachable, show=voice.quote)
+
+    def _change(self, intent, sender, chat, worktree):
+        if intent[0] == "yes":   # only while paused; the real yes is `approve`
+            return f"Changes are paused, so I haven't changed the till. Say resume changes, then reply yes {intent[1]}."
+        if intent[0] == "no":
+            with self.engine.journal.locked() as db: db.execute("UPDATE changes SET status='dropped' WHERE code=? AND sender=? AND chat=? AND status='draft'", (intent[1], sender, chat))  # noqa: E701
+            return "Okay, I've cancelled that. Nothing changed on the till."
+        try:
+            if intent[0] == "undo":
+                return self.engine.undo(intent[1], sender=sender, chat=chat, site=lambda iid: self._site(iid, worktree))[1]
+            return self.engine.offer(self._draft(*intent[1:], worktree), sender=sender, chat=chat)[1]
+        except MapError as exc:   # DraftRefused, NotExact, a bad price and SITE_UNKNOWN are plain sentences for the owner
+            return str(exc)
+        except Exception:  # noqa: BLE001 - the till could not be read or the token is not usable: nothing is drafted
+            return TILL_DOWN
+
+    def _draft(self, kind, query, value, worktree):
+        """The drafts.py draft for one fixed sentence, from the till as it is now (a live read, never the cache)."""
+        client, cfg = self.engine._client(), self.config
+        items = parse_items(client.list_items())[0]
+        if kind == "new":
+            parts = [p.strip() for p in query.split(",")]
+            category = parts.pop().lower() if len(parts) > 2 and parts[-1].lower() in CATEGORIES else None
+            if len(parts) < 2: raise MapError("Send a new item like this: new item: Sunshine olive oil, 12.50, pantry")  # noqa: E701
+            cents, cats = cents_from_text(parts.pop(), cfg.max_price_cents), [(c.get("id"), c.get("name")) for c in client.list_categories()]
+            return d.build_create_item(", ".join(parts), cents, category, items, cfg, categories=cats)
+        hidden = [i for i in items if i.hidden and norm_name(i.name) == norm_name(query)]
+        item = hidden[0] if value == "show" and len(hidden) == 1 else resolve_exact(query, items)
+        if kind in ("price", "hide"):
+            return d.build_set_price(item, cents_from_text(value, cfg.max_price_cents), cfg) if kind == "price" else d.build_set_hidden(item, value == "hide", cfg)
+        site = self._site(item.id, worktree)
+        return (d.build_received(item, Decimal(value), cfg, site_product=site) if kind == "received" else
+                d.build_set_stock(item, Decimal(value) if kind == "set" else 0, cfg, site_product=site))
+
+    def _site(self, item_id, worktree):
+        """The website product explicitly linked to this till item (the private links table), or None."""
+        try:
+            content, links = reports.read_inputs(self.state, worktree()) if worktree else ({"products": []}, {})
+            pid = next((p for p, link in links.items() if isinstance(link, dict) and link.get("cloverId") == item_id), None)
+            record = next((r for r in content["products"] if r.get("id") == pid), None) if pid else None
+            return parse_site_product(record) if record else None
+        except Exception as exc:  # noqa: BLE001 - unreadable: no draft rather than a till change without its website word
+            raise MapError(SITE_UNKNOWN) from exc
+
+    def approve(self, code, *, sender, chat):
+        """`yes <code>`: (reply, website ops to publish now under that yes). The engine re-checks owner, chat, code, expiry, cap, item."""
+        try:
+            status = self.engine.handle("yes " + code, sender=sender, chat=chat, group=";+;" in chat)
+        except MapError as exc:
+            return voice.till(str(exc)), ()
+        except Exception:  # noqa: BLE001 - no token, no till: nothing was sent
+            return TILL_DOWN, ()
+        if status != "applied":
+            return NOT_DONE[status], ()
+        with self.engine.journal.locked() as db: e = json.loads(db.execute("SELECT result FROM changes WHERE code=?", (code,)).fetchone()[0])  # noqa: E701
+        now = {"set_price": lambda a: f"now costs {format_money(a['price'])}", "set_stock": lambda a: f"now shows {a['stock']}",
+               "create_item": lambda a: f"is in it, SKU {a['sku']}", "set_hidden": lambda a: "is hidden" if a["hidden"] else "is showing"}[e["kind"]](e["after"])
+        return voice.till(f"Done, and I read the till back: {e['label']} {now}. To put it back, say undo {code}."), tuple(e["site_ops"])

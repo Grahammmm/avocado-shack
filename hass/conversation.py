@@ -934,6 +934,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self._polish_jobs = []  # HASS-IMAGE-1: stored photos to clean up in the background, after the commit
         self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
         self._intake_receipt(msg)  # HASS-INTAKE-2: a bare photo's first question goes out before the photo is fetched
+        self._till_job = None  # HASS-CLOVER-4: the till code an owner's yes approved; the till is called only after this message is saved
         try:
             with self._tx():
                 disposition, approved = self._handle(msg, last_try)
@@ -943,6 +944,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 self._reply(HELD_REPLY.format(code=held.code))
                 self._record(msg, "approval-held")
             return "approval-held"
+        if self._till_job is not None: self._till_apply(msg, self._till_job, apply)
         for job in self._label_jobs:  # AV1537-15: after the commit, never holding the lock; AV2152-04: a failed one never stops the next
             try: self._read_label(*job)
             except Exception: continue  # noqa: BLE001 - no label is today's reply exactly
@@ -955,6 +957,27 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._outcome(self._row(approved["row_id"]), out, self._now())
         self._verify_pending()
         return disposition
+
+    def _till_apply(self, msg, code, apply) -> None:
+        """HASS-CLOVER-4: an owner's till yes, after its message is saved (never inside the write transaction). The till part first; only
+        when it is read back does a website word riding on it go through the normal draft, approval, editor.apply and outcome."""
+        text, ops = (HELD_REPLY, ()) if not apply else self.till.approve(code, sender=self._asker, chat=msg.chat)
+        with self._tx(): self._reply(text, long_ok=True)
+        if not ops: return
+        try:
+            out, now = self.editor.prepare(list(ops)), self._now()
+            if out.get("result") != "ok": raise ValueError("site")
+            with self._tx():
+                row = self._propose(out["draft"], msg.sender, now)
+                self.db.execute("INSERT INTO approvals(sender, chat, provider_id, change_id, draft_hash, base, expires_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                (msg.sender, msg.chat, msg.provider_id, row["change_id"], row["draft_hash"], row["base"], row["expires_at"], _iso(now)))
+                self._move(row, "approved")
+                self._audit("approved", row, approval="A1", approved_by=self._audit_role(msg.chat))
+            res = self.editor.apply(row["change_id"], row["draft_hash"], **({"chat": msg.chat} if getattr(self.editor, "routes_chat", False) else {}))
+            with self._tx(): self._outcome(self._row(row["row_id"]), res, now)
+        except Exception:  # noqa: BLE001 - the till part stands; the owner is told the website is not done
+            with self._tx(): self._reply(self.till.SITE_NOT_YET)
+        self._verify_pending()
 
     def _is_owner(self, msg) -> bool:
         """The owner chat with an owner sender, or (gIsOwner) G's own one-to-one chat with a G sender. Nobody else."""
@@ -995,7 +1018,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         memory = None if command or msg.attachments > 0 else read_memory(msg.text)
-        till = None if command or memory or msg.attachments > 0 or self.till is None else self.till.parse(msg.text)  # HASS-CLOVER-2
+        first = None if msg.attachments > 0 or self.till is None else self.till.first(msg.text, self._asker, msg.chat)  # HASS-CLOVER-4: till code words, before commands
+        if first: command = memory = None
+        till = first or (None if command or memory or msg.attachments > 0 or self.till is None else self.till.parse(msg.text))  # HASS-CLOVER-2
         if memory and memory[0] == "memory" or till: expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
         for row in expired:
             self._move(row, "expired", expires_at=_iso(self._expiry(row)))
@@ -1008,9 +1033,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             disposition = self._memory(msg, *memory)
             self._record(msg, disposition)
             return disposition, None
-        if till:  # HASS-CLOVER-2: a till question (or a till change, which is refused): read-only, from the private cache, no model
-            self._reply(self.till.answer(till, now), long_ok=True)
-            disposition = "till-write-refused" if till[0] == "write" else "till-read"
+        if till:  # HASS-CLOVER-2/4: a till read, or a till change by fixed words: never the interpreter or a model; a yes runs after the commit
+            if till[0] == "yes" and not (paused := self._paused()): self._till_job = till[1]
+            else: self._reply(self.till.answer(till, now, sender=self._asker, chat=msg.chat, worktree=lambda: editor_mod._load(str(self.sdir))[2]), long_ok=True)
+            disposition = "paused" if till[0] == "yes" and paused else {"write": "till-write-refused", "till": "till-draft", "yes": "till-approved", "no": "till-cancelled", "undo": "till-undo"}.get(till[0], "till-read")
             self._record(msg, disposition)
             return disposition, None
         if msg.attachments <= 0 and (unknown := parse_unknown_code(msg.text)) is not None and not any(
@@ -1957,7 +1983,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
     def _command(self, msg, now, verb, code) -> str:
         if verb == "help":
             registry = self.dispatch.registry if self.dispatch else None
-            self._reply(HELP_TEXT + "\n\n" + capabilities.help_section(registry), long_ok=True)
+            self._reply(HELP_TEXT + "\n\n" + capabilities.help_section(registry) + ("\n\n" + self.till.HELP if self.till is not None and self.till.engine is not None else ""), long_ok=True)  # HASS-CLOVER-4: till words when it can change the till
             return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
