@@ -95,5 +95,8 @@ class WorktreeNulTests(base.BackupTestCase):
             with self.subTest(wt=wt):
                 self.bind(backup, wt)
                 self.assertEqual(statebackup.verify(str(backup)), {"result": "ok", "files": count})
+        # Backup names have one-second resolution; use a separate destination.
+        self.bk = self.tmp / "restore-backups"
+        self.bk.mkdir(mode=0o700)
         backup2 = self.backup()
         self.assertEqual(statebackup.restore(str(backup2), str(new), str(self.drill_wt))["result"], "ok")
