@@ -218,6 +218,11 @@ class RunnerTest(unittest.TestCase):
                          {"needs Michael's devices", "release step"})
         self.assertEqual((acceptance.MAP["H23"], acceptance.MAP["H24"][0]),
                          (("test_auto_policy",), "test_design_check"))
+        self.assertEqual(acceptance.MAP["H04"], ("test_hike_ops", "test_route_add",
+                         "test_route_edit", "test_route_hide", "test_hike_samples"))
+        self.assertEqual(acceptance.MAP["H13"], ("test_store_ops", "test_store_intro",
+                         "test_store_headline", "test_store_story",
+                         "test_store_home_image", "test_store_clear_home_image"))
 
 
 UNEXP = textwrap.dedent("""
