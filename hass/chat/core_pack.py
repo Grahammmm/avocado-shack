@@ -43,13 +43,19 @@ class CorePack:
             row = self.db.execute("SELECT approved_at FROM approvals WHERE change_id = ? AND draft_hash = ? AND base = ? AND expires_at = ? "
                                   "AND chat = ? ORDER BY id DESC LIMIT 1", bind).fetchone()
             raw = row["approved_at"] if row is not None else None
+        except (ValueError, TypeError, OverflowError, OSError, KeyError, IndexError, sqlite3.Error): return TIME_UNKNOWN
+        return self._history_time(raw)
+
+    @staticmethod
+    def _history_time(raw) -> str:
+        try:
             if not isinstance(raw, str): return TIME_UNKNOWN
             at = datetime.fromisoformat(raw[:-1] + "+00:00" if raw.endswith(("Z", "z")) else raw)
             if at.tzinfo is None or at.utcoffset() is None: return TIME_UNKNOWN
             at = at.astimezone(LOCAL_TZ)
             hour = at.hour % 12 or 12
             return f"{_DAYS[at.weekday()]} {_MONTHS[at.month - 1]} {at.day} {hour}:{at.minute:02d} {'am' if at.hour < 12 else 'pm'}"
-        except (ValueError, TypeError, OverflowError, OSError, KeyError, IndexError, sqlite3.Error): return TIME_UNKNOWN
+        except (ValueError, TypeError, OverflowError, OSError): return TIME_UNKNOWN
 
     def _history_line(self, r) -> str:
         """One `history` line. HASS-OWNERS-2: with several owners it says whose change it was (`Mike's change`, `Your change`)."""
@@ -69,7 +75,10 @@ class CorePack:
             if e["target"] == "site" and e.get("draft"):
                 row = self.db.execute("SELECT * FROM drafts WHERE code = ?", (e["draft"],)).fetchone()
                 if row is not None and row["state"] in HISTORY_STATES: lines.append(self._history_line(row))
-            elif e["target"] == "till": lines.append(audit_mod.till_line(e))
+            elif e["target"] == "till":
+                when = self._history_time(e.get("at"))  # the audit entry's approved step, not its later result
+                head, sep, state = audit_mod.till_line(e).partition(":")
+                lines.append(f"{head}, {when if when == TIME_UNKNOWN else 'approved ' + when}{sep}{state}")
             if len(lines) >= limit: return lines
         try: logged = self.audit.approved_drafts()
         except Exception: logged = set()  # noqa: BLE001,E701
