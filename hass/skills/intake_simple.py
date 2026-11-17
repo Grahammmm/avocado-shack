@@ -1,0 +1,143 @@
+"""Single editable catalog draft. Typed finances are private; photo text is data, never ops.
+
+The catalog still has no public price field. This adapter uses its existing product.add
+model and the ordinary editor/approval/live-policy gates, not a second publication path.
+"""
+import re
+
+from hass import newitem, voice
+from hass.content_model import CATEGORIES, FORBIDDEN_TEXT, INVISIBLE_RE, TEXT_LIMITS
+from hass.skills import item_intake as ii
+
+NEXT = re.compile(r"^(?:what['’]?s next|what next|next|\?)[?!. ]*$", re.I)
+
+
+def public_sources(slots):
+    details = photo_details(slots.get("intake") or {})
+    return [v for value in details.values() for v in (value if isinstance(value, list) else [value]) if isinstance(v, str)]
+
+
+def photo_details(got):
+    # An earlier explicit rejection remains an edit, even though fresh reads no longer ask for consent.
+    if got.get("photo_confirmed") is False: return {}
+    details = dict(got.get("photo_details") or {})
+    if "printed_claims" in details:
+        details["printed_claims"] = [c for i, c in enumerate(details["printed_claims"])
+                                    if got.get("photo_claim_answers", {}).get(str(i)) is not False]
+    return details
+
+
+def fill(slots, texts):
+    """Fill only absent facts. Never invent a maker location or create a maker profile."""
+    out = dict(slots)
+    got = dict(out.get("intake") or {})
+    got["simple"] = True
+    out["intake"] = got
+    details = photo_details(got)
+    for source, target in (("name", "name"), ("brand", "maker"), ("category", "shelf")):
+        if details.get(source) and not out.get(target):
+            out[target] = details[source]
+    if not out.get("name"): return out
+    out.setdefault("maker", "Producer not identified")
+    out.setdefault("shelf", newitem.stated_shelf(" ".join(texts)) or "pantry")
+    if not out.get("description") or details and not got.get("photo_applied"):
+        parts = [out.get("description") or details.get("description") or out.get("name", "")]
+        parts += [details[k] for k in ("size", "count", "colour", "finish", "materials") if details.get(k)]
+        parts += details.get("features", []) + details.get("printed_claims", []) + details.get("warnings", [])
+        kept, overflow = [], []
+        for part in dict.fromkeys(p.rstrip(".") + "." for p in parts if p):
+            if len(" ".join([*kept, part])) <= TEXT_LIMITS["product"]["description"]:
+                kept.append(part)
+            else:
+                overflow.append(part)
+        out["description"] = " ".join(kept)
+        if details: got["photo_applied"] = True
+        if overflow: got["left_off_label"] = overflow
+    if not out.get("availability") and got.get("qty") is not None:
+        out["availability"] = "yes" if got["qty"] > 0 else "no"
+    return out
+
+
+def edit(slots, text, asked=None):
+    """Return changed slots and public source text. Unstructured replies become copy, not a yes/no loop."""
+    out = dict(slots)
+    got = dict(out.get("intake") or {})
+    public, finance = ii.caption_answers(text)
+    got.update(finance)
+    out["intake"] = got
+    if asked == "price" and not finance and (value := ii._parse_money(text)) is not None:
+        got["price"] = value
+        return out, ""
+    if not public or NEXT.fullmatch(public.strip()) or ii.SKIP.fullmatch(public.strip()):
+        return out, ""
+    if match := re.fullmatch(r"(?:remove|leave out|delete)\s+(.+)", public, re.I):
+        target = match[1].strip().rstrip(".")
+        description = out.get("description", "")
+        out["description"] = re.sub(re.escape(target) + r"[.!]?", "", description, flags=re.I).strip()
+        out["description"] = " ".join(out["description"].split())
+        return out, ""
+    if match := re.fullmatch(r"(?:name|call it|rename(?: it)?(?: to)?)\s*:?\s+(.+)", public, re.I):
+        out["name"] = match[1]
+        out["image_alt"] = match[1]
+        return out, match[1]
+    if match := re.fullmatch(r"(?:brand|maker)\s*:?\s+(.+)", public, re.I):
+        out["maker"] = match[1]
+        return out, match[1]
+    if match := re.fullmatch(r"(?:category|shelf)\s*:?\s+(.+)", public, re.I):
+        out["shelf"] = match[1].lower()
+        return out, match[1]
+    stock = {"in stock": "yes", "sold out": "no", "low on stock": "limited"}.get(public.strip().lower())
+    if stock:
+        out["availability"] = stock
+        return out, public
+    copy = re.sub(r"^(?:add|description)\s*:\s*", "", public, flags=re.I)
+    if asked == "name":
+        out["name"] = copy
+    elif copy:
+        out["description"] = " ".join([out.get("description", ""), copy]).strip()
+    return out, copy
+
+
+def plan(slots, content):
+    """Existing catalog schema only; the editor independently enforces holds, twins and photo safety."""
+    name = slots.get("name") or ""
+    brand = slots.get("maker") or "Producer not identified"
+    description = slots.get("description") or name
+    args = {"name": name, "brand": brand, "category": slots.get("shelf"), "description": description}
+    for key, value in args.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("The listing needs " + key + ".")
+        if len(value) > TEXT_LIMITS["product"][key] or any(bad in value for bad in FORBIDDEN_TEXT) or INVISIBLE_RE.search(value):
+            raise ValueError("I can't use that wording. The listing is unchanged; send the change in plain words.")
+        if "$" in value or newitem.PRICE_RE.search(value):
+            raise ValueError("Prices stay in your private notes, not the website wording. The listing is unchanged.")
+    if args["category"] not in CATEGORIES:
+        raise ValueError("That shelf isn't on the website. The listing is unchanged.")
+    if slots.get("photo"):
+        args.update(photo=slots["photo"], imageAlt=slots.get("image_alt") or name)
+    # Reuse an identified catalog maker only; a new printed brand needs no invented town/story.
+    matches = [key for key, maker in content.makers.items() if maker.get("name", "").casefold() == brand.casefold()]
+    if len(matches) == 1:
+        args["producerKey"] = matches[0]
+    ops = [{"op": "product.add", "args": args}]
+    if slots.get("availability"):
+        ops.append({"op": "store.confirm_selection", "args": {slots["availability"]: [newitem.next_product_id(content)]}})
+    return ops
+
+
+def preview(slots, code=None):
+    got = slots.get("intake") or {}
+    lines = ["Here's the listing:", "Name: " + voice.quote(slots.get("name") or "Not read yet"),
+             "Brand: " + voice.quote(slots.get("maker") or "Producer not identified"),
+             "Description: " + voice.quote(slots.get("description") or "Not read yet"),
+             "Category: " + voice.quote(slots.get("shelf") or "pantry")]
+    if slots.get("availability"):
+        lines.append("Availability: " + {"yes": "in stock", "no": "sold out", "limited": "low on stock"}[slots["availability"]])
+    lines += ii.private_lines(got)
+    if got.get("left_off_label"):
+        lines.append("More label text (not in the listing; it has no room): " + voice.quote(" ".join(got["left_off_label"])))
+    details = got.get("photo_details") or {}
+    if details.get("barcode"): lines.append("Label barcode (kept private): " + voice.quote(details["barcode"]))
+    if code:
+        lines.append("Reply 'yes " + code + "' to put it on the website, or tell me what to change.")
+    return "\n".join(lines)

@@ -1,22 +1,14 @@
-"""HASS-INTAKE-2: the full intake interview of ``item.add`` (a new product: what Mike knows when it comes in).
+"""Private intake parsing and storage for item.add.
 
-G, 2026-11-16: a picture sent to Hass starts a routine intake, so everything useful for the listing is collected now, even
-though the website shows no prices: how many were bought, how it is sold and at what price, who made it, what it is, when it
-expires. This module is the pure part: the questions (one at a time, plain words, docs/hass/VOICE.md), the reading of each
-answer (``skip`` and ``don't know`` work for every question and are never replaced by a guess), the private summary Mike sees
-beside the draft, and the private record that is saved after his ``yes <code>``.
+With itemIntake enabled, dispatch + intake_simple build one editable catalog preview
+instead of interviewing the owner. Typed quantity/cost/price are separated from public
+copy before any interpreter call, retained with the open request, and saved privately
+only after the existing owner approval applies the listing. The catalog has no price
+field; those amounts never enter its ops, generated files or screenshot.
 
-Nothing here touches the website. The PUBLIC listing stays what ``item.add`` already drafts (photo, name, maker line,
-description, stock word). Quantity, unit, price, cost, dates, threshold and every descriptor stay PRIVATE: they travel in the
-open request's slots, are kept beside the draft in the conversation's own state, and are written to ``item-intake.jsonl`` in the
-state folder (0600, like ``maker-sources.jsonl``) only when the draft is applied. They are never in an op, a preview, a
-generated file or a message to the interpreter. A claim Mike states (organic, ...) is kept as his unverified word.
-
-A fixed reading takes only a COMPLETE, unambiguous answer; anything else goes once to the interpreter (``hass/answer_reader.py``,
-first try only) whose value is checked again here, else he is asked again, and a third unreadable answer is left blank and said so.
-
-Switched on by the setting ``itemIntake: true`` (default off, like ``houseRender``). The dispatcher (hass/skills/dispatch.py)
-asks each question and keeps the answers out of the owner's joined texts, so a price he types is never read as a public word.
+The pure single-answer helpers remain for bounded parsing and existing skill-toolkit
+consumers. They are not the production conversation flow. Photo claims need no separate
+consent; the editable draft is the review. Existing live-policy holds still apply.
 """
 from __future__ import annotations
 
@@ -120,9 +112,14 @@ def caption_answers(caption):
     for part in re.split(r"[,;\n]+|\s+and\s+(?=(?:sell|selling|bought|paid|\d)\b)", caption, flags=re.I):
         text = part.strip().rstrip(".!")
         got = {}
-        money = re.fullmatch(r"(?:bought|paid|cost|sell|selling|price)(?:\s+(?:it|them))?(?:\s+for)?\s+(\$?\d+(?:\.\d{1,2})?)(?:\s+each)?", text, re.I)
+        purchase = re.fullmatch(r"bought\s+(\d+)\s+at\s+\$?(\d+(?:\.\d{1,2})?)(?:\s+each)?", text, re.I)
+        money = re.fullmatch(r"(?:bought|paid|cost|sell|selling|price)(?:\s+(?:it|them))?(?:\s+(?:for|at))?\s*:?\s+(\$?\d+(?:\.\d{1,2})?)(?:\s+each)?", text, re.I)
         qty = re.fullmatch(r"(?:bought\s+|got\s+|stock\s*:?\s*)?(\d+(?:\.\d+)?)\s+(of them|each|[a-z]+)", text, re.I)
-        if money:
+        if purchase:
+            parsed = _parse_qty(purchase[1])
+            cost = _parse_money(purchase[2])
+            if parsed and cost is not None: got.update(qty=parsed[0], qty_unit="each", cost=cost)
+        elif money:
             key = "cost" if re.match(r"bought|paid|cost", text, re.I) else "price"
             value = _parse_money(money[1])
             if value is not None: got[key] = value
@@ -137,51 +134,6 @@ def caption_answers(caption):
             if key in answers and answers[key] != value: conflicts.add(key)
             answers[key] = value
     return "; ".join(public), {k: v for k, v in answers.items() if k not in conflicts}
-
-
-def photo_step(intake):
-    """Explicit confirmation of the reading, then one separate yes/no per printed claim."""
-    details = intake.get("photo_details") or {}
-    if not details: return None
-    if "photo_confirmed" not in intake:
-        lines = []
-        for key, value in details.items():
-            if key != "printed_claims":
-                lines.append(key.replace("_", " ") + ": " + _q("; ".join(value) if isinstance(value, list) else value))
-        return "photo_confirm", "I read the photo as " + "; ".join(lines) + ". Use these details for this product?"
-    if intake.get("photo_confirmed") is True:
-        decisions = intake.get("photo_claim_answers", {})
-        for i, claim in enumerate(details.get("printed_claims", [])):
-            if str(i) not in decisions:
-                return f"photo_claim_{i}", f"The label says: {_q(claim)}. Put that on the website?"
-    return None
-
-
-def photo_answer(key, text, slots):
-    """A plain explicit yes is the ONLY inclusion path. Skip/no never grants consent."""
-    got = dict(slots.get("intake") or {})
-    words = _clean(text)
-    if ABORT.fullmatch(words): return {"abort": True}
-    yes = bool(re.fullmatch(r"yes[.!]*", words, re.I))
-    if not yes and not (NO_FULL.fullmatch(words) or SKIP.fullmatch(words)):
-        step = photo_step(got)
-        return {"again": "Please say yes, no or skip. " + (step[1] if step else "")}
-    extra, said = {}, ""
-    details = got.get("photo_details") or {}
-    if key == "photo_confirm":
-        got["photo_confirmed"] = yes
-        if yes:
-            for source, target in (("name", "name"), ("brand", "maker"), ("category", "shelf")):
-                if details.get(source) and not slots.get(target):
-                    extra[target] = details[source]
-            # Only the confirmed identification supports public source-word checks.
-            said = " ".join(details.get(k, "") for k in ("name", "brand", "category"))
-            if details.get("size") and "variety" not in got: got["variety"] = details["size"]
-    else:
-        index = key.removeprefix("photo_claim_")
-        got["photo_claim_answers"] = {**got.get("photo_claim_answers", {}), index: yes}
-        if yes: said = details["printed_claims"][int(index)]
-    return {"slots": {"intake": got, **extra}, "public": bool(said), "text": said}
 
 
 def photo_description(intake):
