@@ -154,6 +154,7 @@ const allowed=req=>{
             await card.locator('img').first().evaluate(e=>e.decode()).catch(()=>{});
             if(target.status==='active'){
               checks.description=(await card.locator('.food-description').textContent())===target.description;
+              if('price' in target){const price=card.locator('.product-price');checks.priceShown=(await price.count()===1)&&await price.isVisible()&&(await price.textContent())===target.price;}
               if('availability' in target){const a=card.locator('.availability');checks.availabilityShown=(await a.count()?await a.first().textContent():null)===target.availability;}
               if(target.image){const img=card.locator('img').first();await img.scrollIntoViewIfNeeded();
                 checks.imageShown=await img.evaluate((e,src)=>e.getAttribute('src')===src&&e.complete&&e.naturalWidth>0,target.image).catch(()=>false);}

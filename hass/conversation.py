@@ -782,34 +782,38 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if (self.settings.get("itemIntake") is True and target.get("kind") == "product"
                 and any(call.get("op") == "product.add" for call in draft.get("ops", []))):
             target.update(cardOnly=True, image=record["after"].get("image"))
+            if price := record["after"].get("sellingPrice"):
+                target["price"] = "$" + price
         return self.previewer.capture(rendered["files"], target,
                                       self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
             if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
 
-    def _proposal_reply(self, row, draft, prefix="", notes=(), shot=None, retry=False):
+    def _proposal_reply(self, row, draft, prefix="", notes=()):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06). HASS-CHAT-1: a picture
         that could not be drawn is never silent: the text says so first, the proposal is complete without it, and the picture
-        is tried once more PREVIEW_RETRY_SECONDS later (retry_previews, outside this message's transaction)."""
+        is tried once more later for ordinary proposals. Simple listings answer once; '?' can ask for a new card."""
         reasons = self._live_reasons(draft) if self.settings.get("liveSite") else []
         if reasons: self._save_private(row, reasons)
-        shots, head, tail = [], "", ""
-        if self.previewer is not None:
-            shot = shot or self._capture(draft)
-            shots = [shot["png"]] if shot.get("png") else []
-            if not shot["ok"]:
-                self._problem("error", "preview-failed", excerpt=preview_mod.failure_kind(shot.get("error")))
-                if shots: tail = "\nThe picture may not show every part of this change; the list above is exactly what will change."
-                else:
-                    head, tail = PREVIEW_FAILED_HEAD, "\n" + PREVIEW_RETRY_LINE
-                    if not retry: self._queue_preview_retry(row)
-        text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._named(row), head=head, undo=_is_undo(row),
-                                      live_site=self.settings.get("liveSite") if draft.get("environment", {}).get("env") != "sandbox" else None,
-                                      now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
         listing = getattr(self, "_intake_listing", None)
         if listing is None and not _is_undo(row) and self.dispatch is not None and self.dispatch.simple_intake():
             req = self.requests.get(self._chat(), self._now())
             if req and req["draft_code"] == row["code"] and req["slots"].get("intake", {}).get("simple"):
                 listing = req["slots"]
+        shot, shots, head, tail = None, [], "", ""
+        if self.previewer is not None:
+            shot = self._capture(draft)
+            shots = [shot["png"]] if shot.get("png") else []
+            if not shot["ok"]:
+                self._problem("error", "preview-failed", excerpt=preview_mod.failure_kind(shot.get("error")))
+                if shots: tail = "\nThe picture may not show every part of this change; the list above is exactly what will change."
+                else:
+                    head = PREVIEW_FAILED_HEAD
+                    if not listing:
+                        tail = "\n" + PREVIEW_RETRY_LINE
+                        self._queue_preview_retry(row)
+        text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._named(row), head=head, undo=_is_undo(row),
+                                      live_site=self.settings.get("liveSite") if draft.get("environment", {}).get("env") != "sandbox" else None,
+                                      now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
         if listing:
             from hass.skills import intake_simple
             if shot is not None and not shot.get("ok"):
@@ -918,15 +922,12 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             taken += 1
             row = self._row(due["row_id"])
             if row is None or row["state"] != "proposed" or row["change_id"] != due["change_id"] or self._expiry(row) <= now: continue
+            req = self.requests.get(due["chat"], now) if self.requests else None
+            if req and req.get("draft_code") == row["code"] and req["slots"].get("intake", {}).get("simple"):
+                continue  # discard a listing retry queued by an older worker version
             draft = self.editor.show(row["change_id"]).get("draft")
             shot = self._capture(draft) if isinstance(draft, dict) else {"ok": False, "png": None}
             with self._tx(), self._answer_to(due["chat"]):
-                req = self.requests.get(due["chat"], now) if self.requests else None
-                if req and req.get("draft_code") == row["code"] and req["slots"].get("intake", {}).get("simple"):
-                    # The same final-state reply owns text, picture, current code and
-                    # policy disposition. Never append an unconditional yes on retry.
-                    self._proposal_reply(row, draft, shot=shot, retry=True)
-                    continue
                 what = q(row["summary"])
                 allowed = not (self._live_reasons(draft) if self.settings.get("liveSite") else [])
                 confirm = f" To go ahead, reply {q('yes ' + row['code'])}." if allowed else ""
@@ -1996,6 +1997,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(said)
             return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
         if self.skills_mode != dispatch_mod.DEFAULT_MODE and self.dispatch.photo_skills():  # SKILLS-FW-3 (spec 2.7): the photo joins the open request
+            prior = self.db.execute("SELECT COALESCE(MAX(id), 0) FROM outbox").fetchone()[0]
             intake_answers = None
             if self.settings.get("itemIntake") is True:
                 caption, intake_answers = item_intake.caption_answers(caption)
@@ -2006,8 +2008,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             if (self.labels is not None and self.settings.get("itemIntake") is True and req
                     and req["skill"] == "item.add" and req["state"] == "open" and req["attachments"] == [sha]
                     and not req["slots"].get("intake", {}).get("photo_details")):
-                question = self.db.execute("SELECT id FROM outbox WHERE chat = ? AND sent_at IS NULL ORDER BY id DESC LIMIT 1",
-                                           (msg.chat,)).fetchone()
+                question = self.db.execute("SELECT id FROM outbox WHERE chat = ? AND id > ? AND sent_at IS NULL ORDER BY id DESC LIMIT 1",
+                                           (msg.chat, prior)).fetchone()
                 self._label_jobs.append((None, sha, (as_text, req["request_id"], now, question["id"] if question else None)))
             return done
         code = self._photo_row(sha, msg, now)
