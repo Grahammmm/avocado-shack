@@ -223,8 +223,12 @@ def _design_call(sdir: Path, ops):
     call = ops[0] if len(ops) == 1 else {}
     cid = str((call.get("args") or {}).get("changeId"))
     if call.get("op") == "history.revert" and CHANGE_ID_RE.fullmatch(cid):
-        try: return call if _read(sdir / "changes" / f"{cid}.json").get("kind") == "design" else None
-        except (OSError, ValueError, AttributeError): return None  # the history op names an unreadable record
+        try:
+            rec = sdir / "changes" / f"{cid}.json"
+            st = os.lstat(rec)
+            if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_CONFIG: return None  # link, FIFO, socket, folder, too big: never opened
+            return call if _read(rec).get("kind") == "design" else None
+        except (OSError, ValueError, AttributeError, RecursionError): return None  # the history op names an unreadable record
     return call if call.get("op") == "design.apply" else None
 
 def _design_compute(call, wt: Path, sdir: Path) -> dict:
