@@ -148,9 +148,27 @@ class LookChangeTest(unittest.TestCase):
                     self.assertEqual(self.snapshot(), before)
         self.assert_live_untouched()
 
+    def test_guard_rejects_multiline_url_and_every_srcset_candidate(self):
+        for tag in ('<img src=\n"https://evil.example/a.png">',
+                    '<img srcset="/safe.png 1x, https://evil.example/x.png 2x">'):
+            with self.subTest(tag=tag):
+                self.assertEqual(look_guard.check(page_add(tag), "add a picture"), "url")
+
+        for old, new in (('<img src=\n"/safe.png">', '<img src=\n"https://evil.example/a.png">'),
+                         ('<img srcset="/safe.png 1x,\n/safe2.png 2x">',
+                          '<img srcset="/safe.png 1x,\nhttps://evil.example/x.png 2x">')):
+            with self.subTest(new=new):
+                self.assertEqual(look_guard.check(diff("hass/templates/index.html", PAGE + old + "\n", PAGE + new + "\n"),
+                                                  "add a picture"), "url")
+
+    def test_guard_rejects_unquoted_unstated_visible_claim(self):
+        self.assertEqual(look_guard.check(page_add('<img src="/x" alt=organic>'), "add a picture"), "claims")
+
     def test_guard_allows_owner_said_claim_and_relative_urls(self):
         self.assertIsNone(look_guard.check(page_add("<p>All organic</p>"), "add a line saying All organic"))
         self.assertIsNone(look_guard.check(page_add("<img src=\"/assets/a.png\" alt=\"Shop front\">"), "add a picture"))
+        self.assertIsNone(look_guard.check(page_add('<img srcset="/a.png 1x, /b.png 2x" alt=organic>'),
+                                           "add an organic picture"))
 
     def test_daily_cap_refuses_fourth_draft_before_codex(self):
         for code in ("a1", "a2", "a3"):

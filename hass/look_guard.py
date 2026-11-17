@@ -18,11 +18,11 @@ TAG = re.compile(r"<\s*/?\s*(?:script|form|input|iframe|embed|object|base|frame|
 HANDLER = re.compile(r"(?<![\w-])on[a-z]+\s*=", re.I)
 SCRIPTY = re.compile(r"javascript:|vbscript:|expression\(|-moz-binding|behavior:", re.I)  # judged with whitespace removed
 PROTECTED = re.compile(r"<\s*/?\s*(?:meta|link|head)(?![\w-])|content-security-policy", re.I)
-URL_VALUES = re.compile(r"""\b(?:src|href|srcset|action|poster|xlink:href)\s*=\s*["']?\s*([^"'\s>]*)"""
-                        r"""|@import\s+(?:url\(\s*)?["']?\s*([^"')\s;]*)|url\(\s*["']?\s*([^"')\s]*)""", re.I)
+URL_ATTR = re.compile(r"""(?<![\w:-])(srcset|src|href|action|poster|xlink:href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.I)
+URL_VALUES = re.compile(r"""@import\s+(?:url\(\s*)?["']?\s*([^"')\s;]*)|url\(\s*["']?\s*([^"')\s]*)""", re.I)
 OFF_SITE = re.compile(r"^(?:[a-z][a-z0-9+.\-]*:|[/\\]{2})|\{\{", re.I)  # a scheme, //host, or a slot (value unknown)
 CSS_ESCAPE = re.compile(r"\\([0-9a-fA-F]{1,6})\s?|\\(.)")
-VISIBLE_ATTR = re.compile(r"""\b(?:alt|title|aria-label|placeholder)\s*=\s*["']([^"']*)""", re.I)
+VISIBLE_ATTR = re.compile(r"""(?<![\w:-])(?:alt|title|aria-label|placeholder)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.I)
 CSS_CONTENT = re.compile(r"""content\s*:\s*(["'])(.*?)\1""", re.I)
 HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@")
 
@@ -35,7 +35,7 @@ def _decode(line: str) -> str:
 
 
 def parse(diff: str):
-    """[(path, added, removed)] of a plain unified diff, or a refusal reason. Hunk lines are counted from each @@ header,
+    """[(path, added, removed, new-side hunks)] of a plain unified diff, or a refusal reason. Hunk lines are counted from each @@ header,
     so a content line spelled like a header ("--- x") stays content."""
     files, old, left = [], None, [0, 0]
     for line in diff.splitlines():
@@ -44,13 +44,16 @@ def parse(diff: str):
             if kind not in " +-\\" or (kind in " -" and not left[0]) or (kind in " +" and not left[1]): return "mode"
             left = [left[0] - (kind in " -"), left[1] - (kind in " +")]
             if kind in "+-": files[-1][1 if kind == "+" else 2].append(line[1:])
+            if kind in " +": files[-1][3][-1].append((kind == "+", line[1:]))
         elif old is not None:  # the line after "--- a/X" must be "+++ b/X": /dev/null or a rename is refused
             if not (line.startswith("+++ b/") and old.startswith("a/") and old[2:] == line[6:].strip()): return "mode"
             if old[2:] not in MODEL_FILES: return "path"
-            files.append((old[2:], [], []))
+            files.append((old[2:], [], [], []))
             old = None
         elif line.startswith("--- "): old = line[4:].strip()
-        elif (hunk := HUNK.match(line)) and files: left = [int(hunk[1] or 1), int(hunk[2] or 1)]
+        elif (hunk := HUNK.match(line)) and files:
+            left = [int(hunk[1] or 1), int(hunk[2] or 1)]
+            files[-1][3].append([])
         elif not line.startswith(("diff --git ", "index ", "\\")): return "mode"  # mode, rename, binary or stray text
     return "mode" if left != [0, 0] or old is not None else files
 
@@ -58,7 +61,20 @@ def parse(diff: str):
 def visible_text(path: str, lines) -> str:
     text = "\n".join(map(_decode, lines))
     if path.endswith(".css"): return "\n".join(m[2] for m in CSS_CONTENT.finditer(text))
-    return "\n".join([re.sub(r"<[^>]*>|\{\{[^}]*\}\}", " ", text), *VISIBLE_ATTR.findall(text)])
+    return "\n".join([re.sub(r"<[^>]*>|\{\{[^}]*\}\}", " ", text),
+                      *(next((v for v in m.groups() if v is not None), "") for m in VISIBLE_ATTR.finditer(text))])
+
+
+def changed_tags(hunks):
+    """Complete new-side tags touching an added line, including unchanged hunk context."""
+    for hunk in hunks:
+        lines = [(added, _decode(line)) for added, line in hunk]
+        text = "\n".join(line for _, line in lines)
+        for tag in re.finditer(r'''<(?:[^>"']|"[^"]*"|'[^']*')*>''', text):
+            first = text.count("\n", 0, tag.start())
+            last = text.count("\n", 0, tag.end())
+            if any(added for added, _ in lines[first:last + 1]):
+                yield tag.group()
 
 
 def check(diff: str, owner_text: str) -> str | None:
@@ -70,7 +86,13 @@ def check(diff: str, owner_text: str) -> str | None:
         if TAG.search(line): return "tag"
         if HANDLER.search(line): return "handler"
         if SCRIPTY.search(re.sub(r"[\s\x00-\x1f]+", "", line)): return "javascript"
-        if any(OFF_SITE.search(v) for m in URL_VALUES.finditer(line) for v in m.groups() if v): return "url"
+    for _, lines, _, hunks in files:
+        text = _decode("\n".join(lines)) + "\n" + "\n".join(changed_tags(hunks))
+        for m in URL_ATTR.finditer(text):
+            value = next((v for v in m.groups()[1:] if v is not None), "")
+            values = (candidate.strip().split()[0] for candidate in value.split(",") if candidate.strip()) if m[1].lower() == "srcset" else [value.strip()]
+            if any(OFF_SITE.search(v) for v in values): return "url"
+        if any(OFF_SITE.search(v) for m in URL_VALUES.finditer(text) for v in m.groups() if v): return "url"
     if any(PROTECTED.search(_decode(x)) for x in added + removed): return "protected"
     now, was = ("\n".join(visible_text(f[0], f[i]) for f in files) for i in (1, 2))
     if claims.unstated({"records": [{"collection": "look", "key": "page", "before": {"text": was}, "after": {"text": now}}]},
