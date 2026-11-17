@@ -102,41 +102,67 @@ def enabled(ctx) -> bool:
     return getattr(ctx, "intake", False) is True
 
 
-def caption_answers(caption):
+def commerce_answers(value):
+    """Strict model boundary: bool/float/extra keys and out-of-range quantities are not commerce facts."""
+    keys = {"price_cents", "cost_cents", "quantity"}
+    if not isinstance(value, dict) or set(value) != keys: return {}
+    if any(v is not None and (type(v) is not int or not 0 <= v <= (100000 if k == "quantity" else 99999999))
+           for k, v in value.items()): return {}
+    out = {k: "%d.%02d" % divmod(value[source], 100) for k, source in (("price", "price_cents"), ("cost", "cost_cents"))
+           if value[source] is not None}
+    if value["quantity"] is not None: out.update(qty=value["quantity"], qty_unit="each")
+    return out
+
+
+def caption_answers(caption, extracted=None):
     """Separate complete typed finance clauses from public words. Never called on image output.
 
     Ambiguous clauses stay untouched for the existing refusal/question path, not guessed.
     Repeated conflicting answers are not seeded.
     """
     public, answers, conflicts = [], {}, set()
-    for part in re.split(r"[,;\n]+|\s+and\s+(?=(?:sell|selling|bought|paid|\d)\b)", caption, flags=re.I):
-        text = part.strip().rstrip(".!")
+    model = commerce_answers(extracted)
+    for part in re.split(r"[,;\n]+|\s+and\s+(?=(?:(?:I\s+)?(?:will\s+)?)?(?:sell|selling|bought|paid|\d)\b)", caption, flags=re.I):
+        text = re.sub(r"^(?:I\s+)?(?:will\s+)?", "", part.strip().rstrip(".!"), flags=re.I)
         got = {}
-        purchase = re.fullmatch(r"bought\s+(\d+)\s+at\s+\$?(\d+(?:\.\d{1,2})?)(?:\s+each)?", text, re.I)
-        money = re.fullmatch(r"(?:bought|paid|cost|sell|selling|price)(?:\s+(?:it|them))?(?:\s+(?:for|at))?\s*:?\s+(.+)", text, re.I)
-        qty = re.fullmatch(r"(?:(bought|got|stock|qty|quantity)\s*:?\s*)?(\d+(?:\.\d+)?)(?:\s+(of them|each|[a-z]+))?", text, re.I)
+        purchase = re.fullmatch(r"bought\s+(\d+)(?:\s+of\s+(?:these|them))?\s+at\s+(.+)", text, re.I)
+        money = re.fullmatch(r"(?:bought|paid|cost|sell|selling|price|retail)(?:\s+(?:it|them))?(?:\s+(?:for|at))?\s*:?\s+(.+)", text, re.I)
+        qty = re.fullmatch(r"(?:(bought|got|have|stock|qty|quantity)\s*:?\s*)?(\d+(?:\.\d+)?)(?:\s+(of them|of these|each|[a-z]+))?", text, re.I)
         if purchase:
-            parsed = _parse_qty(purchase[1])
+            count = _parse_count(purchase[1])
             cost = _parse_money(purchase[2])
-            if parsed and cost is not None: got.update(qty=parsed[0], qty_unit="each", cost=cost)
+            if count is not None and cost is not None: got.update(qty=count, qty_unit="each", cost=cost)
         elif qty and (qty[1] or qty[3]):
-            unit = "each" if not qty[3] or qty[3].lower() == "of them" else qty[3]
+            unit = "each" if not qty[3] or qty[3].lower() in ("of them", "of these") else qty[3]
             parsed = _parse_qty(qty[2] + " " + unit)
             if parsed: got.update(qty=parsed[0], qty_unit=parsed[1])
-            elif qty[1] and qty[1].lower() == "stock" and unit in UNIT_WORDS and _parse_count(qty[2]) == 0:
+            elif unit in UNIT_WORDS and _parse_count(qty[2]) == 0:
                 got.update(qty=0, qty_unit=UNIT_WORDS[unit])
+        elif re.fullmatch(r"\$\d+(?:\.\d{1,2})?(?:/(?:lb|each)|\s+per\s+(?:lb|pound|item|each))?", text, re.I):
+            value = _parse_money(text)
+            if value is not None: got["price"] = value
+        elif match := re.fullmatch(r"(\d+)\s+(lb|pounds?|items?|each)\s+in\s+stock", text, re.I):
+            got.update(qty=int(match[1]), qty_unit=UNIT_WORDS.get(match[2].lower(), "each"))
         elif money:
             key = "cost" if re.match(r"bought|paid|cost", text, re.I) else "price"
             value = _parse_money(money[1])
             if value is not None: got[key] = value
         if not got:
-            if part.strip(): public.append(part.strip())
+            if part.strip() and not (model and re.search(r"\b(?:bought|paid|cost|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$", text, re.I)):
+                public.append(part.strip())
             continue
+        if "qty" in got and (type(got["qty"]) is not int or not 0 <= got["qty"] <= 100000):
+            got.pop("qty")
+            got.pop("qty_unit", None)
         if money and text.lower().endswith("each"): got["sold_by"] = "item"
         for key, value in got.items():
             if key in answers and answers[key] != value: conflicts.add(key)
             answers[key] = value
-    return "; ".join(public), {k: v for k, v in answers.items() if k not in conflicts}
+    if re.search(r"(?:/|per\s+)(?:lb|pound)\b", caption, re.I): answers["sold_by"] = "pound"
+    elif re.search(r"(?:/|per\s+)(?:each|item)\b", caption, re.I): answers["sold_by"] = "item"
+    out = {k: v for k, v in {**answers, **model}.items() if k not in conflicts}
+    if "qty" in out and answers.get("qty_unit"): out["qty_unit"] = answers["qty_unit"]
+    return "; ".join(public), out
 
 
 def photo_description(intake):
@@ -315,6 +341,7 @@ def _parse_count(text):
 def _parse_money(text):
     """"9.57" from a COMPLETE answer ("$9.57", "9.5", "9 dollars", "9 dollars and 57 cents", "nine dollars", "57 cents"), else None."""
     t = _clean(text).lower().rstrip(".!").strip()
+    t = re.sub(r"\s+(?:each|apiece|per\s+(?:item|unit))$", "", t)
     cents = None
     if m := re.fullmatch(r"\$?\s*(\d{1,6})(?:\.(\d{1,2}))?(?:\s*(?:dollars?|bucks?|usd))?(?:\s*(?:each|apiece|(?:per|a|/)\s*[a-z]+))?", t):
         cents = int(m.group(1)) * 100 + int((m.group(2) or "0").ljust(2, "0"))

@@ -12,7 +12,7 @@ from hass.tests.test_conversation import ConversationTestCase, _ops
 
 REGISTRY = load_registry()
 AGAIN = interpret_check.AGAIN
-SHELVES = "There is no {} shelf. Which shelf: Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread or Flowers?"
+SHELVES = "There is no {} shelf. Which shelf: Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread, Flowers or General?"
 AVAIL = "Should it say Available today, Limited or Sold out?"
 HOURS = {"op": "store.set_hours", "args": {"hours": ["Daily 8am"]}}
 
