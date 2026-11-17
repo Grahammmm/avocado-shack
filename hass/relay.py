@@ -96,10 +96,14 @@ def _photo_data(b):
     return 1 <= len(data) <= PHOTO_MAX and sha256(data).hexdigest() == b["sha256"]
 
 
+# Mac-side fetch failures keep their real BridgeError code so a refusal is diagnosable; the host treats each as fetch-failed.
+FETCH_DIAG = ("size-mismatch", "empty", "http-error", "transport-error", "not-json", "shape", "attachment-count", "password-unreadable")
+PHOTO_REFUSED_CODES = ("too-large", "unsupported-type", "fetch-failed") + FETCH_DIAG
+
 SHAPES = {  # body op -> [(keys, validator)]; picture has request and answer forms
     "photo": [({"op", "guid", "idx", "count", "sha256", "b64"}, _photo_data)],
     "photo-refused": [({"op", "guid", "idx", "count", "code"}, lambda b: _photo_count(b)
-                       and type(b["code"]) is str and b["code"] in ("too-large", "unsupported-type", "fetch-failed"))],
+                       and type(b["code"]) is str and b["code"] in PHOTO_REFUSED_CODES)],
     "photo-ok": [({"op", "guid", "idx"}, _photo_index)],
     "pull": [({"op", "max"}, lambda b: type(b["max"]) is int and 1 <= b["max"] <= 5)],
     "ack": [({"op", "ids"}, lambda b: _ints(b["ids"], 1, 20))],

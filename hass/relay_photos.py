@@ -11,7 +11,7 @@ from hass import bridge_photos, media, memory, relay
 
 class PhotoRefused(media.Refused):
     def __init__(self, code, position):
-        if code == "fetch-failed":
+        if code == "fetch-failed" or code in relay.FETCH_DIAG:
             from hass.conversation import FETCH_FAILED
             Exception.__init__(self, code)
             self.code, self.reply = code, FETCH_FAILED

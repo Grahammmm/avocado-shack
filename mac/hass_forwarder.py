@@ -279,7 +279,8 @@ class Forwarder:
         code = None
         try: data = photos.fetch(msg.provider_id, msg.attachments)
         except Exception as exc:
-            code = "too-large" if isinstance(exc, bridge.BridgeError) and exc.code == "too-large" else "fetch-failed"
+            real = exc.code if isinstance(exc, bridge.BridgeError) else None  # a fixed code only: never a guid, URL or bytes
+            code = real if real == "too-large" or real in relay.FETCH_DIAG else "fetch-failed"
             data = [None] * msg.attachments
         for idx, raw in enumerate(data):
             remaining()
