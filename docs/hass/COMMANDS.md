@@ -112,7 +112,29 @@ the card label only, not the maker link. Example: `Add Test Orchard quince, bran
 still asks for any other missing required fact and never invents one; the draft still needs `yes <code>`, and `undo`
 works as for any change.
 
-A new item from a photo (a change request, needs `yes <code>`): send the photo with a few words (what it is, who makes it,
+With `itemIntake: true`, a single product photo and your words make **one editable listing preview**:
+name, brand, size, plain description, printed features/claims, shelf and any stock word you gave.
+The preview is the review: there is no separate product confirmation, interview, claim-by-claim question
+or “add claims” step. Send `bought 100 at $1, sell for $2` before, with or after the photo;
+Hass keeps the numbers for the same listing. Cost, quantity and selling price appear in a clearly private
+part of your chat preview and are saved to the private intake record after approval. The existing website
+catalog has no price/count fields, so those numbers are not published or sent to the interpreter.
+Normally only a missing selling price gets a question. If the picture cannot identify the item, Hass
+needs its name; if you start with text only, it needs the product photo required by the catalog.
+Unknown brand/location stays unknown; a new printed brand does not invent a maker profile or town.
+
+Edit the preview with `remove Made in USA`, `add: great for furniture`, `price 3`, `name Wood Glue`,
+`brand Gorilla` or `category pantry`. You get the updated preview with **the same code**; it refreshes
+the exact approval hash, not an approval. `What's next` or `?` repeats the current preview instead of
+getting stuck on a yes/no question. `yes <code>` applies the latest preview and `undo` still drafts an undo.
+Printed text is not independent verification: the existing live-policy holds for origin/organic,
+health and other protected claims still prevent publication where applicable and the preview says so.
+Forbidden text, photo-price filtering, expiry, pause and owner approval gates are unchanged. Long label
+text beyond the catalog description limit is explicitly listed as private overflow, not silently published.
+Nothing in this intake prepares or writes a till item. The till half of “both” remains separate.
+
+With `itemIntake` off, the earlier new-item flow is unchanged:
+a new item from a photo (a change request, needs `yes <code>`): send the photo with a few words (what it is, who makes it,
 which shelf, whether it is in). Hass asks one short question at a time for what is missing and shows one draft: the product, the
 maker when new, the picture, the description and the shelf check. One `yes <code>` saves all of it and one `undo` takes all of
 it back. The picture is made to match the others (an ivory square, the item in the middle). A photo on a busy background, or one

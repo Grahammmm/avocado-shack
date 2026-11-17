@@ -1,7 +1,8 @@
 """Read all useful visible product details from a metadata-free photo, for owner review.
 
-Prices and forbidden text are never offered. Claims stay separate from ordinary details;
-the intake asks before any claim can enter a website draft. Transport/routing is unchanged.
+Prices and forbidden text are never offered. Claims stay separate from ordinary details
+in the read receipt; the editable listing includes them by default, without per-claim
+questions. Independent live-policy holds and transport/routing are unchanged.
 """
 import base64
 import json

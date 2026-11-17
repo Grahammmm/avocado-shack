@@ -536,8 +536,6 @@ def intake_read(req, text, ctx) -> dict:
     """His answer to the open intake question: {"abort": True}, {"again": the question again} or {"slots": the slots it sets,
     "public": whether the answer may join his texts (only a maker's website), "note": a sentence to say first or None}."""
     key = (req.get("asked_slot") or "")[len(intake_mod.PREFIX):]
-    if key == "photo_confirm" or key.startswith("photo_claim_"):
-        return intake_mod.photo_answer(key, text, req["slots"])
     today = _today(ctx) or date.today()
     got = intake_mod.read(key, text, _intake(req["slots"]), today=today, asks=req.get("asks") or 1,
                           reader=(lambda k, words: ctx.intake_reader(k, words, today)) if getattr(ctx, "intake_reader", None) else None)
@@ -556,7 +554,7 @@ def intake_record(skill_name, slots, ctx, code, now):
         return None
     content = _content(ctx)
     maker = _clean(slots.get("maker"))
-    maker = None if not maker or DONT_KNOW.match(maker) else maker  # "I don't know" is not a maker's name
+    maker = None if not maker or maker == UNKNOWN_BRAND or DONT_KNOW.match(maker) else maker  # unknown is not a maker's name
     return intake_mod.record(code, clean_name(slots.get("name")), maker, _clean(slots.get("shelf")) or None,
                              _next_id(ctx, content), slots.get("photo"), got, now)
 
