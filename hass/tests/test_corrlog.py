@@ -208,6 +208,61 @@ class NeverRaises(LogCase):
         self.assertEqual(path.read_bytes(), before)
         self.assertEqual(sorted(p.name for p in self.state.rglob("*")), members)
 
+    BAD_EXCERPTS = ([], ["synthetic-canary"], {}, {"a": 1}, None, False, True, 0, 5)
+
+    def _excerpt_rows(self, when=None):
+        at = (when or self.now).isoformat()
+        good = lambda: {"at": at, "kind": "error", "reason": "healthy-control", "excerpt": "synthetic control"}
+        bad = [{"at": at, "kind": "error", "reason": "malformed-excerpt", "excerpt": e} for e in self.BAD_EXCERPTS]
+        return [good()] + bad + [good()], [good(), good()]
+
+    def test_non_string_excerpt_rows_skip_and_continue(self):
+        mixed, accepted = self._excerpt_rows()
+        path = self._write(mixed)
+        before = path.read_bytes()
+        self.assertEqual(self.log.rows(), accepted)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_missing_empty_and_text_excerpts_remain_accepted(self):
+        at = NOW.isoformat()
+        kept = [{"at": at, "kind": "error", "reason": "x"}, {"at": at, "kind": "error", "reason": "x", "excerpt": ""},
+                {"at": at, "kind": "error", "reason": "x", "excerpt": "café ünï"}]
+        self._write(kept)
+        self.assertEqual(self.log.rows(), kept)
+
+    def test_bad_excerpt_does_not_change_problems_or_weekly(self):
+        mixed, accepted = self._excerpt_rows()
+        self._write(mixed)
+        ref = self.state / "ref"
+        (ref / corrlog.FOLDER).mkdir(parents=True)
+        (ref / corrlog.FOLDER / f"{NOW:%Y-%m-%d}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in accepted), encoding="utf-8")
+        other = corrlog.CorrLog(ref, lambda: NOW)
+        for fn in (corrlog.problems_text, corrlog.weekly_line):
+            self.assertEqual(fn(self.log), fn(other))
+            self.assertNotIn("synthetic-canary", fn(self.log))
+        self.assertIn("2 times", corrlog.weekly_line(self.log))
+
+    def test_cli_problems_and_weekly_survive_bad_excerpts(self):
+        now = datetime.now(timezone.utc)
+        mixed, accepted = self._excerpt_rows(now)
+        path = self._write(mixed, now)
+        before = path.read_bytes()
+        ref = Path(tempfile.mkdtemp(dir=self.state))
+        (ref / corrlog.FOLDER).mkdir()
+        (ref / corrlog.FOLDER / path.name).write_text("".join(json.dumps(r) + "\n" for r in accepted), encoding="utf-8")
+        members = sorted(p.name for p in self.state.rglob("*"))
+        for what in ("problems", "weekly"):
+            got = []
+            for state in (self.state, ref):
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    self.assertEqual(corrlog.main([what, "--state", str(state)]), 0)
+                self.assertEqual(err.getvalue(), "")
+                got.append(out.getvalue())
+            self.assertEqual(got[0], got[1])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(sorted(p.name for p in self.state.rglob("*")), members)
+
     DEEP_ARRAY = "[" * 100000 + "0" + "]" * 100000
     DEEP_OBJECT = '{"a":' * 100000 + "0" + "}" * 100000
 

@@ -118,6 +118,7 @@ class CorrLog:
                 try: row = json.loads(raw)
                 except (ValueError, RecursionError): continue  # RecursionError: nesting beyond the decoder's depth
                 if isinstance(row, dict) and isinstance(row.get("kind"), str) and row["kind"] in KINDS and isinstance(row.get("at"), str):
+                    if "excerpt" in row and not isinstance(row["excerpt"], str): continue  # damaged row: skip only it
                     try: at = datetime.fromisoformat(row["at"])
                     except ValueError: continue
                     if at.tzinfo is not None and at >= cutoff: out.append((at, row))
