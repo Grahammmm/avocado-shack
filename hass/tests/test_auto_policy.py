@@ -75,17 +75,18 @@ class CheckOptInTest(unittest.TestCase):
         self.assertEqual(check_opt_in(ALL), [])
 
 
-class UnwiredTest(unittest.TestCase):
+class WiredTest(unittest.TestCase):
     def test_only_the_module_and_its_test_mention_it(self):
         out = subprocess.run(["git", "grep", "-l", "auto_policy", "--", "*.py"], cwd=ROOT, capture_output=True, text=True)
         self.assertIn(out.returncode, (0, 1))
-        self.assertEqual(out.stdout.split(), ["hass/acceptance.py", "hass/tests/test_acceptance_runner.py",
+        self.assertEqual(out.stdout.split(), ["hass/acceptance.py", "hass/auto_policy.py", "hass/stock_site.py", "hass/tests/test_acceptance_runner.py",
                                               "hass/tests/test_auto_policy.py",
                                               "hass/tests/test_auto_policy_dated.py",
                                               "hass/tests/test_auto_policy_shapes.py",
                                               "hass/tests/test_clear_availability.py",
-                                              "hass/tests/test_maker_hide_products.py"])  # no importer outside tests
-        self.assertIn("UNWIRED", auto_policy.__doc__ or "")
+                                              "hass/tests/test_maker_hide_products.py",
+                                              "hass/tests/test_stock_site.py"])  # exactly one production caller
+        self.assertIn("WIRED only by stock_site", auto_policy.__doc__ or "")
 
 
 if __name__ == "__main__":
