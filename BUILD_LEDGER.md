@@ -2419,3 +2419,115 @@ Branch rb/av0022-16 (AV0022-16, PR #225, merged as 7a4850feb321579c5da5db629f149
 Checks at PR head 645be367: `python3 -m unittest hass.tests.test_interpreter_eval -v` — 11 tests, OK; the full discover run was 1576 tests with one failure in `hass.tests.test_demo_negative`, which also failed at the merge base; PREPUSH-TESTS PASS (recorded in PR #225).
 
 Limits: Issue #1 (conversation and ops). Running `--live` is an operator step; no prompt change or scorer rule change, and cases use synthetic text only.
+
+## Site: published home-page photo (AV1422-01) — November 4, 2026
+
+Branch rb/av1422-01 (AV1422-01, PR #342, merged as 490b6bafbc629fdffa9ce6b6b69caa9a5a9f85d7). `sitegen.py --publish` also copies the home-page photo set with `store.set_home_image`, so the published home page shows it instead of a broken image; a photo shared with a product is copied once and a missing file or a symlink is refused. Without a home photo the published file set is unchanged.
+
+Checks at PR head 481ef00a: `python3 -B -m unittest hass.tests.test_publish_home_image hass.tests.test_publish hass.tests.test_store_home_image hass.tests.test_generated_io` — 40 tests, OK; the published site passed `storefront-mockup/static-site-qa.cjs`; PREPUSH-TESTS NOT-RUN (recorded in PR #342).
+
+Limits: Issue #2 (photos). No 404 page (AV1422-02), logo or favicon (AV1422-03), image sizes (AV1422-04) or clearing the photo (AV1422-12).
+
+## Site: published 404 page (AV1422-02) — November 4, 2026
+
+Branch rb/av1422-02 (AV1422-02, PR #344, merged as a2dcdd68cd2ff34d175db52b180ca7c819b0ebd2). `hass/templates/404.html` is rendered only in `publish_files` (`PUBLISH_PAGES`), with the shop header and footer, two links and `noindex`; `static-site-qa.cjs` serves it with status 404 for missing paths. `sitegen --check` and the editor pins are unchanged.
+
+Checks at PR head 77f0937b: `python3 -B -m unittest hass.tests.test_publish_404 hass.tests.test_publish hass.tests.test_content` — 38 tests, OK; `python3 hass/sitegen.py --check` ok; the published site passed `storefront-mockup/static-site-qa.cjs`; PREPUSH-TESTS NOT-RUN (recorded in PR #344).
+
+Limits: Site units have no GitHub issue; ledger sections stay in id order. No logo or favicon (AV1422-03), image sizes (AV1422-04), sitemap, robots or canonical links (they need G's domain decision); the template omits the address strip because it holds a slot.
+
+## Site: header logo and favicon (AV1422-03) — November 4, 2026
+
+Branch rb/av1422-03 (AV1422-03, PR #347, merged as 074742c0e243d9ef6fa78241d5a478857f326ab8). Page headers load a 22 KB `assets/logo-header.png` instead of the 223 KB `logo.png`, and every page links one `assets/favicon.png`; `logo.png` is byte-identical (its sha256 is pinned in `test_publish`) and the README says how both copies were made.
+
+Checks at PR head 72ec580d: `python3 -B -m unittest hass.tests.test_publish hass.tests.test_publish_404 hass.tests.test_content hass.tests.test_preview_overlay` — 49 tests, OK; the published site passed `storefront-mockup/static-site-qa.cjs`; PREPUSH-TESTS NOT-RUN (recorded in PR #347).
+
+Limits: Site units have no GitHub issue. No image width/height attributes (AV1422-04), social share images (they need G's domain decision) or apple-touch icons.
+
+## Site: image dimensions (AV1422-04) — November 4, 2026
+
+Branch rb/av1422-04 (AV1422-04, PR #354, merged as 281e5f9887bb3db08316a1af10d643ef318caa4e). The header logo, Michael's portrait and the default hero carry `width` and `height` equal to the files' real pixel sizes, and `.brand img` gets `height:auto` so the logo is not stretched. An owner-set home photo keeps none because its size is not stored.
+
+Checks at PR head c3cab7bb: `python3 -B -m unittest hass.tests.test_image_dimensions hass.tests.test_store_home_image hass.tests.test_store_clear_home_image hass.tests.test_publish hass.tests.test_publish_home_image hass.tests.test_content` — 59 tests, OK; the published site passed `storefront-mockup/static-site-qa.cjs` (the PR also edited `storefront-mockup/catalog-only-qa.cjs`); PREPUSH-TESTS NOT-RUN (recorded in PR #354).
+
+Limits: Site units have no GitHub issue. No lazy-loading of the trail map (AV1422-08), no product-card image sizes and no change to the 404 page.
+
+## Site: sample invitation past date (AV1422-05) — November 4, 2026
+
+Branch rb/av1422-05 (AV1422-05, PR #384, merged as 4ba289d34c5e8e47e9e3a073774acdd5e87d52e8). From the next Pacific day after the sample invitation's `startsAt`, `/hike` shows `Date to be confirmed` instead of a past date; an unparseable or missing date also shows it, never "Invalid Date". Real hikes and `hiking-preview.json` are unchanged.
+
+Checks at PR head 3c0d196e: the published site passed `storefront-mockup/static-site-qa.cjs` (fixed-clock checks); `python3 -B -m unittest hass.tests.test_content hass.tests.test_publish` — 31 tests, OK; PREPUSH-TESTS NOT-RUN (recorded in PR #384).
+
+Limits: Site units have no GitHub issue. The sample date in `hiking-preview.json` is not changed, and hiding the samples is AV1422-10.
+
+## Site: static hikes without invented counts (AV1422-06) — November 4, 2026
+
+Branch rb/av1422-06 (AV1422-06, PR #393, merged as 084dbeb99e19bb3d7eb28393c3d4c0eaafaeaab5). On the static site a real hike no longer shows "0 confirmed guests", and a hike with RSVPs on says "To join, ask at the Shack."; with the club service nothing changes. No invented guest count is shown: the static fallback carries `null`, not zero.
+
+Checks at PR head 512aad79: the published site passed `storefront-mockup/static-site-qa.cjs` (four synthetic hikes); `python3 -m unittest hass.tests.test_hike_ics` — 4 tests, OK; `storefront-mockup/community-qa.py` printed `Community UI passed`; PREPUSH-TESTS NOT-RUN (recorded in PR #393).
+
+Limits: Site units have no GitHub issue. No server-side guest-count rules, no signup forms (AV1422-07) and no change to the sample invitation preview count.
+
+## Site: signup closed up front (AV1422-07) — November 5, 2026
+
+Branch rb/av1422-07 (AV1422-07, PR #404, merged as 79743ae904a8199615c9f9b769d1b9485fe10c8e). Both signup forms say "Online signup isn’t open yet" on load when the club service is absent, with every field and the button disabled; a pending probe leaves the form enabled and `send()` is unchanged.
+
+Checks at PR head c24875e9: the published site passed `storefront-mockup/static-site-qa.cjs`; `python3 -m unittest hass.tests.test_hike_ics hass.tests.test_publish_home_image` — 10 tests, OK; `storefront-mockup/community-qa.py` printed `Community UI passed`; PREPUSH-TESTS NOT-RUN (recorded in PR #404).
+
+Limits: Site units have no GitHub issue. Signup is not opened; no change to the RSVP dialog (live service only) or the live-service messages.
+
+## Site: trail map loads near view (AV1422-08) — November 5, 2026
+
+Branch rb/av1422-08 (AV1422-08, PR #419, merged as f2caec36ad5278e61a28ccca51010e1368424444). The `/hike` trail map mounts, and fetches its aerial and route JSON, only within one viewport of view, with a "Loading the trail map…" placeholder until then; without `IntersectionObserver` it mounts at once. A route JSON that fails still gives `data-ready=error`.
+
+Checks at PR head e79d1bfa: the published site passed `storefront-mockup/static-site-qa.cjs`; `storefront-mockup/community-ui-qa.cjs` and `storefront-mockup/section-navigation-qa.cjs` were updated and are CI-run; PREPUSH-TESTS NOT-RUN (recorded in PR #419).
+
+Limits: Site units have no GitHub issue. A missing aerial image does not set `error` (only the route JSON does); no heading order (AV1422-09), map layers or controls, or preloading hints.
+
+## Site: /hike heading order (AV1422-09) — November 5, 2026
+
+Branch rb/av1422-09 (AV1422-09, PR #433, merged as ca40f8f5bbdd5901442d534df1c99aaa74b637b8). `/hike` now goes h1, h2, h3, h4 with no jump and looks the same (computed styles compared at three viewports); no copy changed, and the RSVP dialog headings are unchanged. `static-site-qa.cjs` gains a heading-order check.
+
+Checks at PR head a89e8768: the published site passed `storefront-mockup/static-site-qa.cjs`; `python3 -B -m unittest hass.tests.test_content hass.tests.test_publish` — 31 tests, OK; `storefront-mockup/community-ui-qa.cjs` follows the h2; PREPUSH-TESTS NOT-RUN (recorded in PR #433).
+
+Limits: Site units have no GitHub issue. Home-page headings, the RSVP dialog and the sample switch (AV1422-10) are untouched.
+
+## H04: sample hikes switch (AV1422-10) — November 6, 2026
+
+Branch rb/av1422-10 (AV1422-10, PR #473, merged as 4e7208d5e55878401b0e7ffc8b5f723be79a8674). `hike.samples {show}` (`hass/ops/samples.py`): `show=false` hides the sample invitation and sample archive by writing club `showSamples: false`, and `show=true` removes the key; the same state again is refused and nothing is written. `club` joins the undoable collections, so `history.revert` restores it.
+
+Checks at PR head (an all-digit id, left out so the checker does not read it as a number): `python3 -B -m unittest hass.tests.test_hike_samples hass.tests.test_publish` and the neighbouring modules — 86 tests, OK; `python3 hass/sitegen.py --check` ok; PREPUSH-TESTS NOT-RUN (recorded in PR #473).
+
+Limits: Issue #1 (conversation and ops). No editing of sample content, no `COMMANDS.md` row (it lists parser commands only) and no change to the sample date.
+
+## Site: local-business JSON-LD (AV1422-11) — November 5, 2026
+
+Branch rb/av1422-11 (AV1422-11, PR #435, merged as d96097853a57b3289a05b1f81a5544a46837da14). The home page gets one `application/ld+json` GroceryStore block with the shop name, street, town and region; the telephone is included only when the store record has one (the repo store has none, and this ledger does not quote it). Store text is escaped so it cannot close the script.
+
+Checks at PR head 5357a1bc: `python3 -B -m unittest hass.tests.test_local_business_data hass.tests.test_publish hass.tests.test_content hass.tests.test_store_home_image` — 44 tests, OK (2 skipped, browser); `python3 hass/sitegen.py --check` ok; `storefront-mockup/static-site-qa.cjs` was not run locally and is CI-run; PREPUSH-TESTS NOT-RUN (recorded in PR #435).
+
+Limits: Site units have no GitHub issue. No opening hours as structured data, no og or twitter tags or sitemap (they need the domain) and no Event data on `/hike`.
+
+## H13: put the old home photo back (AV1422-12) — November 4, 2026
+
+Branch rb/av1422-12 (AV1422-12, PR #348, merged as 5753567e6d3e5af17e7d6cdb5fbc0282eea69f4c). `store.clear_home_image {}` removes `store.homeImage`, so the home page shows the shop's own hero again; with no home photo set it is refused. The photo file is kept and undo restores the owner's photo; the preview checks the default hero.
+
+Checks at PR head (an all-digit id, left out for the same reason): `python3 -B -m unittest hass.tests.test_store_clear_home_image hass.tests.test_store_home_image hass.tests.test_store_ops hass.tests.test_undo hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_preview_target_shapes hass.tests.test_acceptance_runner hass.tests.test_interpreter_eval hass.tests.test_store_notice` — 95 tests, OK; PREPUSH-TESTS NOT-RUN (recorded in PR #348).
+
+Limits: Issue #1 (conversation and ops). No removal of unused photo files, no acceptance map entry (AV1422-14) and no store notice change.
+
+## H25: feature states match main (AV1422-13) — November 4, 2026
+
+Branch rb/av1422-13 (AV1422-13, PR #350, merged as 204c1a9a65db08d0e710401c8ca13c2383abbf1b). The H09, H13, H20 and H25 state cells of `docs/hass/FEATURES.md` and one stale sentence in `hass/README.md` now match main. Docs only; no state word changed, nothing is promoted to Done and H25 stays Needs G.
+
+Checks: the PR recorded only `git diff --stat origin/main -- docs/hass/FEATURES.md hass/README.md` (2 files, 5 insertions, 5 deletions) and no test run; the standing doc guards are `hass.tests.test_support_doc` and `hass.tests.test_commands_doc`, not claimed as run for this unit.
+
+Limits: Issue #3 (handover). No other FEATURES rows, no acceptance map change (AV1422-14) and no `COMMANDS.md` edit.
+
+## H25: acceptance map adds H04 and H13 modules (AV1422-14) — November 17, 2026
+
+Branch rb/av1422-14 (AV1422-14, PR #980, merged as 06ccd039b4685b361628eabda7c36e66c3437378). `hass/acceptance.py` MAP: H04 also runs `test_route_add`, `test_route_edit`, `test_route_hide` and `test_hike_samples`; H13 also runs `test_store_home_image` and `test_store_clear_home_image`. H25 stays a release step, and `test_acceptance_runner` pins both tuples.
+
+Checks at PR head 57d8ef6b: `python3 -B -m unittest hass.tests.test_acceptance_runner` — 25 tests, OK; `python3 hass/acceptance.py --only H04,H13` — H04 pass (44), H13 pass (59), exit 0; PREPUSH-TESTS NOT-RUN (recorded in PR #980).
+
+Limits: Issue #3 (handover). No ledger or FEATURES wording change and no MAP rows other than H04 and H13; any store-notice module has its own unit (AV1322-01).

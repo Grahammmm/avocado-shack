@@ -20,6 +20,7 @@ UNITS += tuple(f"AV1222-{n:02d}" for n in range(1, 16))  # AV1222-16 roll-up (id
 UNITS += tuple(f"AV2022-{n:02d}" for n in range(1, 15))  # AV2022-15 roll-up
 UNITS += tuple(f"AV1322-{n:02d}" for n in range(1, 16))  # AV1322-16 roll-up
 UNITS += tuple(f"AV0022-{n:02d}" for n in range(1, 17) if n != 5)  # AV0022-17 roll-up (id order; AV0022-05 was closed unmerged, see test_unmerged_unit_has_no_section)
+UNITS += tuple(f"AV1422-{n:02d}" for n in range(1, 15))  # AV1422-15 roll-up (id order; the ledger has no issue headings)
 LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
 WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
          "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
@@ -35,6 +36,7 @@ WORDS |= {"AV2022-05": ("Audio is refused, never transcribed or stored",),
 WORDS |= {"AV0022-01": ("sideways photos keep only the Orientation tag (no location, camera or date)",),
           "AV0022-14": ("health only reports unused photo copies and deletes nothing",),
           "AV0022-16": ("`--live` is operator-only and no model-quality claim is made",)}  # AV0022-17 edge path 5
+WORDS |= {"AV1422-06": ("No invented guest count",), "AV1422-13": ("Docs only",), "AV1422-14": ("H25 stays a release step",)}  # AV1422-15 edge path 5
 LEDGER = (REPO_ROOT / "BUILD_LEDGER.md").read_text(encoding="utf-8")
 SHA = re.compile(r"\b[0-9a-f]{40}\b")
 GIT_HEX = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # commit ids are not phone numbers
@@ -68,6 +70,11 @@ def git(*args):
 
 
 class LedgerRF1120Tests(unittest.TestCase):
+    def test_av1422_06_merge_date_is_pacific_date(self):
+        # PR #393 merged 2026-11-05 02:43:33 UTC, still November 4 in Pacific time.
+        heading = sections(LEDGER, "AV1422-06")[0].splitlines()[0]
+        self.assertTrue(heading.endswith(" — November 4, 2026"), heading)
+
     def test_merge_shas_exist_in_history(self):
         if not (REPO_ROOT / ".git").exists() or git("rev-parse", "--is-shallow-repository") == "true":
             self.skipTest("no .git (tarball checkout) or shallow clone: merge history not available")
