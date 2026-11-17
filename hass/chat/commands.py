@@ -11,6 +11,8 @@ from hass.chat.shared import ALIAS_NAME_MAX, q
 from hass.ops import catalog
 
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
+UNDO_PHRASES = ("undo that", "undo it", "undo last", "undo the last change", "please undo")  # AV0222-07 (H06/H17): whole message only
+CANCEL_PHRASES = ("cancel that", "cancel it", "never mind", "nevermind")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
 NEAR_RE = re.compile(r"(ok|okay|yes please|yep|yeah|sure|go ahead|do it|sounds good|looks good)(?: ([0-9a-f]{4,12}))?")  # H05
 COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
@@ -57,7 +59,9 @@ MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S.*)|(memory|notes)
 
 def parse_keyword(text: str):
     """(verb, code or None) when the whole message is an approval keyword; otherwise None."""
-    match = KEYWORD_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
+    norm = re.sub(r"[.!]+$", "", text.strip().lower())
+    if norm in CANCEL_PHRASES: return "reject", None  # AV0222-07: the same as a bare no
+    match = KEYWORD_RE.fullmatch(norm)
     if not match: return None
     return ("approve" if match[1] in APPROVE else "reject"), match[2]
 
@@ -125,7 +129,9 @@ def parse_command(text: str, *, listing_names=False):
     """("undo", code or None) or (history|status|pause|resume|help, None) when the whole message is that command;
     otherwise None."""
     if maker := _post_maker(text): return maker  # AV1937-10: before the general punctuation rule, which would cut a key's . or !
-    match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
+    norm = re.sub(r"[.!]+$", "", text.strip().lower())
+    if norm in UNDO_PHRASES: return "undo", None  # AV0222-07: the same as a bare undo
+    match = COMMAND_RE.fullmatch(norm)
     if not match: return None
     if match[22]: return "again", (match[23] or "").strip()  # AV2152-03: the rest as sent (lower-cased); _again accepts only a code
     if match[21]: return "backlog", None  # SKILLS-FW-3
