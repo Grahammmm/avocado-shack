@@ -232,7 +232,8 @@ class CorePack:
             has_table = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
             if has_table and self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
             every = self.memory.list() if has_table else []
-            rows = [r for r in every if not r["key"].startswith("alias.")]
+            design = [r for r in every if r["key"].startswith("design.")]  # AV1052-11: kept design requests, listed apart
+            rows = [r for r in every if not r["key"].startswith(("alias.", "design."))]
             aliases = [r for r in every if r["key"].startswith("alias.")]
             lines = [f"- {q(r['key'])}: {q(r['value'])} (since {voice.natural(datetime.fromisoformat(r['created_at']), self._now())})"
                      for r in rows[:MEMORY_LIST_MAX]]
@@ -240,7 +241,11 @@ class CorePack:
             notes = "\n".join(["Notes I'm keeping:"] + lines + more) if rows else "I'm not keeping any notes."
             amore = ["And a few more."] if len(aliases) > ALIAS_LIST_MAX else []
             self._reply("\n".join([notes] + (["Nicknames:"] + self._alias_lines(aliases[:ALIAS_LIST_MAX]) + amore if aliases else
-                                            ["I don't have any nicknames."])), long_ok=True)
+                                            ["I don't have any nicknames."])
+                        + ([f"Design notes ({len(design)}):"] + [
+                            f"- {r['key']}: {q(r['value'])} (owner, since {voice.natural(datetime.fromisoformat(r['created_at']), self._now())})"
+                            for r in design[:MEMORY_LIST_MAX]] + (["And a few more."] if len(design) > MEMORY_LIST_MAX else []) if design else [])),
+                        long_ok=True)
             return "memory-list"
         if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
         if verb == "alias": return self._alias(msg, key, value)
