@@ -11,7 +11,7 @@ JPEG = b"\xff\xd8\xffsynthetic\xff\xd9"
 PNG = media.KINDS["png"] + b"synthetic" + media.PNG_END
 
 
-class PhotoTests(ForwarderCase):
+class PhotoCase(ForwarderCase):
     def setUp(self):
         super().setUp()
         self.raw, self.photos, self.order, self.downloads = [JPEG], [], [], []
@@ -54,9 +54,11 @@ class PhotoTests(ForwarderCase):
         self.f.deliver()
         self.assertEqual(self.pending(), 0)
 
+
+class PhotoTests(PhotoCase):
     def test_one_through_four_sniffed_photos_before_text(self):
         for n in range(1, 5):
-            self.f.photo_posts.clear(); self.photos.clear(); self.order.clear()
+            self.spool.db.execute("DELETE FROM photo_posts"); self.photos.clear(); self.order.clear()
             self.raw = [JPEG, PNG, JPEG, PNG][:n]
             self.send(f"m{n}")
             self.assertEqual(self.order, ["photo"] * n + ["text"])
@@ -85,6 +87,7 @@ class PhotoTests(ForwarderCase):
         self.photo_error = RuntimeError("synthetic-failure"); self.send("failed")
         with patch.object(fwd.bridge_photos.BlueBubblesPhotos, "fetch", side_effect=OSError):
             self.photo_error = None; self.send("fetchfailed")
+            for _ in range(10): self.now += 61; self.f.retry_photos()
             self.assertEqual(self.photos[-1]["code"], "fetch-failed")
         with patch.object(fwd.subprocess, "run", side_effect=subprocess.TimeoutExpired("sips", 30)):
             self.raw = [b"heic"]; self.send("sipstimeout")
@@ -94,6 +97,7 @@ class PhotoTests(ForwarderCase):
                              (bridge.BridgeError("odd-new-code"), "fetch-failed"), (bridge.BridgeError("too-large"), "too-large")):
             with patch.object(fwd.bridge_photos.BlueBubblesPhotos, "fetch", side_effect=raised):
                 self.send(f"code-{sent}-{raised.code}")
+                for _ in range(3): self.now += 301; self.f.retry_photos()
             self.assertEqual(self.photos[-1]["code"], sent)
             self.assertEqual(set(self.photos[-1]), {"op", "guid", "idx", "count", "code"})
 
@@ -116,6 +120,8 @@ class PhotoTests(ForwarderCase):
             if i == 1: self.raw, self.converted = [b"heic"] * 4, b"bad"
             self.send(f"rate{i}")
         self.assertEqual(len(self.photos), 8)
+        self.now += 61; self.f.retry_photos()
+        self.assertEqual(len(self.photos), 12)
         self.assertEqual(len(self.posts), 3)
 
     def test_stalled_photo_stops_waiting_at_thirty_seconds_and_ack_is_independent(self):
