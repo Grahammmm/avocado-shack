@@ -531,7 +531,13 @@ class Dispatcher:
         # Model fields still need owner-word provenance. Only checked label-reader data
         # supplies additional source words, never the raw image or model instructions.
         trusted = [*texts, *simple.public_sources(slots)]
-        filled = validate(skill, {}, new_slots, trusted, ctx, req["attachments"] if req else [])
+        # Simple intake drafts ordinary product prose for owner review. Identity,
+        # maker and origin still need their own provenance; the plan sanitizes
+        # unsupported claim clauses before either image generation or preview.
+        copy_skill = dataclasses.replace(skill, slots=tuple(
+            dataclasses.replace(slot, owner_words=False) if slot.name == "description" else slot
+            for slot in skill.slots))
+        filled = validate(copy_skill, {}, new_slots, trusted, ctx, req["attachments"] if req else [])
         slots.update(filled.slots)
         attachments = req["attachments"] if req else []
         if attachments: slots["photo"] = attachments[-1]

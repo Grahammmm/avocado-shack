@@ -205,6 +205,8 @@ class PublishGate(unittest.TestCase):
                 self.assertNotIn('1.75', prompts[0])
                 self.assertNotIn('40', prompts[0])
                 product, draft = self.product(chat)
+                self.assertEqual(product['description'], 'Fuyu persimmons are sweet and crisp. Eat firm or let soften. Store in a cool place.')
+                self.assertIn('Website description: ' + product['description'], said[0])
                 self.assertEqual(live_policy.check(draft), [])
                 rendered = chat.conv.editor.render_draft(draft['change_id'])
                 public = b'\n'.join(rendered['files'].values())
@@ -232,6 +234,21 @@ class PublishGate(unittest.TestCase):
         self.assertEqual(live_policy.check(draft), [])
         self.assertIn('Price: $3.50 per lb', said[0].splitlines())
         self.assertIn('yes ' + chat.live()['draft_code'], said[0])
+
+    def test_generated_produce_prose_keeps_ordinary_copy_not_invented_claims_or_maker(self):
+        chat = self.chat({})
+        text = 'add Fuyu persimmons'
+        chat.script(text, base.reply(name='Fuyu persimmons', shelf='fruit', maker='Invented Orchard',
+                    description='Fuyu persimmons are sweet and crisp. Organic. Made in Spain. Cures cancer.'))
+        disposition, said = chat.say(text + '; sell for $3.50', base.JAR)
+        self.assertEqual(disposition, 'proposed', said)
+        product, draft = self.product(chat)
+        self.assertIn('sweet and crisp', product['description'])
+        for phrase in ('Organic', 'Made in Spain', 'Cures cancer'):
+            self.assertNotIn(phrase, product['description'])
+            self.assertIn(phrase, said[0])  # explicitly disclosed as dropped, not silently lost
+        self.assertEqual(product['brand'], 'Producer not identified')
+        self.assertEqual(live_policy.check(draft), [])
 
     def test_real_generator_card_png_attached_and_edit_rerenders_same_code(self):
         chat = self.chat()
