@@ -958,14 +958,24 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self._verify_pending()
         return disposition
 
-    def _till_apply(self, msg, code, apply) -> None:
+    def _till_apply(self, msg, job, apply) -> None:
         """HASS-CLOVER-4: an owner's till yes, after its message is saved (never inside the write transaction). The till part first; only
-        when it is read back does a website word riding on it go through the normal draft, approval, editor.apply and outcome."""
+        when it is read back does a website word riding on it go through the normal draft, approval, editor.apply and outcome.
+        FIX-1: the website must still show the word the draft (or undo) was made against, or nothing at all changes (a newer word
+        wins); ``job`` = (code, True) after the owner's yes to the shelf question, whose check then goes in the same site change."""
+        code, shelf = job if isinstance(job, tuple) else (job, False)
+        ops, base = self.till.bundle(code, self._asker, msg.chat) if apply else ((), None)
+        site = lambda: editor_mod._load(str(self.sdir))[2]  # noqa: E731
+        if ops and self.till.site_moved(base, site):
+            self.till.drop(code, self._asker, msg.chat)
+            with self._tx(): self._reply(self.till.SITE_MOVED)
+            return
         text, ops = (HELD_REPLY, ()) if not apply else self.till.approve(code, sender=self._asker, chat=msg.chat)
         with self._tx(): self._reply(text, long_ok=True)
         if not ops: return
         try:
-            out, now = self.editor.prepare(list(ops)), self._now()
+            if self.till.site_moved(base, site): raise ValueError("site")  # changed while the till was written: keep the newer word
+            out, now = self.editor.prepare([*([{"op": "store.confirm_selection", "args": {}}] if shelf else []), *ops]), self._now()
             if out.get("result") != "ok": raise ValueError("site")
             with self._tx():
                 row = self._propose(out["draft"], msg.sender, now)
@@ -1034,7 +1044,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._record(msg, disposition)
             return disposition, None
         if till:  # HASS-CLOVER-2/4: a till read, or a till change by fixed words: never the interpreter or a model; a yes runs after the commit
-            if till[0] == "yes" and not (paused := self._paused()): self._till_job = till[1]
+            if till[0] == "yes" and not (paused := self._paused()):
+                if (ops := self.till.bundle(till[1], self._asker, msg.chat)[0]) and (out := self.editor.prepare(list(ops))).get("result") == "refused" \
+                        and out.get("reason") == catalog.NOT_CHECKED_TODAY:  # FIX-1 (CLOVER.md 5): the editor's own shelf-check rule, as for site changes
+                    disposition = self._ask_shelf(msg, now, {"ops": [], "till": till[1]}, [])  # the shelf question first; nothing waits half-done
+                    self._record(msg, disposition)
+                    return disposition, None
+                self._till_job = till[1]
             else: self._reply(self.till.answer(till, now, sender=self._asker, chat=msg.chat, worktree=lambda: editor_mod._load(str(self.sdir))[2]), long_ok=True)
             disposition = "paused" if till[0] == "yes" and paused else {"write": "till-write-refused", "till": "till-draft", "yes": "till-approved", "no": "till-cancelled", "undo": "till-undo"}.get(till[0], "till-read")
             self._record(msg, disposition)
@@ -1379,7 +1395,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return {"ops": ops, "revises": pending.get("revises"), "texts": texts if isinstance(texts, list) else [],
                     "skills": pending.get("skills", []),
                     "calls": calls if isinstance(calls, list) else [], "ask": pending.get("ask"),  # HASS-CHAT-1: "meet" or None (shelf check)
-                    "suggest": pending.get("suggest"), "index": pending.get("index"), "notes": [n for n in pending.get("notes") or () if isinstance(n, str)]}
+                    "suggest": pending.get("suggest"), "index": pending.get("index"), "notes": [n for n in pending.get("notes") or () if isinstance(n, str)],
+                    "till": pending.get("till")}  # HASS-CLOVER-4 FIX-1: the till code (with its website word) waiting for this answer
         except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
 
     def _check_day(self):
@@ -1419,7 +1436,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(SHELF_CLOCK)
             return "not-drafted"
         self._open_ask(msg, now, earlier, {"ops": result["ops"], "revises": result.get("revises"),
-                                         "skills": [getattr(s, 'name', s) for s in skill_names]})
+                                         "skills": [getattr(s, 'name', s) for s in skill_names], **({"till": result["till"]} if result.get("till") else {})})
         self._reply(SHELF_QUESTION)
         return "question"
 
@@ -1456,6 +1473,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         yes: one draft that marks today's shelf check and then makes the waiting change (none, for the morning report's
         question), with the normal approval; no: nothing is changed and the question is closed."""
         self._close_asks()
+        if isinstance(ask.get("till"), str) and self.till is not None and self.till.engine is not None:  # HASS-CLOVER-4 FIX-1
+            if verb == "reject": self.till.drop(ask["till"], self._asker, msg.chat)  # noqa: E701
+            if verb == "reject" or self._paused():
+                self._reply(SHELF_NO if verb == "reject" else self.till.answer(("yes", ask["till"]), now))
+                return "shelf-no" if verb == "reject" else "paused"
+            self._till_job = (ask["till"], True)  # the whole bundle (till, shelf check, website word) now, after this message is saved
+            return "till-approved"
         if verb == "reject":
             self._reply(SHELF_NO)
             return "shelf-no"

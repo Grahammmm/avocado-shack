@@ -69,6 +69,19 @@ class TillWriteChat(NoNetwork, ConversationTestCase):
         products = json.loads((self.repo.wt / "hass/content/products.json").read_text("utf-8"))["products"]
         return next(p for p in products if p["id"] == pid).get("available")
 
+    def site(self, *ops):   # a website change through the editor's own prepare and apply (the shelf check, or a newer word)
+        out = editor.prepare({"ops": [{"op": op, "args": args} for op, args in ops]}, state=str(self.state))
+        self.assertEqual(editor.apply(out["draft"]["change_id"], out["draft"]["draft_hash"], state=str(self.state))["result"], "applied")
+
+    def link_eggs(self, shelf=True):
+        products = json.loads((self.repo.wt / "hass/content/products.json").read_text("utf-8"))["products"]
+        pid = next(p["id"] for p in products if p.get("status", "active") == "active")
+        links = self.state / "clover" / "links.json"
+        links.write_text(json.dumps({pid: {"cloverId": "FAKEITEM00003", "sku": "EGG12"}}))
+        links.chmod(0o600)
+        if shelf: self.site(("store.confirm_selection", {}))   # noqa: E701 - the editor's own today
+        return pid
+
     def test_each_kind_gives_a_draft_then_one_yes_applies_and_reads_back(self):
         cases = (("received 12 Sunshine olive oil", "  Count: 12 -> 24", lambda: "Sunshine olive oil now shows 24",
                   lambda: self.item("FAKEITEM00001")["itemStock"]["quantity"] == 24),
@@ -103,13 +116,7 @@ class TillWriteChat(NoNetwork, ConversationTestCase):
         self.assertEqual(rows, [("change price of Sunshine olive oil to 14.00", "till-draft"), (f"yes {code}", "till-approved")])
 
     def test_sold_out_carries_the_site_word_under_one_yes_and_its_undo_restores_it(self):
-        products = json.loads((self.repo.wt / "hass/content/products.json").read_text("utf-8"))["products"]
-        pid = next(p["id"] for p in products if p.get("status", "active") == "active")
-        links = self.state / "clover" / "links.json"
-        links.write_text(json.dumps({pid: {"cloverId": "FAKEITEM00003", "sku": "EGG12"}}))
-        links.chmod(0o600)
-        shelf = editor.prepare({"ops": [{"op": "store.confirm_selection", "args": {}}]}, state=str(self.state))   # the editor's own today
-        self.assertEqual(editor.apply(shelf["draft"]["change_id"], shelf["draft"]["draft_hash"], state=str(self.state))["result"], "applied")
+        pid = self.link_eggs()
         before = self.site_word(pid)
         reply, code = self.draft("Eggs, dozen is sold out")
         self.assertIn("Mark Eggs, dozen (SKU EGG12) as sold out?", reply)
@@ -125,6 +132,36 @@ class TillWriteChat(NoNetwork, ConversationTestCase):
         self.assertIn("  Website:", undo)
         self.yes(re.search(r"Reply yes ([0-9a-f]{8})", undo)[1])
         self.assertEqual((self.item("FAKEITEM00003")["itemStock"]["quantity"], self.site_word(pid)), (2, before))
+
+    def test_without_todays_shelf_check_the_yes_asks_the_shelf_question_first_and_holds_the_whole_bundle(self):
+        pid = self.link_eggs(shelf=False)
+        before, eggs, said = self.site_word(pid), lambda: (self.item("FAKEITEM00003")["itemStock"]["quantity"], self.site_word(pid)), []
+        for answer, disposition in (("no", "shelf-no"), ("yes", "till-approved")):
+            _, code = self.draft("Eggs, dozen is sold out")
+            self.assertEqual(self.say(f"yes {code}"), "question")
+            self.assertEqual(self.replies(), [conversation.SHELF_QUESTION])
+            self.assertEqual((eggs(), self.journal()[-1]["status"], self.drafts()), ((2, before), "draft", []))   # nothing yet, till or site
+            self.assertEqual(self.say(answer), disposition)
+            said.append(self.replies())
+        self.assertEqual(self.journal()[0]["status"], "dropped")   # the no dropped that whole bundle
+        self.assertEqual(said[0], [conversation.SHELF_NO])
+        self.assertEqual(said[1][0], f"Done, and I read the till back: Eggs, dozen now shows 0. To put it back, say undo {code}.")
+        self.assertTrue(said[1][1].startswith("Saved: the shelf check for "), said[1])   # the shelf check went with the website word
+        self.assertEqual((eggs(), [r["state"] for r in self.drafts()]), ((0, "no"), ["applied"]))   # shelf check + word: one site change
+
+    def test_a_newer_website_word_is_never_overwritten_by_the_yes_or_by_an_undo(self):
+        pid = self.link_eggs()
+        limited, eggs = ("product.set_availability", {"id": pid, "available": "limited"}), lambda: (self.item("FAKEITEM00003")["itemStock"]["quantity"], self.site_word(pid))
+        _, code = self.draft("Eggs, dozen is sold out")
+        self.site(limited)   # a newer website word after the draft, before his yes
+        self.assertEqual((self.yes(code), eggs(), self.journal()[-1]["status"]), ([chat.SITE_MOVED], (2, "limited"), "dropped"))
+        _, code = self.draft("Eggs, dozen is sold out")
+        self.yes(code)
+        self.assertEqual(eggs(), (0, "no"))
+        self.assertEqual(self.say(f"undo {code}"), "till-undo")
+        undo = re.search(r"Reply yes ([0-9a-f]{8})", self.replies()[0])[1]   # drafted while the website says Sold out
+        self.site(limited)
+        self.assertEqual((self.yes(undo), eggs()), ([chat.SITE_MOVED], (0, "limited")))
 
     def test_a_wrong_sender_or_a_group_chat_gets_no_draft(self):
         self.assertEqual(self.say("set Hass avocado to 7", sender=STRANGER, chat="chat-stranger"), "ignored")

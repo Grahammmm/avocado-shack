@@ -36,6 +36,8 @@ TILL_DOWN, SITE_UNKNOWN = "I can't reach the till, so nothing was changed.", "I 
 NOT_DONE = {"failed": "I sent that to the till, but when I read it back it did not show the change. I stopped there; nothing else was changed.",
             "uncertain": "I couldn't tell whether the till took that change. I won't send it again; please check that item on the till."}
 SITE_NOT_YET = "The till is updated; the website is not yet. Tell me again if the website still needs it."
+SITE_MOVED = ("The website word for that item changed after you were shown this change, so I changed nothing on the till or the website and "
+              "kept the newer word. Send the change again if it is still needed.")
 HELP = "Till (each needs your yes and its code): " + "; ".join(map(voice.quote, (
     "received 12 Sunshine olive oil", "set Sunshine olive oil to 7", "Sunshine olive oil is sold out", "new item: Sunshine olive oil, 12.50, pantry",
     "change price of Sunshine olive oil to 14.00", "hide Sunshine olive oil on the till", "show Sunshine olive oil on the till", "undo <code>"))) + "."
@@ -110,7 +112,7 @@ def _query(q):
 
 class TillDesk:
     """Reads the cache under `state`; holds no token and makes no network call (HASS-CLOVER-4 writes go through `engine` only)."""
-    HELP, SITE_NOT_YET = HELP, SITE_NOT_YET
+    HELP, SITE_NOT_YET, SITE_MOVED = HELP, SITE_NOT_YET, SITE_MOVED
 
     def __init__(self, state, settings, read=cache.read, engine=None):
         self.state, self.config, self._read, self.engine = state, from_settings(settings), read, engine   # engine: a BundleEngine, or None (read-only)
@@ -218,7 +220,7 @@ class TillDesk:
         if intent[0] == "yes":   # only while paused; the real yes is `approve`
             return f"Changes are paused, so I haven't changed the till. Say resume changes, then reply yes {intent[1]}."
         if intent[0] == "no":
-            with self.engine.journal.locked() as db: db.execute("UPDATE changes SET status='dropped' WHERE code=? AND sender=? AND chat=? AND status='draft'", (intent[1], sender, chat))  # noqa: E701
+            self.drop(intent[1], sender, chat)
             return "Okay, I've cancelled that. Nothing changed on the till."
         try:
             if intent[0] == "undo":
@@ -256,6 +258,25 @@ class TillDesk:
             return parse_site_product(record) if record else None
         except Exception as exc:  # noqa: BLE001 - unreadable: no draft rather than a till change without its website word
             raise MapError(SITE_UNKNOWN) from exc
+
+    def drop(self, code, sender, chat):
+        with self.engine.journal.locked() as db: db.execute("UPDATE changes SET status='dropped' WHERE code=? AND sender=? AND chat=? AND status='draft'", (code, sender, chat))  # noqa: E701
+
+    def bundle(self, code, sender, chat):
+        """(website ops, the website word they were drafted against) of this sender's waiting till draft, or ((), None)."""
+        with self.engine.journal.locked() as db:
+            row = db.execute("SELECT draft FROM changes WHERE code=? AND sender=? AND chat=? AND status='draft'", (code, sender, chat)).fetchone()
+        draft = json.loads(row[0]) if row else {}
+        return tuple(draft.get("site_ops") or ()), (draft.get("before") or {}).get("site")
+
+    def site_moved(self, base, worktree):
+        """True unless the website product still shows exactly the word the draft (or undo) was made against: a newer change wins."""
+        try:
+            record = next((r for r in reports.read_inputs(self.state, worktree())[0]["products"] if r.get("id") == base["id"]), None)
+            product = parse_site_product(record)
+            return product.status != "active" or product.availability != base["available"]
+        except Exception:  # noqa: BLE001 - no base, or the website cannot be read: never write over what we cannot see
+            return True
 
     def approve(self, code, *, sender, chat):
         """`yes <code>`: (reply, website ops to publish now under that yes). The engine re-checks owner, chat, code, expiry, cap, item."""

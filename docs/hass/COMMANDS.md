@@ -84,7 +84,10 @@ reaction never drafts or approves. `stop changes` holds till yeses too. Over the
 (and a count up from 0 marks it Available today) in the same draft, under the same one yes. The till goes first; only when it is
 read back does the website word go through the normal website change and its usual reply. If the website part does not go
 through, Hass says "The till is updated; the website is not yet." The undo of such a change puts the website word back the same
-way, only while the website still shows the word it set. The website word needs today's shelf check, as always.
+way, only while the website still shows the word it set. The website word needs today's shelf check, as always: without one,
+the `yes <code>` first asks "Before I change that, is the shelf list right for today?" and nothing changes, till or website,
+until a bare `yes` (then the till, the shelf check and the website word go together) or `no` (the whole change is dropped).
+If the website word changed after the draft (or the undo) was shown, nothing changes and Hass says so; the newer word stays.
 `help` lists these sentences when the till is connected for changes. The conversation record keeps what you typed.
 
 Cancelling a hike (a change request, needs `yes <code>`; not the `cancel <code>` command above, which only rejects a
