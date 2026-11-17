@@ -505,7 +505,7 @@ class Dispatcher:
     def intake_text(self, msg, now, req):
         """Separate typed purchase facts before the general interpreter sees any text."""
         if not self.simple_intake(req): return msg, req
-        public, answers = item_intake.caption_answers(msg.text)
+        public, answers = item_intake.caption_answers(msg.text, getattr(self.conv, "_intake_fields", None))
         if not answers: return msg, req
         slots = dict(req["slots"]) if req else {}
         slots["intake"] = {**slots.get("intake", {}), **answers,
@@ -564,7 +564,7 @@ class Dispatcher:
             already = slots["intake"].get("asked_required") == needed
             slots["intake"]["asked_required"] = needed
             question = {"name": "Send the product photo or its name.", "photo": "Send a product photo for this listing.",
-                        "price": "What is the selling price?"}[needed]
+                        "price": "What price should it sell for?"}[needed]
             if already: question = "Tell me what to change, or send the missing " + needed + "."
             conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"] if req else None,
                               skill="item.add", slots=slots, texts=texts, attachments=attachments,

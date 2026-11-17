@@ -35,21 +35,25 @@ def fill(slots, texts):
     out["intake"] = got
     details = photo_details(got)
     for source, target in (("name", "name"), ("brand", "maker"), ("category", "shelf")):
-        if details.get(source) and (not out.get(target) or got.get(target + "_default")):
-            out[target] = details[source]
+        value = (got.get("category_choice") or details.get(source)) if source == "category" else details.get(source)
+        if value and (not out.get(target) or got.get(target + "_default")):
+            out[target] = value
             got.pop(target + "_default", None)
     if not out.get("name"): return out
     if not out.get("maker"):
         out["maker"], got["maker_default"] = "Producer not identified", True
     if not out.get("shelf"):
-        out["shelf"] = newitem.stated_shelf(" ".join(texts)) or "pantry"
+        out["shelf"] = newitem.stated_shelf(" ".join(texts)) or "general"
         got["shelf_default"] = not bool(newitem.stated_shelf(" ".join(texts)))
     if not out.get("description") or details and not got.get("photo_applied"):
         prior = "" if got.get("description_default") else out.get("description", "")
         parts = [prior, details.get("description") or (out.get("name", "") if not prior else "")]
         got["description_default"] = not bool(prior or details.get("description"))
+        if details.get("size"):
+            parts = [re.sub(re.escape(details["size"]) + r"\.?", "", p, flags=re.I).strip() for p in parts]
         parts += [details[k] for k in ("size", "count", "colour", "finish", "materials") if details.get(k)]
-        parts += details.get("features", []) + details.get("printed_claims", []) + details.get("warnings", [])
+        label_features = details.get("features", []) + details.get("printed_claims", []) + details.get("warnings", [])
+        if label_features: parts.append(", ".join(p.rstrip(".") for p in dict.fromkeys(label_features)))
         kept, overflow = [], []
         for part in dict.fromkeys(p.rstrip(".") + "." for p in parts if p):
             if len(" ".join([*kept, part])) <= TEXT_LIMITS["product"]["description"]:
@@ -138,17 +142,39 @@ def plan(slots, content):
 
 def preview(slots, code=None):
     got = slots.get("intake") or {}
+    details = photo_details(got)
+    description = slots.get("description") or "Not read yet"
+    size = details.get("size")
+    if size: description = re.sub(re.escape(size) + r"\.?", "", description, flags=re.I)
+    features = []
+    for part in sorted((p for p in [*(details.get(k) for k in ("count", "colour", "finish", "materials")),
+                                    *details.get("features", []), *details.get("printed_claims", []), *details.get("warnings", [])] if p),
+                       key=len, reverse=True):
+        if part and part.casefold() in description.casefold():
+            features.append(part.rstrip("."))
+            description = re.sub(re.escape(part) + r"[.!]?(?:,\s*)?", "", description, flags=re.I)
+    description = " ".join(description.split()).strip(" ,;.")
+    if description: description += "."
     lines = ["Here's the listing:", "Name: " + voice.quote(slots.get("name") or "Not read yet"),
-             "Brand: " + voice.quote(slots.get("maker") or "Producer not identified"),
-             "Description: " + voice.quote(slots.get("description") or "Not read yet"),
-             "Category: " + voice.quote(slots.get("shelf") or "pantry")]
+             "Brand: " + voice.quote(slots.get("maker") or "Producer not identified")]
+    if size: lines.append("Size: " + voice.quote(size))
+    lines.append("Description: " + voice.quote(description or slots.get("name") or "Not read yet"))
+    if features: lines.append("Features: " + voice.quote(", ".join(dict.fromkeys(features))))
+    if got.get("price") is not None: lines.append("Price: " + ii.money_text(got["price"]))
+    category = slots.get("shelf") or "general"
+    lines.append("Category: " + voice.quote(category.title()) + (" (say 'category X' to change)" if category == "general" else ""))
     if slots.get("availability"):
         lines.append("Availability: " + {"yes": "in stock", "no": "sold out", "limited": "low on stock"}[slots["availability"]])
-    lines += ii.private_lines(got)
+    private = []
+    if got.get("cost") is not None: private.append("cost " + ii.money_text(got["cost"]))
+    if got.get("qty") is not None: private.append("quantity " + str(got["qty"]))
+    if private: lines.append("Private (not shown on the website): " + ", ".join(private))
+    if got.get("price") is not None and got.get("cost") is not None and got["price"] != got["cost"]:
+        from decimal import Decimal
+        if Decimal(got["price"]) < Decimal(got["cost"]): lines.append("Note: the selling price is below your cost.")
     if got.get("left_off_label"):
         lines.append("More label text (not in the listing; it has no room): " + voice.quote(" ".join(got["left_off_label"])))
-    details = got.get("photo_details") or {}
     if details.get("barcode"): lines.append("Label barcode (kept private): " + voice.quote(details["barcode"]))
     if code:
-        lines.append("Reply 'yes " + code + "' to put it on the website, or tell me what to change.")
+        lines.append("Reply yes " + code + " to publish, or tell me what to change.")
     return "\n".join(lines)

@@ -1,6 +1,7 @@
 """Recorded glue read + real Conversation/editor. Synthetic storage photo, no live OCR/till/site."""
 import json
 import unittest
+from datetime import timedelta
 from unittest import mock
 
 from hass.skills import item_intake as ii
@@ -94,7 +95,7 @@ class SimpleIntake(unittest.TestCase):
     def test_one_price_question_then_new_info_not_yes_no_reprompt(self):
         chat, _ = self.chat()
         _, said = chat.say("", base.JAR)
-        self.assertIn("What is the selling price?", said[0])
+        self.assertIn("What price should it sell for?", said[0])
         _, said = chat.say("What's next")
         self.assertIn("Here's the listing:", said[0])
         self.assertNotIn("?", said[0])
@@ -214,6 +215,124 @@ class SimpleIntake(unittest.TestCase):
         chat.say("yes " + code)
         self.assertEqual(chat.commits(), 0)
         self.assertEqual(chat.drafts()[0]["state"], "proposed")
+
+    def test_exact_live_demo_before_caption_and_late_text(self):
+        from hass import answer_reader, cloud_codex
+        sentence = "I bought 100 of these at one dollar per item and I will sell them at $2 per item"
+        for when in ("before", "caption", "after"):
+            with self.subTest(when=when):
+                chat, _ = self.chat({**DETAILS, "description": DETAILS["description"] + " 4 fl. oz. (118 mL)."})
+                requests, cloud = [], []
+                def local(url, body, headers, timeout):
+                    self.assertFalse(chat.conv.db.in_transaction)
+                    request = json.loads(body)
+                    requests.append(request)
+                    result = ({"price_cents": 200, "cost_cents": 100, "quantity": 100}
+                              if "price_cents" in request["messages"][0]["content"] else {"category": "general"})
+                    return 200, json.dumps({"done": True, "message": {"content": json.dumps(result)}}).encode()
+                fallback = answer_reader.AnswerReader("http://127.0.0.1:11434", "fixture", transport=local)
+                chat.conv.answer_reader = answer_reader.AnswerReader(None, "gpt-6.1-sol", api="codex",
+                    transport=cloud_codex.CodexTransport(runner=lambda request: cloud.append(request)), fallback=fallback)
+                if when == "before":
+                    chat.say(sentence)
+                    chat.now += timedelta(minutes=28)
+                _, said = chat.say(sentence if when == "caption" else "", base.JAR)
+                if when == "after":
+                    self.assertEqual(said[0].count("What price should it sell for?"), 1)
+                    self.assertNotIn("Reply yes", said[0])
+                    chat.now += timedelta(minutes=28)
+                    _, said = chat.say(sentence)
+                self.assert_preview(chat, said)
+                preview = said[0]
+                self.assertEqual(preview.count("4 fl. oz. (118 mL)"), 1)
+                self.assertEqual(chat.live()["slots"]["description"].count("4 fl. oz. (118 mL)"), 1)
+                self.assertIn("Category: General (say 'category X' to change)", preview)
+                self.assertNotIn("pantry", preview.lower())
+                public, private = preview.split("Private (not shown on the website): ")
+                self.assertIn("Price: $2.00", public)
+                self.assertNotIn("$1.00", public)
+                self.assertIn("cost $1.00, quantity 100", private)
+                self.assertNotIn("Stock on site", preview)  # catalog shows an availability word, not a count
+                self.assertIn("Features:", preview)
+                description = next(line for line in preview.splitlines() if line.startswith("Description:"))
+                self.assertNotIn("Incredibly Strong", description)
+                self.assertNotIn("size", description.lower())
+                self.assertEqual(cloud, [])  # unchanged owner-finance local-only guard
+                self.assertEqual(len(requests), 1)
+                self.assertEqual(requests[0]["format"]["additionalProperties"], False)
+                self.assertNotIn("$", json.dumps(chat.live()["texts"]))
+                self.doCleanups()
+
+    def test_natural_fallback_money_and_quantity_and_late_edit_keep_code(self):
+        chat, _ = self.chat()
+        _, said = chat.say("I bought 100 of these at one dollar per item and I will sell them at two dollars per item", base.JAR)
+        code = self.assert_preview(chat, said)
+        for text, price, cost, qty in (("retail 3", "3.00", "1.00", 100),
+                                       ("have 20", "3.00", "1.00", 20),
+                                       ("cost 4", "3.00", "4.00", 20)):
+            disposition, said = chat.say(text)
+            self.assertEqual(disposition, "proposed", said)
+            self.assertEqual(len(said), 1)
+            self.assertIn("yes " + code, said[0])
+            got = chat.live()["slots"]["intake"]
+            self.assertEqual((got["price"], got["cost"], got["qty"]), (price, cost, qty))
+        self.assertIn("selling price is below your cost", said[0])  # warning, not a publication block
+        _, said = chat.say("category flowers")
+        self.assertIn("Category: Flowers", said[0])
+        self.assertEqual(chat.live()["draft_code"], code)
+
+    def test_category_uses_real_list_and_owner_context_in_the_existing_photo_read(self):
+        from hass.content_model import CATEGORIES
+        chat, transport = self.chat({**DETAILS, "category": "general"})
+        public = "new glue for furniture"
+        chat.script(public, base.reply(name="Glue"))
+        _, said = chat.say(public + "; " + FINANCE, base.JAR)
+        self.assertIn("Category: General", said[0])
+        self.assertEqual(len(transport.calls), 1)  # no second model round trip for category
+        body = transport.calls[0][1]
+        prompt = body["messages"][0]["content"]
+        self.assertIn(json.dumps(list(CATEGORIES)), prompt)
+        self.assertIn(public, prompt)
+        self.assertNotIn("$", prompt)
+        self.assertIn("never guess pantry", prompt)
+
+    def test_structured_fields_strict_validation_and_fallback(self):
+        from hass import answer_reader
+        valid = {"price_cents": 200, "cost_cents": 100, "quantity": 100}
+        for values in (valid, {**valid, "quantity": 0}, {**valid, "quantity": 100000}):
+            got = ii.commerce_answers(values)
+            self.assertEqual(got["price"], "2.00")
+            self.assertEqual(got["qty"], values["quantity"])
+        for values in ({**valid, "quantity": 100001}, {**valid, "quantity": -1}, {**valid, "price_cents": True},
+                       {**valid, "price_cents": 2.5}, {**valid, "cost_cents": "100"}, {**valid, "extra": 1}):
+            with self.subTest(values=values):
+                self.assertEqual(ii.commerce_answers(values), {})
+                reader = answer_reader.AnswerReader("http://127.0.0.1:11434", "fixture", transport=lambda *args:
+                    (200, json.dumps({"done": True, "message": {"content": json.dumps(values)}}).encode()))
+                self.assertEqual(reader.fields("sell for two dollars"), {})
+                self.assertEqual(ii.caption_answers("sell for two dollars", values)[1]["price"], "2.00")
+        self.assertNotIn("qty", ii.caption_answers("have 100001")[1])
+
+    def test_interpreter_can_read_non_regex_owner_finance_only(self):
+        from hass import answer_reader
+        chat, _ = self.chat()
+        seen = []
+        def transport(url, body, headers, timeout):
+            self.assertFalse(chat.conv.db.in_transaction)
+            request = json.loads(body)
+            seen.append(request)
+            values = ({"category": "general"} if "photo_read" in request["messages"][1]["content"] else
+                      {"price_cents": 250, "cost_cents": 125, "quantity": 20})
+            return 200, json.dumps({"done": True, "message": {"content": json.dumps(values)}}).encode()
+        chat.conv.answer_reader = answer_reader.AnswerReader("http://127.0.0.1:11434", "fixture", transport=transport)
+        chat.say("", base.JAR)
+        _, said = chat.say("I purchased twenty of these for a dollar twenty-five each; retail is two fifty")
+        self.assertEqual(chat.live()["state"], "drafted", said)
+        self.assertIn("Price: $2.50", said[0])
+        self.assertIn("cost $1.25, quantity 20", said[0])
+        self.assertEqual(len(seen), 1)
+        self.assertNotIn("photo_read", seen[0]["messages"][1]["content"])
+        self.assertEqual(chat.asked, [])
 
     def test_photo_and_website_approval_never_call_till_parser_or_writer(self):
         chat, _ = self.chat()
