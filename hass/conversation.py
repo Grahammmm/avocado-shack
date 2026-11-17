@@ -21,6 +21,7 @@ from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_polic
 from hass import capabilities, photo_polish, transcript  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
+from hass.clover import approvals as till_approvals  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
 # imported back here, so hass.conversation.<name> still works for every caller and test.
 from hass.chat.shared import (  # noqa: E402,F401
@@ -850,7 +851,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     # -- message handling ----------------------------------------------------------------------------------------
     _answering = None  # AV0022-10 (H16): received_at of the message handle() is running; replies are tagged with it
-    till = None  # HASS-CLOVER-2: a hass.clover.chat.TillDesk when host.json has a `clover` block (make_worker); None = no till replies
+    _till = None
+
+    @property
+    def till(self):
+        return self._till
+
+    @till.setter
+    def till(self, desk):
+        self._till = desk  # engine attachment is still separately gated; read-only desks never gain one here
+        till_approvals.recover(self)
     _forwarded = None  # HASS-SEC-2 (L5): when the message reached the inbox (inbox.Inbox.forwarded_at); None when not known
 
     def handle(self, msg: Inbound, last_try=False, apply=True, forwarded_at=None) -> str:
@@ -939,12 +949,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             with self._tx():
                 disposition, approved = self._handle(msg, last_try)
                 if approved is not None and not apply: raise _Held(approved["code"])
+                till_approvals.save(self, msg, self._till_job, apply)
         except _Held as held:
             with self._tx():
                 self._reply(HELD_REPLY.format(code=held.code))
                 self._record(msg, "approval-held")
             return "approval-held"
-        if self._till_job is not None: self._till_apply(msg, self._till_job, apply)
+        till_approvals.recover(self)  # also reconciles a redelivered provider id
         for job in self._label_jobs:  # AV1537-15: after the commit, never holding the lock; AV2152-04: a failed one never stops the next
             try: self._read_label(*job)
             except Exception: continue  # noqa: BLE001 - no label is today's reply exactly
@@ -968,10 +979,14 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         site = lambda: editor_mod._load(str(self.sdir))[2]  # noqa: E731
         if ops and self.till.site_moved(base, site):
             self.till.drop(code, self._asker, msg.chat)
-            with self._tx(): self._reply(self.till.SITE_MOVED)
+            with self._tx():
+                self._reply(self.till.SITE_MOVED)
+                till_approvals.finish(self, msg)
             return
         text, ops = (HELD_REPLY, ()) if not apply else self.till.approve(code, sender=self._asker, chat=msg.chat)
-        with self._tx(): self._reply(text, long_ok=True)
+        with self._tx():
+            self._reply(text, long_ok=True)
+            till_approvals.finish(self, msg)
         if not ops: return
         try:
             if self.till.site_moved(base, site): raise ValueError("site")  # changed while the till was written: keep the newer word
