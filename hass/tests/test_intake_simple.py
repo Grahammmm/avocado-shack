@@ -200,7 +200,7 @@ class SimpleIntake(unittest.TestCase):
         chat.say("yes " + code)
         self.assertEqual(chat.commits(), 1)
 
-    def test_live_protected_claim_gate_remains_in_preview_and_approval(self):
+    def test_live_label_text_is_not_a_blocked_claim_in_preview_or_approval(self):
         from hass import live_policy
         chat, _ = self.chat()
         chat.conv.settings["liveSite"] = {"url": "https://example.invalid"}
@@ -209,12 +209,12 @@ class SimpleIntake(unittest.TestCase):
         chat.conv._live_reasons = live_policy.check
         _, said = chat.say(FINANCE, base.JAR)
         self.assertIn("Made in USA", said[0])
-        self.assertIn("I can't put this on the website", said[0])
+        self.assertNotIn("I can't put this on the website", said[0])
         code = chat.live()["draft_code"]
-        self.assertNotIn("yes " + code, said[0])
+        self.assertIn("yes " + code, said[0])
         chat.say("yes " + code)
-        self.assertEqual(chat.commits(), 0)
-        self.assertEqual(chat.drafts()[0]["state"], "proposed")
+        self.assertEqual(chat.commits(), 1)
+        self.assertIn(chat.drafts()[0]["state"], ("applied", "verified"))
 
     def test_exact_live_demo_before_caption_and_late_text(self):
         from hass import answer_reader, cloud_codex
@@ -244,7 +244,9 @@ class SimpleIntake(unittest.TestCase):
                     _, said = chat.say(sentence)
                 self.assert_preview(chat, said)
                 preview = said[0]
-                self.assertEqual(preview.count("4 fl. oz. (118 mL)"), 1)
+                # The structured listing shows size once; the publish-card lane also
+                # includes the exact full website description for owner review.
+                self.assertEqual(preview.split("Website description:")[0].count("4 fl. oz. (118 mL)"), 1)
                 self.assertEqual(chat.live()["slots"]["description"].count("4 fl. oz. (118 mL)"), 1)
                 self.assertIn("Category: General (say 'category X' to change)", preview)
                 self.assertNotIn("pantry", preview.lower())

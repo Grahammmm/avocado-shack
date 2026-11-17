@@ -1483,7 +1483,9 @@
    "hold",
    "available",
    "available_on",
-   "restock_on"
+   "restock_on",
+   "labelSource",
+   "ownerSource"
   ],
   "product_optional_public": [
    "imageAlt",

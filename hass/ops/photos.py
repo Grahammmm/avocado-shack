@@ -219,7 +219,7 @@ def _folder_unusable(site_dir):
     return False
 
 
-def install(ctx, sha, alt, *, style=True):
+def install(ctx, sha, alt, *, style=True, owner_fallback=False):
     """Queue the stored photo's web copy for commit; the site path ``assets/products/photo-<sha16>.<ext>`` or Refused.
     Shared by product.set_photo and product.add (AV0022-02). Same bytes already there are reused, not rewritten.
     With settings ``houseRender`` true and ``style`` True the queued bytes are the house-style JPEG instead (named .jpg),
@@ -249,11 +249,13 @@ def install(ctx, sha, alt, *, style=True):
         data, ext = cleaned, "jpg"
     elif house:
         verdict = _verdict(data)
-        if isinstance(verdict, Refused):
-            return verdict
-        if not verdict["ok"]:
-            return Retake(verdict["reason"], tuple(verdict["problems"]))
-        data, ext = verdict["jpeg"], "jpg"
+        if not isinstance(verdict, Refused) and verdict["ok"]:
+            data, ext = verdict["jpeg"], "jpg"
+        elif not owner_fallback:
+            return verdict if isinstance(verdict, Refused) else Retake(verdict["reason"], tuple(verdict["problems"]))
+        # Styling is optional. The already decoded, resized, metadata-free owner
+        # web copy remains usable even when isolation/style checks fail. Never
+        # publish the rejected generated/rendered pixels as the fallback.
     target = f"assets/products/photo-{sha[:16]}.{ext}"
     path, have, link = Path(ctx.site_dir) / target, ctx.assets.get(target), False
     try:  # read the site file only when not already queued; lstat first so a FIFO is never opened

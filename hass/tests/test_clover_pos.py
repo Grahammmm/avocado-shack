@@ -2,6 +2,7 @@
 report + pos-totals.json. Synthetic fixtures only (FAKEMERCH0001, FAKE token); sockets are patched, the token and client are never touched.
 Run: python3 -B -m unittest hass.tests.test_clover_pos
 """
+import dataclasses
 import json
 import sqlite3
 import os
@@ -112,6 +113,16 @@ class ViewTests(PosCase):
         left = []
         pos.drop_rows(snapshot, snaps, T0, 1, left)
         self.assertEqual(left, ["Sunshine olive oil"])
+
+    def test_an_item_counted_earlier_but_absent_from_the_latest_list_is_left_out_and_incomplete(self):
+        snapshot, snaps = self.with_series((3, ["10", "50", "14", "0", "7.5", None]), (0.0, ["5", "50", "14", "0", "7.5", None]))
+        snapshot = dataclasses.replace(snapshot, items=tuple(i for i in snapshot.items if i.id != IDS[0]))   # the oil is gone from the latest list
+        left = []
+        names = [i.name for i, _ in pos.drop_rows(snapshot, snaps, T0, 1, left)]
+        self.assertEqual((left, "Sunshine olive oil" in names), ([pos.GONE_NAME], False))
+        self.assertIn("Left out: " + pos.GONE_NAME, pos.drops(snapshot, snaps, T0))
+        self.assertIn("incomplete: 1 item left out", pos.summary(snapshot, snaps, T0, CONTENT, LINKS))
+        self.assertEqual(pos.build(snapshot, snaps, T0, CONTENT, LINKS)[1]["countDropLeftOut"], 1)
 
     def test_summary_and_totals_say_incomplete_when_items_are_left_out(self):
         mid = ["25", "50", "14", "0", None, None]
