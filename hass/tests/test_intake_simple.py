@@ -106,12 +106,51 @@ class SimpleIntake(unittest.TestCase):
         chat, _ = self.chat({**DETAILS, "price": "99.00", "stock": 999})
         _, said = chat.say(FINANCE, base.JAR)
         original = chat.drafts()[0]
-        for edit in ("add: <script>", "add: costs $500", "add: bad\u202eline"):
+        for edit in ("add: <script>", "add: costs $500", "add: sells for two dollars", "add: bad\u202eline"):
             d, said = chat.say(edit)
             self.assertEqual(d, "not-drafted", said)
             self.assertEqual(chat.drafts()[0], original)
             self.assertEqual(chat.commits(), 0)
         self.assertEqual(chat.live()["slots"]["intake"]["price"], "2.00")
+
+    def test_earlier_identity_does_not_mask_later_photo_brand_shelf_or_description(self):
+        chat, _ = self.chat({**DETAILS, "category": "drinks"})
+        text = "new glue"
+        chat.script(text, base.reply(name="Glue"))
+        chat.say(text + "; " + FINANCE)
+        d, said = chat.say("", base.JAR)
+        self.assertEqual(d, "proposed", said)
+        slots = chat.live()["slots"]
+        self.assertEqual(slots["name"], "Glue")
+        self.assertEqual(slots["maker"], "Gorilla")
+        self.assertEqual(slots["shelf"], "drinks")
+        self.assertIn("pointed applicator", slots["description"])
+
+    def test_interrupted_label_callback_cannot_leave_a_no_reply_loop(self):
+        chat, _ = self.chat()
+        with mock.patch.object(chat.conv, "_read_label", side_effect=RuntimeError("interrupted callback")):
+            chat.say(FINANCE, base.JAR)
+        self.assertTrue(chat.live()["slots"]["intake"]["reading_photo"])
+        d, said = chat.say("Glue")
+        self.assertEqual(d, "proposed", said)
+        self.assertEqual(chat.live()["slots"]["name"], "Glue")
+        self.assertEqual(len(said), 1)
+        self.assertFalse(chat.live()["slots"]["intake"]["reading_photo"])
+
+    def test_separate_quantity_and_spelled_money_clauses_and_zero_stock(self):
+        for words, qty, stock in (("bought 100; paid one dollar; selling for two dollars", 100, "yes"),
+                                  ("stock 0; price 2; cost 1", 0, "no")):
+            with self.subTest(words=words):
+                chat, _ = self.chat()
+                d, said = chat.say(words, base.JAR)
+                self.assertEqual(d, "proposed", said)
+                slots = chat.live()["slots"]
+                self.assertEqual((slots["intake"]["qty"], slots["intake"]["price"], slots["intake"]["cost"]),
+                                 (qty, "2.00", "1.00"))
+                self.assertEqual(slots["availability"], stock)
+                self.assertNotIn("dollar", chat.drafts()[0]["ops_json"])
+                self.assertEqual(chat.asked, [])
+                self.doCleanups()
 
     def test_model_cannot_supply_private_finances_or_fake_photo_provenance(self):
         chat, _ = self.chat()

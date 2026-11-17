@@ -597,6 +597,12 @@ class Dispatcher:
             return "cancelled"
         # Keep every accepted source word across edits, not the financial clauses.
         asked = (req["asked_slot"] or "").removeprefix(item_intake.PREFIX)
+        if req["slots"].get("intake", {}).get("reading_photo"):
+            # A later turn after an interrupted callback must not wait forever on
+            # an in-memory job that no longer exists. Keep the photo and typed facts.
+            slots = {**req["slots"], "intake": {**req["slots"]["intake"], "reading_photo": False}}
+            req = {**req, "slots": slots}
+            if not slots.get("name"): asked = "name"
         if req["state"] == "drafted" and simple.NEXT.fullmatch(msg.text.strip()):
             row = self.conv._by_code(req["draft_code"], ("proposed",))
             if row is not None and self.conv._expiry(row) > now:

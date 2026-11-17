@@ -113,19 +113,22 @@ def caption_answers(caption):
         text = part.strip().rstrip(".!")
         got = {}
         purchase = re.fullmatch(r"bought\s+(\d+)\s+at\s+\$?(\d+(?:\.\d{1,2})?)(?:\s+each)?", text, re.I)
-        money = re.fullmatch(r"(?:bought|paid|cost|sell|selling|price)(?:\s+(?:it|them))?(?:\s+(?:for|at))?\s*:?\s+(\$?\d+(?:\.\d{1,2})?)(?:\s+each)?", text, re.I)
-        qty = re.fullmatch(r"(?:bought\s+|got\s+|stock\s*:?\s*)?(\d+(?:\.\d+)?)\s+(of them|each|[a-z]+)", text, re.I)
+        money = re.fullmatch(r"(?:bought|paid|cost|sell|selling|price)(?:\s+(?:it|them))?(?:\s+(?:for|at))?\s*:?\s+(.+)", text, re.I)
+        qty = re.fullmatch(r"(?:(bought|got|stock|qty|quantity)\s*:?\s*)?(\d+(?:\.\d+)?)(?:\s+(of them|each|[a-z]+))?", text, re.I)
         if purchase:
             parsed = _parse_qty(purchase[1])
             cost = _parse_money(purchase[2])
             if parsed and cost is not None: got.update(qty=parsed[0], qty_unit="each", cost=cost)
+        elif qty and (qty[1] or qty[3]):
+            unit = "each" if not qty[3] or qty[3].lower() == "of them" else qty[3]
+            parsed = _parse_qty(qty[2] + " " + unit)
+            if parsed: got.update(qty=parsed[0], qty_unit=parsed[1])
+            elif qty[1] and qty[1].lower() == "stock" and unit in UNIT_WORDS and _parse_count(qty[2]) == 0:
+                got.update(qty=0, qty_unit=UNIT_WORDS[unit])
         elif money:
             key = "cost" if re.match(r"bought|paid|cost", text, re.I) else "price"
             value = _parse_money(money[1])
             if value is not None: got[key] = value
-        elif qty:
-            parsed = _parse_qty(qty[1] + " " + ("each" if qty[2].lower() == "of them" else qty[2]))
-            if parsed: got.update(qty=parsed[0], qty_unit=parsed[1])
         if not got:
             if part.strip(): public.append(part.strip())
             continue

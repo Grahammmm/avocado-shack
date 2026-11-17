@@ -35,13 +35,19 @@ def fill(slots, texts):
     out["intake"] = got
     details = photo_details(got)
     for source, target in (("name", "name"), ("brand", "maker"), ("category", "shelf")):
-        if details.get(source) and not out.get(target):
+        if details.get(source) and (not out.get(target) or got.get(target + "_default")):
             out[target] = details[source]
+            got.pop(target + "_default", None)
     if not out.get("name"): return out
-    out.setdefault("maker", "Producer not identified")
-    out.setdefault("shelf", newitem.stated_shelf(" ".join(texts)) or "pantry")
+    if not out.get("maker"):
+        out["maker"], got["maker_default"] = "Producer not identified", True
+    if not out.get("shelf"):
+        out["shelf"] = newitem.stated_shelf(" ".join(texts)) or "pantry"
+        got["shelf_default"] = not bool(newitem.stated_shelf(" ".join(texts)))
     if not out.get("description") or details and not got.get("photo_applied"):
-        parts = [out.get("description") or details.get("description") or out.get("name", "")]
+        prior = "" if got.get("description_default") else out.get("description", "")
+        parts = [prior, details.get("description") or (out.get("name", "") if not prior else "")]
+        got["description_default"] = not bool(prior or details.get("description"))
         parts += [details[k] for k in ("size", "count", "colour", "finish", "materials") if details.get(k)]
         parts += details.get("features", []) + details.get("printed_claims", []) + details.get("warnings", [])
         kept, overflow = [], []
@@ -82,9 +88,11 @@ def edit(slots, text, asked=None):
         return out, match[1]
     if match := re.fullmatch(r"(?:brand|maker)\s*:?\s+(.+)", public, re.I):
         out["maker"] = match[1]
+        got.pop("maker_default", None)
         return out, match[1]
     if match := re.fullmatch(r"(?:category|shelf)\s*:?\s+(.+)", public, re.I):
         out["shelf"] = match[1].lower()
+        got.pop("shelf_default", None)
         return out, match[1]
     stock = {"in stock": "yes", "sold out": "no", "low on stock": "limited"}.get(public.strip().lower())
     if stock:
@@ -95,6 +103,7 @@ def edit(slots, text, asked=None):
         out["name"] = copy
     elif copy:
         out["description"] = " ".join([out.get("description", ""), copy]).strip()
+        got["description_default"] = False
     return out, copy
 
 
@@ -109,7 +118,7 @@ def plan(slots, content):
             raise ValueError("The listing needs " + key + ".")
         if len(value) > TEXT_LIMITS["product"][key] or any(bad in value for bad in FORBIDDEN_TEXT) or INVISIBLE_RE.search(value):
             raise ValueError("I can't use that wording. The listing is unchanged; send the change in plain words.")
-        if "$" in value or newitem.PRICE_RE.search(value):
+        if re.search(r"[$€£]|\b(?:prices?|costs?|dollars?|bucks?|usd|euros?|eur|gbp|cents?)\b", value, re.I):
             raise ValueError("Prices stay in your private notes, not the website wording. The listing is unchanged.")
     if args["category"] not in CATEGORIES:
         raise ValueError("That shelf isn't on the website. The listing is unchanged.")
