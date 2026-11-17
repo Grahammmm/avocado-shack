@@ -416,6 +416,16 @@ def house_description(slots, ctx):
     note = _clean(_intake(slots).get("customer_note"))
     if note and not _note_problems(slots, ctx):
         return note
+    photo_text = intake_mod.photo_description(_intake(slots))
+    if photo_text:
+        # Same content, house-style and live-claim checks as any other description.
+        # Never relax those gates for a photo or for the label's yes.
+        try:
+            if not description_problems(_text(photo_text, "description", "description"), _message(ctx)) and not (
+                    _live(ctx) and _claim_kinds(photo_text)):
+                return photo_text
+        except Refusal:
+            pass
     content, name = _content(ctx), clean_name(slots.get("name"))
     if content is None or not name:
         return None
@@ -526,6 +536,8 @@ def intake_read(req, text, ctx) -> dict:
     """His answer to the open intake question: {"abort": True}, {"again": the question again} or {"slots": the slots it sets,
     "public": whether the answer may join his texts (only a maker's website), "note": a sentence to say first or None}."""
     key = (req.get("asked_slot") or "")[len(intake_mod.PREFIX):]
+    if key == "photo_confirm" or key.startswith("photo_claim_"):
+        return intake_mod.photo_answer(key, text, req["slots"])
     today = _today(ctx) or date.today()
     got = intake_mod.read(key, text, _intake(req["slots"]), today=today, asks=req.get("asks") or 1,
                           reader=(lambda k, words: ctx.intake_reader(k, words, today)) if getattr(ctx, "intake_reader", None) else None)
@@ -841,6 +853,10 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
 
     # 5. the description: drafted in the shop's voice, or his own words
     description = _clean(slots.get("description"))
+    photo_draft = intake_mod.photo_description(_intake(slots))
+    if photo_draft and description != photo_draft:
+        left.append("the photo's description or approved label wording, because the website's existing wording and claim checks still apply. "
+                    "The photo details stay in your private notes")
     if _clean(_intake(slots).get("customer_note")) and (why := _note_problems(slots, ctx)):  # HASS-INTAKE-2: said once, never silently dropped
         left.append(f"your sentence for customers, because {_join(why, 'and')}. I wrote the usual kind of description instead")
     if description and "description" not in filled and _live(ctx) and (kinds := _claim_kinds(description)):

@@ -1783,9 +1783,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(said)
             return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
         if self.skills_mode != dispatch_mod.DEFAULT_MODE and self.dispatch.photo_skills():  # SKILLS-FW-3 (spec 2.7): the photo joins the open request
+            intake_answers = None
+            if self.settings.get("itemIntake") is True:
+                caption, intake_answers = item_intake.caption_answers(caption)
             as_text = Inbound(**{**vars(msg), "text": caption})
-            done = self.dispatch.photo(as_text, now, sha, caption)
-            return done if done is not None else self._request(as_text, now)  # no skill yet: the caption is the next text of that request
+            done = self.dispatch.photo(as_text, now, sha, caption, intake_answers=intake_answers)
+            done = done if done is not None else self._request(as_text, now)
+            req = self.requests.get(msg.chat, now)
+            if (self.labels is not None and self.settings.get("itemIntake") is True and req
+                    and req["skill"] == "item.add" and req["state"] == "open" and req["attachments"] == [sha]
+                    and not req["slots"].get("intake", {}).get("photo_details")):
+                question = self.db.execute("SELECT id FROM outbox WHERE chat = ? AND sent_at IS NULL ORDER BY id DESC LIMIT 1",
+                                           (msg.chat,)).fetchone()
+                self._label_jobs.append((None, sha, (as_text, req["request_id"], now, question["id"] if question else None)))
+            return done
         code = self._photo_row(sha, msg, now)
         if not caption:
             self._photo_question(code, sha)
@@ -1850,6 +1861,18 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
             found = self.labels.read(web, sorted({p["category"] for p in products if isinstance(p.get("category"), str)}))
         except Exception: return  # noqa: BLE001 - no label is today's reply exactly
+        if code is None:
+            msg, request_id, now, question_id = reply_id
+            with self._answer_to(msg.chat), self._tx():
+                req = self.requests.get(msg.chat, now)
+                if (not found or req is None or req["request_id"] != request_id or req["state"] != "open"
+                        or req["skill"] != "item.add" or req["attachments"] != [sha]): return
+                slots = {**req["slots"], "intake": {**req["slots"].get("intake", {}), "photo_details": found}}
+                # Replace only this message's unsent question; an early receipt already sent stays sent.
+                self.db.execute("DELETE FROM outbox WHERE id = ? AND sent_at IS NULL", (question_id,))
+                self.dispatch._advance(Inbound(**{**vars(msg), "text": ""}), now, req,
+                                       self.dispatch.registry.get("item.add"), slots, None, resolved=True)
+            return
         line = label_reader.question(found, self._makers(), products) if found else None  # AVB-10: matching records
         with self._tx():
             if line and self.db.execute("UPDATE drafts SET summary = summary || ? WHERE code = ? AND state = "

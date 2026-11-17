@@ -50,7 +50,7 @@ class FarmTermTests(unittest.TestCase):
             with self.subTest(collection=collection):
                 self.assertEqual(self.hits("", "regenerative", collection=collection), ["regenerative"])
 
-    def test_label_transport_never_offers_farm_claims_in_any_field(self):
+    def test_label_transport_quarantines_farm_claims_from_identity_fields(self):
         for term in FARM + ("Cage-Free Eggs", "free‑range", "FAIR-TRADE"):
             for field in ("name", "brand", "category"):
                 with self.subTest(term=term, field=field):
@@ -58,7 +58,8 @@ class FarmTermTests(unittest.TestCase):
                     values[field] = term
                     labels, transport = reader(recorded(values))
                     found = labels.read(b"fixture image", ["eggs", term])
-                    self.assertEqual(found, {k: v for k, v in values.items() if k != field})
+                    self.assertEqual(found, {**{k: v for k, v in values.items() if k != field},
+                                             "printed_claims": [term]})
                     self.assertEqual(len(transport.calls), 1)
         labels, _ = reader(recorded({"name": "Large Eggs"}))
         self.assertEqual(labels.read(b"fixture image", []), {"name": "Large Eggs"})
