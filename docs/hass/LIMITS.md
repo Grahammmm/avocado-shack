@@ -69,7 +69,7 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 
 ## New badge
 
-- A product you add through Hass shows New for **14** <!-- shop.NEW_BADGE_DAYS --> days from the day it was added (Pacific). Products already on the shop before that, restored products and edited products are not newly added, so they never show it.
+- A product you add through Hass normally shows New for **14** <!-- shop.NEW_BADGE_DAYS --> Pacific calendar days, counting the day it was added. In the sandbox, you can ask for no New badge. Products already on the shop before this feature have no added date and do not show it. Editing or restoring a product does not start or restart the badge period; a recently added product can still show New after an edit or restore.
 
 ## Home page
 
