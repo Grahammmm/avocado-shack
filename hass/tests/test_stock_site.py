@@ -214,6 +214,18 @@ class StockCase(unittest.TestCase):
         self.pull(); self.runq(); self.assertEqual(len(self.live.calls), 6)
         self.assertEqual(len(self.published()), 6)
 
+    def test_crash_after_publish_then_stock_reverses(self):
+        self.baseline(); pid = self.ids[0]; self.pull(**{pid: 0})
+        with patch.object(s.StockSite, 'finish', side_effect=Crash), self.assertRaises(Crash): self.runq()
+        self.assertEqual(len(self.live.calls), 1)
+        self.pull(**{pid: 3}); self.assertEqual(self.runq(), 'live')
+        product = next(p for p in json.loads(self.products_path.read_text())['products'] if p['id'] == pid)
+        self.assertEqual(product['available'], 'yes')
+        self.assertNotIn(pid, self.data()['pending'])
+        self.assertEqual([batch[0]['args']['available'] for batch in self.live.calls], ['no', 'yes'])
+        self.assertEqual(len(self.published()), 2)
+        self.pull(); self.assertEqual(self.runq(), 'ok'); self.assertEqual(len(self.live.calls), 2)
+
     def test_crash_before_inflight_and_unsettled(self):
         self.baseline(); self.pull(**{self.ids[0]: 0})
         prepare = self.live.prepare

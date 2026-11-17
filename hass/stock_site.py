@@ -241,7 +241,12 @@ class StockSite:
         self.event(flight['change_id'], 'published', flight['change_id'])
         self.data['lastStockRelease'] = dict(actor='stock-sync', change_id=flight['change_id'], undo='That was a stock update from the till')
         for pid, p in flight['products'].items():
-            if self.data['pending'].get(pid, {}).get('crossing') == p['crossing']: self.data['pending'].pop(pid)
+            pending = self.data['pending'].get(pid)
+            if pending and pending['crossing'] == p['crossing']:
+                self.data['pending'].pop(pid)
+            elif pending and pending['till'] == p['till']:
+                # A later crossing starts from the word this release just published.
+                pending['base'] = p['target']
         for code, st in self.data['sets'].items():
             if st['state'] == 'open' and not any(p['held'] == code for p in self.data['pending'].values()): st['state'] = 'done'
         return True
