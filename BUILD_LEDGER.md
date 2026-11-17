@@ -2454,7 +2454,7 @@ Checks at PR head 3c0d196e: the published site passed `storefront-mockup/static-
 
 Limits: Site units have no GitHub issue. The sample date in `hiking-preview.json` is not changed, and hiding the samples is AV1422-10.
 
-## Site: static hikes without invented counts (AV1422-06) — November 5, 2026
+## Site: static hikes without invented counts (AV1422-06) — November 4, 2026
 
 Branch rb/av1422-06 (AV1422-06, PR #393, merged as 084dbeb99e19bb3d7eb28393c3d4c0eaafaeaab5). On the static site a real hike no longer shows "0 confirmed guests", and a hike with RSVPs on says "To join, ask at the Shack."; with the club service nothing changes. No invented guest count is shown: the static fallback carries `null`, not zero.
 

@@ -70,6 +70,11 @@ def git(*args):
 
 
 class LedgerRF1120Tests(unittest.TestCase):
+    def test_av1422_06_merge_date_is_pacific_date(self):
+        # PR #393 merged 2026-11-05 02:43:33 UTC, still November 4 in Pacific time.
+        heading = sections(LEDGER, "AV1422-06")[0].splitlines()[0]
+        self.assertTrue(heading.endswith(" — November 4, 2026"), heading)
+
     def test_merge_shas_exist_in_history(self):
         if not (REPO_ROOT / ".git").exists() or git("rev-parse", "--is-shallow-repository") == "true":
             self.skipTest("no .git (tarball checkout) or shallow clone: merge history not available")
