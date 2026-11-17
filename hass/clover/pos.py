@@ -19,7 +19,6 @@ from hass.clover.mapper import format_quantity
 
 NOTE = "(count drops, not exact sales: a recount or a till edit also shows here)"
 DATED = re.compile(r"(\d{4}-\d{2}-\d{2})-pos\.md")
-GRACE = 300   # seconds a journalled change may have landed after its draft expired (the client's retries and Retry-After waits have no smaller hard bound)
 low = reads.low_stock
 
 
@@ -32,28 +31,40 @@ def since_day(now, days):
     return now.astimezone(reads.PACIFIC).date() - timedelta(days=days - 1)
 
 
-def journal_deltas(state, identity, since):
-    """[(lo, hi, item id, change)]: Hass's own applied count changes on or after `since` (ISO day); [] when there is no journal. The journal keeps
-    no apply time, so a change landed somewhere in [expires - 600, expires + GRACE]: offered at most 10 minutes before the draft expired."""
+def journal_deltas(state, identity, since=None):
+    """[(lo, hi, item id, change)]: every journalled count change of Hass's (`since` is unused: no day filter). lo/hi are the journal's own stamps
+    (intent written / settled), None when unstamped or not settled (unbounded). change is the stock difference for an applied change with known
+    before and after, else None (amount unknown). [] when there is no journal."""
     path = Path(state) / "clover" / "journal.sqlite3"
+    cols = "SELECT c.draft, c.status, c.result, {} FROM changes c {} WHERE c.status != 'draft'"
     try:
         if not cache._private_dir(path.parent, False) or not cache._private_file(path, False):
             return []
         with closing(sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=5)) as db:
             if db.execute("SELECT v FROM meta WHERE k='identity'").fetchone()[0] != json.dumps(list(identity)):
                 return []
-            rows = db.execute("SELECT expires, result FROM changes WHERE status='applied' AND day >= ?", (since,)).fetchall()
-        entries = [((datetime.fromtimestamp(expires - 600, timezone.utc), datetime.fromtimestamp(expires + GRACE, timezone.utc)), json.loads(result))
-                   for expires, result in rows]
-        return [(*span, e["item_id"], Decimal(e["after"]["stock"]) - Decimal(e["before"]["stock"]))
-                for span, e in entries if e["kind"] == "set_stock" and e["before"]["stock"] is not None]
+            try:
+                rows = db.execute(cols.format("s.intent_at, s.settled_at", "LEFT JOIN stamps s ON s.code = c.code")).fetchall()
+            except sqlite3.OperationalError:   # no stamps table: every row is unstamped
+                rows = db.execute(cols.format("NULL, NULL", "")).fetchall()
+        out = []
+        for draft, status, result, lo, hi in rows:
+            draft = json.loads(draft)
+            if draft.get("kind") != "set_stock":
+                continue
+            seen = json.loads(result) if status == "applied" and result else {}
+            before, after = (seen.get(k, {}).get("stock") for k in ("before", "after"))
+            change = Decimal(after) - Decimal(before) if None not in (before, after) else None
+            out.append(tuple(None if t is None else datetime.fromtimestamp(t, timezone.utc) for t in (lo, hi)) + (draft["item_id"], change))
+        return out
     except (cache.CacheUnsafe, sqlite3.Error, ValueError, KeyError, TypeError, ArithmeticError):
         return []
 
 
 def drop_rows(snapshot, snaps, deltas, now, days, unsure=None):
     """[(item, units)] biggest first, or None when no earlier count covers the period. units = count before - count now + Hass's own change.
-    A Hass change whose window crosses either count is ambiguous: its item gets no number and is appended to `unsure` (a list) when given."""
+    A Hass change is ignored only when its stamps prove it settled by the first count or began at or after the last; it is added back only when it
+    began and settled between the two counts with a known amount. Anything else is ambiguous: its item gets no number and is appended to `unsure`."""
     first = since_day(now, days)
     start = datetime.combine(first, time.min, reads.PACIFIC) - timedelta(hours=1)
     began, base = next(((t, c) for t, c in snaps if start <= t < snapshot.fetched_at), (None, None))
@@ -61,9 +72,9 @@ def drop_rows(snapshot, snaps, deltas, now, days, unsure=None):
         return None
     own, vague = {}, set()
     for lo, hi, iid, change in deltas:
-        if hi <= began or lo >= snapshot.fetched_at:   # wholly before the first count (already in it) or wholly after the last (not in it yet): ignored
+        if (hi is not None and hi <= began) or (lo is not None and lo >= snapshot.fetched_at):
             continue
-        if began < lo and hi < snapshot.fetched_at:
+        if lo is not None and began < lo and hi is not None and hi < snapshot.fetched_at and change is not None:
             own[iid] = own.get(iid, 0) + change
         else:
             vague.add(iid)

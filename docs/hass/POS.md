@@ -24,11 +24,12 @@ The cache keeps the counts of every read for **14 days** (`snapshots`, written a
 the till does not count have no row). A drop is the count at the start of the period, less the count now, **plus Hass's own change**:
 
 - the start is the earliest read from one hour before Pacific midnight of the first day (today, or the last 7 days);
-- Hass's own changes are the applied `set_stock` rows of its write journal (`journal.sqlite3`, opened read-only, same till only) made strictly between the start read
-  and the read now. The journal keeps no apply time, so each change gets the window it provably landed in: from 10 minutes before its draft expired
-  (when the owner was offered it) to 5 minutes after (`GRACE` in `pos.py`). A window wholly before the start read is already in the start count and one wholly
-  after the read now is not in it yet, so neither is added back; a window wholly between the two reads is added back. A window that crosses either read is
-  **ambiguous**: that item gets no number, and the reply says "Left out: <names> (a Hass till change landed close to a count)" rather than guess. A count Hass lowered is taken off the drop; stock it received is added back, so a delivery does not hide sales;
+- Hass's own changes are the `set_stock` rows of its write journal (`journal.sqlite3`, opened read-only, same till only). Each carries two stamps Hass wrote
+  itself: when it recorded its intent to write, and when the change was settled (applied, failed or checked afterwards). Before the stamps there is no
+  apply time to rely on. A change settled at or before the start read is already in the start count, and one begun at or after the read now is not in it yet:
+  neither is added back. A change begun after the start read and settled before the read now, with a known amount, is added back. Every other change is
+  **ambiguous**: one with no stamps, one not settled, one whose amount is unknown (not applied, or no known before/after), or one whose stamps touch a read.
+  That item gets no number, and the reply says "Left out: <names> (a Hass till change landed close to a count)" rather than guess. A count Hass lowered is taken off the drop; stock it received is added back, so a delivery does not hide sales;
 - a count changed by hand at the register, a recount or a till edit is **not** known, so it also shows as a drop. That is why every reply says
   "count drops, not exact sales". Exact sales need the Orders permission, which this card does not use.
 

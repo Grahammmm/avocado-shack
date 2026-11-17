@@ -4,18 +4,27 @@ Run: python3 -B -m unittest hass.tests.test_clover_pos
 """
 import json
 import sqlite3
+import itertools
+import os
 import stat
+import tempfile
 import unittest
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from hass.clover import cache, cli, pos, reads, sync
+from hass.clover import cache, cli, drafts as d, pos, reads, sync
+from hass.clover.apply import ApplyEngine
+from hass.clover.client import CloverWriteClient
+from hass.clover.config import from_settings
+from hass.clover.mapper import parse_item
 from hass.clover.journal import Journal
 from hass.tests.test_clover_chat import identity
 from hass.tests.test_clover_cli import MID, CliCase, T0
-from hass.tests.test_clover_client import fixture
+from hass.tests.test_clover_apply import Till
+from hass.tests.test_clover_client import FAKE_TOKEN, NoNetwork, fixture
 from hass.tests.test_clover_reports import CONTENT, LINKS, put_inputs
 
 IDS = [f"FAKEITEM0000{n}" for n in range(1, 7)]    # oil, avocado, eggs, honey (hidden), tomatoes, special (no count)
@@ -43,11 +52,16 @@ class PosCase(CliCase):
         self.snaps = cache.history(self.state, identity())
         self.snapshot, self.reachable = cache.read(self.state, identity())
 
-    def journal(self, day, item_id, before, after, kind="set_stock", status="applied", at=None):
+    def journal(self, day, item_id, before, after, kind="set_stock", status="applied", at=None, stamp=True):
+        """stamp: True = intent at `at`, settled 15 minutes later; (intent, settled) datetimes or None; False = no stamps row."""
+        at = at or T0 - timedelta(hours=1)
+        lo, hi = (at, at + timedelta(minutes=15)) if stamp is True else stamp or (None, None)
         with Journal(self.state, SimpleNamespace(environment="production", merchant_id=MID)).locked() as db:
             result = json.dumps({"kind": kind, "item_id": item_id, "before": {"stock": before}, "after": {"stock": after}})
             n = db.execute("SELECT count(*) FROM changes").fetchone()[0]
-            db.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?,?)", (f"c{n}", "{}", "s", "c", ((at or T0 - timedelta(hours=1)).timestamp() + 600), status, day, result))
+            db.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?,?)", (f"c{n}", json.dumps({"kind": kind, "item_id": item_id}), "s", "c", at.timestamp() + 600, status, day, result if status == "applied" else None))
+            if stamp is not False:
+                db.execute("INSERT INTO stamps VALUES(?,?,?)", (f"c{n}", lo and lo.timestamp(), hi and hi.timestamp()))
 
     def deltas(self):
         return pos.journal_deltas(self.state, identity(), "2026-11-04")
@@ -108,6 +122,38 @@ class ViewTests(PosCase):
         self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(minutes=1))
         self.assertEqual(pos.drops(self.snapshot, self.snaps, self.deltas(), T0),
                          f"Biggest count drops today: Eggs, dozen 14, Hass avocado 10 {NOTE} Left out: Sunshine olive oil (a Hass till change landed close to a count).")
+
+    def left(self, **kw):
+        self.journal("2026-11-10", IDS[0], "25", "35", **kw)
+        left = []
+        rows = dict((i.name, n) for i, n in pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1, left))
+        return rows.get("Sunshine olive oil"), left
+
+    def sql(self, text):
+        with Journal(self.state, SimpleNamespace(environment="production", merchant_id=MID)).locked() as db:
+            db.execute(text)
+
+    def test_stamps_decide_each_case(self):
+        mins = lambda a, b: (T0 - timedelta(minutes=a), T0 - timedelta(minutes=b))   # counts: first at T0-210 min, last at T0
+        oil = ["Sunshine olive oil"]
+        for name, kw, number, out in (
+                ("(a) wholly between, applied: added back", dict(stamp=mins(120, 100)), 24, []),
+                ("(b) settled at the first count: ignored", dict(stamp=mins(300, 210)), 14, []),
+                ("(c) begun at the last count: ignored", dict(stamp=mins(0, -5)), 14, []),
+                ("(d) delayed write settled after the last count", dict(stamp=mins(60, -30)), None, oil),
+                ("(e) recovered intent from before the first count", dict(stamp=mins(400, 100)), None, oil),
+                ("(f) intent never settled", dict(stamp=(T0 - timedelta(minutes=60), None)), None, oil),
+                ("(g) applied but no stamps row", dict(stamp=False), None, oil),
+                ("unknown amount inside the period", dict(stamp=mins(120, 100), status="uncertain"), None, oil)):
+            with self.subTest(name):
+                self.assertEqual(self.left(**kw), (number, out))
+                self.sql("DELETE FROM changes")
+                self.sql("DELETE FROM stamps")
+
+    def test_journal_without_a_stamps_table_leaves_every_row_unstamped(self):
+        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=2))
+        self.sql("ALTER TABLE stamps RENAME TO gone")
+        self.assertEqual([(lo, hi, c) for lo, hi, _, c in self.deltas()], [(None, None, 10)])
 
     def test_week_and_the_note_is_always_present(self):
         self.assertEqual(pos.drops(self.snapshot, self.snaps, [], T0, days=7),
@@ -238,6 +284,35 @@ class HistoryTests(PosCase):
         db.close()
         self.assertEqual(cache.history(self.state, other), [])
         self.assertEqual(pos.journal_deltas(self.state, identity(), "2026-01-01"), [])     # no journal yet
+
+
+class StampWriteTests(NoNetwork):
+    def test_handle_and_recover_write_the_stamps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state, till, tick = Path(tmp), Till(), itertools.count(1800000000)
+            os.chmod(state, 0o700)
+            token = state / "fake-write"
+            token.write_text(FAKE_TOKEN)
+            token.chmod(0o600)
+            cfg = from_settings({"environment": "sandbox", "merchantId": "FAKEMERCH0001", "tokenFile": str(state / "fake-read"), "writeTokenFile": str(token),
+                                 "writes": True, "liveApproved": True, "categoryMap": {"pantry": "Pantry"}})
+            engine = ApplyEngine(state, cfg, lambda t: CloverWriteClient("FAKEMERCH0001", t, till, min_interval=0), mike=("mike", "private"), clock=lambda: next(tick))
+            offer = lambda n: engine.offer(d.build_set_stock(parse_item(till.items["FAKEITEM00001"]), n, cfg), sender="mike", chat="private")[0]
+
+            def stamp(code):
+                with engine.journal.locked() as db:
+                    return tuple(db.execute("SELECT intent_at, settled_at FROM stamps WHERE code=?", (code,)).fetchone())
+            done = offer(7)
+            self.assertEqual(engine.handle("yes " + done, sender="mike", chat="private"), "applied")
+            lost = offer(9)
+            till.crash = True
+            with self.assertRaises(KeyboardInterrupt):
+                engine.handle("yes " + lost, sender="mike", chat="private")
+            till.crash = False
+            self.assertLess(*stamp(done))
+            self.assertIsNone(stamp(lost)[1])
+            engine.recover()
+            self.assertLess(*stamp(lost))
 
 
 if __name__ == "__main__":
