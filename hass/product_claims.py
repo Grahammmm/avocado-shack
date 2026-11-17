@@ -4,6 +4,7 @@ A label read is private evidence, not a verified health/origin claim. Its exact 
 may be quoted, with source=label and the original photo bound into the draft hash.
 """
 import json
+import hashlib
 import re
 
 from hass import live_policy, media
@@ -31,24 +32,36 @@ def remember(root, sha, details):
                                         sort_keys=True).encode() + b'\n')
 
 
-def source(root, sha, text):
+def remember_owner(root, sha, texts):
+    folder = media._open_root(root) / 'owner-claims'
+    media._private_dir(folder)
+    text = [t for t in texts if live_policy._protected(t)[1] & {'origin/organic'}]
+    key = hashlib.sha256(json.dumps(text, sort_keys=True).encode()).hexdigest()
+    path = folder / (sha + '-' + key + '.json')
+    if media._existing(path) is None:
+        media._write_new(path, json.dumps({'source': 'owner', 'photo': sha, 'text': text}, sort_keys=True).encode())
+    return text
+
+
+def source(root, sha, text, kind='label'):
     """Revalidate the admitted photo read at prepare/apply, not an interpreter's assertion."""
     if not root or not isinstance(sha, str) or not media.SHA_RE.fullmatch(sha) or not isinstance(text, list) or not text or len(text) > 100:
         return None
-    folder = media._open_root(root) / 'labels'
+    folder = media._open_root(root) / ('labels' if kind == 'label' else 'owner-claims')
     media._private_dir(folder)
-    raw = media._existing(folder / (sha + '.json'))
+    suffix = '' if kind == 'label' else '-' + hashlib.sha256(json.dumps(text, sort_keys=True).encode()).hexdigest()
+    raw = media._existing(folder / (sha + suffix + '.json'))
     try:
         receipt = json.loads(raw) if raw and len(raw) <= media.SIDECAR_MAX else {}
     except ValueError:
         return None
-    if receipt.get('source') != 'label' or receipt.get('photo') != sha or any(t not in receipt.get('text', []) for t in text):
+    if receipt.get('source') != kind or receipt.get('photo') != sha or any(t not in receipt.get('text', []) for t in text):
         return None
-    return {'source': 'label', 'photo': sha, 'text': text}
+    return {'source': kind, 'photo': sha, 'text': text}
 
 
-def valid_source(value):
-    return (isinstance(value, dict) and set(value) == {'source', 'photo', 'text'} and value['source'] == 'label'
+def valid_source(value, kind='label'):
+    return (isinstance(value, dict) and set(value) == {'source', 'photo', 'text'} and value['source'] == kind
             and isinstance(value['photo'], str) and bool(media.SHA_RE.fullmatch(value['photo']))
             and isinstance(value['text'], list) and 0 < len(value['text']) <= 100
             and all(isinstance(t, str) and 0 < len(t) <= 600 for t in value['text']))
@@ -58,6 +71,16 @@ def protected(text, product, names=()):
     """Screen exact label phrases independently; extra owner words remain screened."""
     evidence = product.get('labelSource')
     rest = text
+    owner = product.get('ownerSource')
+    if isinstance(rest, str) and valid_source(owner, 'owner'):
+        lines = '\n'.join(live_policy.claims.fold(t) for t in owner['text'])
+        for shown, sentence in live_policy._pieces(rest):
+            kinds = live_policy._protected(shown)[1]
+            if kinds and kinds <= {'origin/organic'} and live_policy._owner_said(sentence, lines):
+                rest = rest.replace(shown, '')
+        # A typed organic claim permits that same word, not a different source place.
+        if live_policy._owner_said('organic', lines):
+            rest = re.sub(r'(?<!\w)organic(?!\w)', '', rest, flags=re.I)
     if isinstance(rest, str) and valid_source(evidence):
         for phrase in sorted(evidence['text'], key=len, reverse=True):
             # Label evidence never excuses contact, money, trail claims or hidden script.
@@ -82,6 +105,9 @@ def sanitize(slots, details):
     text = label_text(details)
     evidence = {'source': 'label', 'photo': slots.get('photo'), 'text': text}
     product = {'category': slots.get('shelf'), 'labelSource': evidence}
+    owner = [t for t in slots.get('_owner_texts', []) if live_policy._protected(t)[1] & {'origin/organic'}]
+    if owner:
+        product['ownerSource'] = {'source': 'owner', 'photo': slots.get('photo') or '0' * 64, 'text': owner}
     dropped = []
     for field in ('name', 'maker', 'description', 'image_alt'):
         value = slots.get(field)

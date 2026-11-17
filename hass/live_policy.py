@@ -194,7 +194,7 @@ LIVE = {
     # HASS-LIVE-ADD-1 (G, 2026-11-09): a NEW product may go live, with the brand, display brand and producer key the owner said in
     # this request (see unsaid) and with the picture that comes with it (the op needs one; the shop has no placeholder). Never the
     # `image` argument (an existing picture file). The brand fields pass the field gate only inside this op (see NEW_RECORD_FIELDS).
-    "product.add": {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey", "displayBrand", "labelText"},
+    "product.add": {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey", "displayBrand", "labelText", "ownerText"},
     # ... and a NEW maker only so that this new product can name it: the name and the place (the maker's about text is the
     # skill's "<Maker> is based in <place>."); never the link (url). A maker on its own is refused (see _lone_makers).
     "maker.add": {"key", "name", "place", "story"},
@@ -463,9 +463,9 @@ def check(draft) -> list[str]:
             if collection == "events" and any(isinstance(v, dict) and v.get("rsvpEnabled") is True for v in (before, after)):
                 reasons.add("sign-up is on")
             for field, b, a in _changes(before, after):
-                if collection == "products" and field == "labelSource":
+                if collection == "products" and field in {"labelSource", "ownerSource"}:
                     from hass.product_claims import valid_source
-                    if a is not None and not valid_source(a):
+                    if a is not None and not valid_source(a, 'label' if field == 'labelSource' else 'owner'):
                         return UNREADABLE.copy()
                     continue  # private exact-photo provenance is not public text
                 if collection == "club" or (field in FIELDS.get(collection, set()) and not _created_here(collection, field, before, names)):

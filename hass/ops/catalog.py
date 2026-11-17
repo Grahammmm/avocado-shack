@@ -154,6 +154,12 @@ def _product_add(content, args, ctx):
         if evidence is None:
             return Refused("label text must come from the stored photo read")
         record["labelSource"] = evidence
+    if "ownerText" in args:
+        from hass import product_claims
+        evidence = product_claims.source(ctx.settings.get("mediaRoot"), args.get("photo"), args["ownerText"], 'owner')
+        if evidence is None:
+            return Refused("origin claims must come from the owner's typed words")
+        record["ownerSource"] = evidence
     if args.get("showNew") is not False:  # HASS-INTAKE-2: the owner said no New label; with no day the shop shows none (shop.js isNew)
         record["addedOn"] = shop_today(ctx.now).isoformat()  # AV1622-06: Pacific day of this add; no other op sets it
     content.products.append(record)
@@ -407,7 +413,8 @@ _ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
 
 OPS = (
     Op("product.add", {**_PRODUCT_FIELDS, "displayBrand": Arg("text", required=False), "image": Arg("image", required=False), "photo": Arg("id", required=False),
-                       "showNew": Arg("bool", required=False), "labelText": Arg("text_list", required=False), **_OPTIONAL}, _product_add),
+                       "showNew": Arg("bool", required=False), "labelText": Arg("text_list", required=False),
+                       "ownerText": Arg("text_list", required=False), **_OPTIONAL}, _product_add),
     Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
                         **_OPTIONAL, "clearProducer": Arg("bool", required=False),
                         "clearImageAlt": Arg("bool", required=False)}, _product_edit),

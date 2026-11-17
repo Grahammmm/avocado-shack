@@ -62,6 +62,7 @@ class Chat:
             and hasattr(conversation.dispatch_mod, "Registry") else __import__("hass.skills.model", fromlist=["Registry"]).Registry(skills={"item.add": ia.ITEM_ADD})
         self.conv = conversation.Conversation(str(self.kit.repo.state), self.kit.editor, self.interp, lambda: self.now,
                                               self.kit.previewer, photos=self.photos, skills=self.registry)
+        self.conv.polish_transport = types.SimpleNamespace(generate=lambda *a: {"ok": False, "code": "no-hermes"})
 
     def close(self):
         self._patch.stop()

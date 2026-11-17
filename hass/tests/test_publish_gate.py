@@ -120,6 +120,48 @@ class PublishGate(unittest.TestCase):
         self.assertNotIn('yes ' + chat.live()['draft_code'], chat.out.sent[-1]['text'])
         self.assertEqual(chat.conv.db.execute('SELECT COUNT(*) FROM preview_retry').fetchone()[0], 0)
 
+    def test_text_only_persimmons_generate_illustration_without_private_finances(self):
+        chat = self.chat()
+        from types import SimpleNamespace
+        prompts = []
+        def generate(prompt, out, timeout):
+            prompts.append(prompt)
+            from PIL import Image, ImageOps
+            with Image.open(REPO_ROOT / base.JAR) as image:
+                ImageOps.pad(image.convert('RGB'), (800, 800), color='ivory').save(out, 'JPEG')
+            return {'ok': True, 'code': 'ok'}
+        chat.conv.polish_transport = SimpleNamespace(generate=generate)
+        text = 'add Fuyu persimmons'
+        chat.script(text, base.reply(name='Fuyu persimmons', shelf='fruit',
+                                    description='Fuyu persimmons are crisp and sweet. Slice and eat while firm.'))
+        disposition, said = chat.say(text + '; bought 40 at $1.75, sell for $3.50')
+        self.assertEqual(disposition, 'proposed', said)
+        self.assertTrue(chat.live()['slots']['intake']['generated_picture'])
+        self.assertEqual(len(prompts), 1)
+        self.assertNotIn('1.75', prompts[0])
+        self.assertNotIn('40', prompts[0])
+        self.assertIn('generated illustration', said[0])
+        self.assertTrue(chat.out.sent[-1]['attachments'])
+        self.assertIn('yes ' + chat.live()['draft_code'], said[0])
+        self.assertEqual(live_policy.check(self.product(chat)[1]), [])
+
+    def test_text_only_generation_failure_offers_photo_without_confirmation(self):
+        chat = self.chat()
+        chat.script('add persimmons', base.reply(name='Persimmons', shelf='fruit'))
+        disposition, said = chat.say('add persimmons; sell for $3.50')
+        self.assertEqual(disposition, 'question', said)
+        self.assertIn('Please send a photo', said[0])
+        self.assertNotIn('yes ', said[0])
+        self.assertEqual(chat.drafts(), [])
+
+    def test_only_owner_typed_origin_or_organic_is_accepted_not_a_different_origin(self):
+        owner = {'source': 'owner', 'photo': 'a' * 64, 'text': ['Organic', 'Made in USA']}
+        product = {'category': 'fruit', 'ownerSource': owner}
+        self.assertFalse(product_claims.protected('Organic persimmons. Made in USA.', product)[1])
+        self.assertTrue(product_claims.protected('Made in Mexico.', product)[1])
+        self.assertTrue(product_claims.protected('Cures cancer.', product)[1])
+        self.assertTrue(product_claims.protected('Organic.', {'category': 'fruit'})[1])
+
     def test_real_generator_card_png_attached_and_edit_rerenders_same_code(self):
         chat = self.chat()
         for rel in base.testkit._git(REPO_ROOT, 'ls-files', 'storefront-mockup').splitlines():

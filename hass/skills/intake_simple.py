@@ -131,6 +131,8 @@ def plan(slots, content):
         args.update(photo=slots["photo"], imageAlt=slots.get("image_alt") or name)
         if labels:
             args["labelText"] = labels
+        if owner := [t for t in slots.get("_owner_texts", []) if product_claims.live_policy._protected(t)[1] & {"origin/organic"}]:
+            args["ownerText"] = owner
     # Reuse an identified catalog maker only; a new printed brand needs no invented town/story.
     matches = [key for key, maker in content.makers.items() if maker.get("name", "").casefold() == brand.casefold()]
     if len(matches) == 1:

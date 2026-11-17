@@ -814,7 +814,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             picture = self._listing_picture(listing, product)
             if not shots and picture:
                 shots = [picture]
-                head = "I couldn't render the website card. Your photo is attached; the text below is the listing."
+                head = "I couldn't render the website card. The product picture is attached; the text below is the listing."
                 tail = ""
             can_approve = not reasons and bool(shots)
             text = (head + "\n" if head else "") + intake_simple.preview(listing, row["code"] if can_approve else None)
@@ -849,6 +849,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if maker.get("story"): lines.append("Meet the maker: " + q(maker["story"]))
         if maker.get("url"): lines.append("Maker website: " + q(maker["url"]))
         got = listing.get("intake") or {}
+        if got.get('generated_picture'):
+            lines.append('Picture: generated illustration from your details.')
         if got.get("dropped_claims"):
             lines.append("Dropped from the listing: " + q("; ".join(got["dropped_claims"])))
         sha, root = listing.get("photo"), self.settings.get("mediaRoot")
@@ -858,7 +860,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 decision = photo_polish.decision(root, sha) if photo_polish.enabled(self.settings) else None
                 if decision and decision.get("use") == "house":
                     lines.append("Picture: your photo (styled picture failed: " + photo_polish.plain_reason(decision.get("code")) + ")")
-                elif not photo_polish.enabled(self.settings):
+                elif not photo_polish.enabled(self.settings) and not got.get('generated_picture'):
                     lines.append("Picture: your photo.")
             except (OSError, media.Refused, editor_mod.UnsafeState):
                 lines.append("Picture: your photo.")
