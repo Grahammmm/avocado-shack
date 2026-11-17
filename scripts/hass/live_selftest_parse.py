@@ -22,7 +22,7 @@ def _last_object(text):
         raise ValueError("no report")
     try:
         obj = json.loads(lines[-1])
-    except ValueError:
+    except (ValueError, RecursionError):
         raise ValueError("report is not JSON") from None
     if not isinstance(obj, dict):
         raise ValueError("report is not a JSON object")
