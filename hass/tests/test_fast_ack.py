@@ -624,7 +624,8 @@ class StateOp(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError): relay.seal_control(bad, key, **kw)
 
     def test_old_shapes_are_unchanged(self):
-        self.assertEqual(set(relay.SHAPES), {"pull", "ack", "replies", "acked", "picture", "gone", "state"})
+        self.assertEqual(set(relay.SHAPES), {"pull", "ack", "replies", "acked", "picture", "gone", "state",
+                                            "photo", "photo-refused", "photo-ok"})
 
 
 class HostState(host_tests.HostCase):

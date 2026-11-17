@@ -1,0 +1,1471 @@
+[
+ {
+  "kind": "real-high",
+  "name": "jar",
+  "ok": true,
+  "code": "ok",
+  "seconds": 10.4,
+  "match": 0.654,
+  "hue_shift": 0.4,
+  "chroma": 0.0026,
+  "words": [
+   [
+    "MESA",
+    0.764
+   ],
+   [
+    "HONEY",
+    0.871
+   ],
+   [
+    "RAW",
+    0.745
+   ],
+   [
+    "WILDFLOWER",
+    0.736
+   ]
+  ],
+  "photo_words": [
+   "HONE",
+   "ILDFLOWER"
+  ],
+  "kept": [
+   [
+    "HONE",
+    0.633
+   ],
+   [
+    "ILDFLOWER",
+    0.675
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-medium",
+  "name": "jar",
+  "ok": true,
+  "code": "ok",
+  "seconds": 10.4,
+  "match": 0.686,
+  "hue_shift": 0.5,
+  "chroma": 0.0281,
+  "words": [
+   [
+    "MESA",
+    0.558
+   ],
+   [
+    "HONE",
+    0.646
+   ],
+   [
+    "RAW",
+    0.383
+   ],
+   [
+    "WILDFLOWER",
+    0.454
+   ]
+  ],
+  "photo_words": [
+   "HONE",
+   "ILDFLOWER"
+  ],
+  "kept": [
+   [
+    "HONE",
+    0.529
+   ],
+   [
+    "ILDFLOWER",
+    0.441
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-high",
+  "name": "coffee",
+  "ok": true,
+  "code": "ok",
+  "seconds": 9.4,
+  "match": 0.778,
+  "hue_shift": 0.1,
+  "chroma": 0.0196,
+  "words": [
+   [
+    "RIDGE",
+    0.505
+   ],
+   [
+    "ROAST",
+    0.501
+   ],
+   [
+    "DARK",
+    0.587
+   ]
+  ],
+  "photo_words": [
+   "ARK",
+   "RIDGE",
+   "ROAS"
+  ],
+  "kept": [
+   [
+    "RIDGE",
+    0.706
+   ],
+   [
+    "ROAS",
+    0.768
+   ],
+   [
+    "ARK",
+    0.72
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-medium",
+  "name": "coffee",
+  "ok": true,
+  "code": "ok",
+  "seconds": 9.1,
+  "match": 0.795,
+  "hue_shift": 0.2,
+  "chroma": 0.0211,
+  "words": [
+   [
+    "IDGE",
+    0.616
+   ],
+   [
+    "DARK",
+    0.609
+   ]
+  ],
+  "photo_words": [
+   "ARK",
+   "RIDGE",
+   "ROAS"
+  ],
+  "kept": [
+   [
+    "RIDGE",
+    0.739
+   ],
+   [
+    "ROAS",
+    0.717
+   ],
+   [
+    "ARK",
+    0.732
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-high",
+  "name": "loaf",
+  "ok": true,
+  "code": "ok",
+  "seconds": 4.8,
+  "match": 0.667,
+  "hue_shift": 1.5,
+  "chroma": 0.0223,
+  "words": [],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-medium",
+  "name": "loaf",
+  "ok": true,
+  "code": "ok",
+  "seconds": 4.7,
+  "match": 0.677,
+  "hue_shift": 0.9,
+  "chroma": 0.0274,
+  "words": [],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-high",
+  "name": "bottle",
+  "ok": true,
+  "code": "ok",
+  "seconds": 20.8,
+  "match": 0.787,
+  "hue_shift": 3.4,
+  "chroma": 0.0108,
+  "words": [
+   [
+    "OLIVA",
+    0.737
+   ]
+  ],
+  "photo_words": [
+   "OLIV"
+  ],
+  "kept": [
+   [
+    "OLIV",
+    0.655
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-medium",
+  "name": "bottle",
+  "ok": true,
+  "code": "ok",
+  "seconds": 21.5,
+  "match": 0.786,
+  "hue_shift": 3.2,
+  "chroma": 0.0114,
+  "words": [
+   [
+    "OLIVA",
+    0.659
+   ]
+  ],
+  "photo_words": [
+   "OLIV"
+  ],
+  "kept": [
+   [
+    "OLIV",
+    0.734
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-high",
+  "name": "produce",
+  "ok": true,
+  "code": "ok",
+  "seconds": 5.1,
+  "match": 0.581,
+  "hue_shift": 1.8,
+  "chroma": 0.0142,
+  "words": [],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-medium",
+  "name": "produce",
+  "ok": true,
+  "code": "ok",
+  "seconds": 5.3,
+  "match": 0.606,
+  "hue_shift": 2.7,
+  "chroma": 0.01,
+  "words": [],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-high",
+  "name": "box",
+  "ok": true,
+  "code": "ok",
+  "seconds": 6.9,
+  "match": 0.78,
+  "hue_shift": 3.0,
+  "chroma": 0.0154,
+  "words": [
+   [
+    "BLUE",
+    0.459
+   ],
+   [
+    "HOUR",
+    0.464
+   ],
+   [
+    "TEA",
+    0.747
+   ]
+  ],
+  "photo_words": [
+   "BLUE",
+   "HOUR",
+   "TEA"
+  ],
+  "kept": [
+   [
+    "BLUE",
+    0.611
+   ],
+   [
+    "HOUR",
+    0.565
+   ],
+   [
+    "TEA",
+    0.835
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "real-medium",
+  "name": "box",
+  "ok": true,
+  "code": "ok",
+  "seconds": 7.0,
+  "match": 0.612,
+  "hue_shift": 3.0,
+  "chroma": 0.0126,
+  "words": [
+   [
+    "BLUE",
+    0.616
+   ],
+   [
+    "HOUR",
+    0.504
+   ],
+   [
+    "TEA",
+    0.628
+   ]
+  ],
+  "photo_words": [
+   "BLUE",
+   "HOUR",
+   "TEA"
+  ],
+  "kept": [
+   [
+    "BLUE",
+    0.722
+   ],
+   [
+    "HOUR",
+    0.662
+   ],
+   [
+    "TEA",
+    0.65
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "bad-swapped",
+  "name": "jar",
+  "ok": false,
+  "code": "match",
+  "seconds": 7.6,
+  "match": 0.475,
+  "hue_shift": 1.4,
+  "chroma": 0.0339,
+  "words": [
+   [
+    "RIDGE",
+    0.128
+   ],
+   [
+    "ROAST",
+    0.102
+   ],
+   [
+    "DARK",
+    0.139
+   ]
+  ],
+  "photo_words": [
+   "HONE",
+   "ILDFLOWER"
+  ],
+  "kept": [
+   [
+    "HONE",
+    null
+   ],
+   [
+    "ILDFLOWER",
+    null
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-relabel",
+  "name": "jar",
+  "ok": false,
+  "code": "text",
+  "seconds": 10.5,
+  "match": 0.67,
+  "hue_shift": 0.8,
+  "chroma": 0.0156,
+  "words": [
+   [
+    "SUNNY",
+    0.235
+   ],
+   [
+    "BRAND",
+    0.266
+   ]
+  ],
+  "photo_words": [
+   "HONE",
+   "ILDFLOWER"
+  ],
+  "kept": [
+   [
+    "HONE",
+    0.3
+   ],
+   [
+    "ILDFLOWER",
+    0.341
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-recolour",
+  "name": "jar",
+  "ok": false,
+  "code": "style",
+  "seconds": 0.1,
+  "hard": [
+   "background colour (warm ivory)"
+  ]
+ },
+ {
+  "kind": "bad-doubled",
+  "name": "jar",
+  "ok": false,
+  "code": "match",
+  "seconds": 7.7,
+  "match": 0.46,
+  "hue_shift": 0.5,
+  "chroma": 0.0619,
+  "words": [
+   [
+    "MESA",
+    0.154
+   ],
+   [
+    "HONE",
+    0.217
+   ],
+   [
+    "A2DM",
+    0.074
+   ],
+   [
+    "RAW",
+    0.191
+   ],
+   [
+    "WILDFLOWER",
+    0.155
+   ],
+   [
+    "WAF",
+    0.195
+   ]
+  ],
+  "photo_words": [
+   "HONE",
+   "ILDFLOWER"
+  ],
+  "kept": [
+   [
+    "HONE",
+    null
+   ],
+   [
+    "ILDFLOWER",
+    0.023
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-blanked",
+  "name": "jar",
+  "ok": false,
+  "code": "text",
+  "seconds": 9.7,
+  "match": 0.668,
+  "hue_shift": 0.9,
+  "chroma": 0.0163,
+  "words": [],
+  "photo_words": [
+   "HONE",
+   "ILDFLOWER"
+  ],
+  "kept": [
+   [
+    "HONE",
+    0.444
+   ],
+   [
+    "ILDFLOWER",
+    0.473
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-word-removed",
+  "name": "jar",
+  "ok": false,
+  "code": "text",
+  "seconds": 10.4,
+  "match": 0.674,
+  "hue_shift": 0.6,
+  "chroma": 0.0199,
+  "words": [
+   [
+    "MESA",
+    0.664
+   ],
+   [
+    "RAW",
+    0.564
+   ],
+   [
+    "WILDFLOWER",
+    0.718
+   ]
+  ],
+  "photo_words": [
+   "HONE",
+   "ILDFLOWER"
+  ],
+  "kept": [
+   [
+    "HONE",
+    0.311
+   ],
+   [
+    "ILDFLOWER",
+    0.522
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-swapped",
+  "name": "coffee",
+  "ok": false,
+  "code": "match",
+  "seconds": 5.0,
+  "match": 0.422,
+  "hue_shift": 2.7,
+  "chroma": 0.0426,
+  "words": [],
+  "photo_words": [
+   "ARK",
+   "RIDGE",
+   "ROAS"
+  ],
+  "kept": [
+   [
+    "RIDGE",
+    null
+   ],
+   [
+    "ROAS",
+    null
+   ],
+   [
+    "ARK",
+    null
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-relabel",
+  "name": "coffee",
+  "ok": false,
+  "code": "text",
+  "seconds": 9.6,
+  "match": 0.704,
+  "hue_shift": 0.2,
+  "chroma": 0.0161,
+  "words": [
+   [
+    "SUNNY",
+    0.202
+   ],
+   [
+    "BRAND",
+    0.157
+   ]
+  ],
+  "photo_words": [
+   "ARK",
+   "RIDGE",
+   "ROAS"
+  ],
+  "kept": [
+   [
+    "RIDGE",
+    0.227
+   ],
+   [
+    "ROAS",
+    0.272
+   ],
+   [
+    "ARK",
+    0.144
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-recolour",
+  "name": "coffee",
+  "ok": false,
+  "code": "style",
+  "seconds": 0.1,
+  "hard": [
+   "background colour (warm ivory)"
+  ]
+ },
+ {
+  "kind": "bad-doubled",
+  "name": "coffee",
+  "ok": false,
+  "code": "match",
+  "seconds": 9.7,
+  "match": 0.449,
+  "hue_shift": 0.4,
+  "chroma": 0.0618,
+  "words": [
+   [
+    "RIDGE",
+    0.246
+   ],
+   [
+    "ROAST",
+    0.261
+   ],
+   [
+    "DARK",
+    null
+   ]
+  ],
+  "photo_words": [
+   "ARK",
+   "RIDGE",
+   "ROAS"
+  ],
+  "kept": [
+   [
+    "RIDGE",
+    0.227
+   ],
+   [
+    "ROAS",
+    null
+   ],
+   [
+    "ARK",
+    null
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-blanked",
+  "name": "coffee",
+  "ok": false,
+  "code": "text",
+  "seconds": 8.9,
+  "match": 0.744,
+  "hue_shift": 0.1,
+  "chroma": 0.0159,
+  "words": [],
+  "photo_words": [
+   "ARK",
+   "RIDGE",
+   "ROAS"
+  ],
+  "kept": [
+   [
+    "RIDGE",
+    0.185
+   ],
+   [
+    "ROAS",
+    0.202
+   ],
+   [
+    "ARK",
+    0.092
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-word-removed",
+  "name": "coffee",
+  "ok": false,
+  "code": "text",
+  "seconds": 9.1,
+  "match": 0.762,
+  "hue_shift": 0.1,
+  "chroma": 0.0175,
+  "words": [
+   [
+    "ROAST",
+    0.428
+   ],
+   [
+    "DARK",
+    0.585
+   ]
+  ],
+  "photo_words": [
+   "ARK",
+   "RIDGE",
+   "ROAS"
+  ],
+  "kept": [
+   [
+    "RIDGE",
+    0.197
+   ],
+   [
+    "ROAS",
+    0.758
+   ],
+   [
+    "ARK",
+    0.737
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-swapped",
+  "name": "loaf",
+  "ok": false,
+  "code": "colour",
+  "seconds": 18.7,
+  "match": 0.579,
+  "hue_shift": null,
+  "chroma": 0.0824,
+  "words": [
+   [
+    "OLIVA",
+    0.178
+   ]
+  ],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": true,
+  "text_removed": false
+ },
+ {
+  "kind": "bad-relabel",
+  "name": "loaf",
+  "ok": false,
+  "code": "text",
+  "seconds": 5.4,
+  "match": 0.559,
+  "hue_shift": 1.6,
+  "chroma": 0.0138,
+  "words": [
+   [
+    "JOR",
+    null
+   ],
+   [
+    "SUNNY",
+    0.133
+   ],
+   [
+    "BRAND",
+    0.169
+   ]
+  ],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": true,
+  "text_removed": false
+ },
+ {
+  "kind": "bad-recolour",
+  "name": "loaf",
+  "ok": false,
+  "code": "style",
+  "seconds": 0.1,
+  "hard": [
+   "background colour (warm ivory)"
+  ]
+ },
+ {
+  "kind": "bad-doubled",
+  "name": "loaf",
+  "ok": false,
+  "code": "match",
+  "seconds": 15.3,
+  "match": 0.399,
+  "hue_shift": 2.1,
+  "chroma": 0.0198,
+  "words": [],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "bad-swapped",
+  "name": "bottle",
+  "ok": false,
+  "code": "match",
+  "seconds": 4.8,
+  "match": 0.463,
+  "hue_shift": 9.5,
+  "chroma": 0.0494,
+  "words": [],
+  "photo_words": [
+   "OLIV"
+  ],
+  "kept": [
+   [
+    "OLIV",
+    null
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-relabel",
+  "name": "bottle",
+  "ok": false,
+  "code": "text",
+  "seconds": 20.8,
+  "match": 0.76,
+  "hue_shift": 3.0,
+  "chroma": 0.0136,
+  "words": [
+   [
+    "SUNNY",
+    0.043
+   ],
+   [
+    "BRAND",
+    0.025
+   ]
+  ],
+  "photo_words": [
+   "OLIV"
+  ],
+  "kept": [
+   [
+    "OLIV",
+    0.239
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-recolour",
+  "name": "bottle",
+  "ok": false,
+  "code": "style",
+  "seconds": 0.1,
+  "hard": [
+   "background colour (warm ivory)"
+  ]
+ },
+ {
+  "kind": "bad-doubled",
+  "name": "bottle",
+  "ok": false,
+  "code": "match",
+  "seconds": 5.8,
+  "match": 0.456,
+  "hue_shift": 1.8,
+  "chroma": 0.0592,
+  "words": [
+   [
+    "OLIVA",
+    0.179
+   ],
+   [
+    "AVIIO",
+    0.055
+   ]
+  ],
+  "photo_words": [
+   "OLIV"
+  ],
+  "kept": [
+   [
+    "OLIV",
+    null
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-blanked",
+  "name": "bottle",
+  "ok": false,
+  "code": "text",
+  "seconds": 20.0,
+  "match": 0.753,
+  "hue_shift": 2.9,
+  "chroma": 0.0095,
+  "words": [],
+  "photo_words": [
+   "OLIV"
+  ],
+  "kept": [
+   [
+    "OLIV",
+    0.224
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-word-removed",
+  "name": "bottle",
+  "ok": false,
+  "code": "text",
+  "seconds": 20.0,
+  "match": 0.753,
+  "hue_shift": 2.9,
+  "chroma": 0.0095,
+  "words": [],
+  "photo_words": [
+   "OLIV"
+  ],
+  "kept": [
+   [
+    "OLIV",
+    0.224
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-swapped",
+  "name": "produce",
+  "ok": false,
+  "code": "match",
+  "seconds": 6.7,
+  "match": 0.375,
+  "hue_shift": null,
+  "chroma": 0.0616,
+  "words": [
+   [
+    "BLUE",
+    0.082
+   ],
+   [
+    "HOUR",
+    0.081
+   ],
+   [
+    "TEA",
+    0.121
+   ]
+  ],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": true,
+  "text_removed": false
+ },
+ {
+  "kind": "bad-relabel",
+  "name": "produce",
+  "ok": false,
+  "code": "match",
+  "seconds": 5.1,
+  "match": 0.532,
+  "hue_shift": 1.3,
+  "chroma": 0.013,
+  "words": [],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "bad-recolour",
+  "name": "produce",
+  "ok": false,
+  "code": "style",
+  "seconds": 0.1,
+  "hard": [
+   "background colour (warm ivory)"
+  ]
+ },
+ {
+  "kind": "bad-doubled",
+  "name": "produce",
+  "ok": false,
+  "code": "match",
+  "seconds": 16.8,
+  "match": 0.432,
+  "hue_shift": null,
+  "chroma": 0.0313,
+  "words": [],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "bad-blanked",
+  "name": "produce",
+  "ok": true,
+  "code": "ok",
+  "seconds": 5.2,
+  "match": 0.581,
+  "hue_shift": 1.8,
+  "chroma": 0.0142,
+  "words": [],
+  "photo_words": [],
+  "kept": [],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "bad-swapped",
+  "name": "box",
+  "ok": false,
+  "code": "match",
+  "seconds": 11.0,
+  "match": 0.51,
+  "hue_shift": 168.6,
+  "chroma": 0.1338,
+  "words": [
+   [
+    "MESA",
+    0.183
+   ],
+   [
+    "HONEY",
+    0.182
+   ],
+   [
+    "RAW",
+    -1.0
+   ],
+   [
+    "WILDFLOWER",
+    0.082
+   ]
+  ],
+  "photo_words": [
+   "BLUE",
+   "HOUR",
+   "TEA"
+  ],
+  "kept": [
+   [
+    "BLUE",
+    null
+   ],
+   [
+    "HOUR",
+    null
+   ],
+   [
+    "TEA",
+    null
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-relabel",
+  "name": "box",
+  "ok": false,
+  "code": "match",
+  "seconds": 7.2,
+  "match": 0.536,
+  "hue_shift": 4.0,
+  "chroma": 0.0172,
+  "words": [
+   [
+    "BLUE",
+    0.19
+   ],
+   [
+    "SUNNY",
+    0.202
+   ],
+   [
+    "BRAND",
+    0.255
+   ],
+   [
+    "TEA",
+    0.325
+   ]
+  ],
+  "photo_words": [
+   "BLUE",
+   "HOUR",
+   "TEA"
+  ],
+  "kept": [
+   [
+    "BLUE",
+    null
+   ],
+   [
+    "HOUR",
+    null
+   ],
+   [
+    "TEA",
+    null
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-recolour",
+  "name": "box",
+  "ok": false,
+  "code": "style",
+  "seconds": 0.1,
+  "hard": [
+   "background colour (warm ivory)",
+   "no photo background left inside the product (patterned cloth, planks)"
+  ]
+ },
+ {
+  "kind": "bad-doubled",
+  "name": "box",
+  "ok": false,
+  "code": "match",
+  "seconds": 13.7,
+  "match": 0.522,
+  "hue_shift": 3.8,
+  "chroma": 0.0288,
+  "words": [
+   [
+    "BIUE",
+    0.266
+   ],
+   [
+    "HOUR",
+    0.215
+   ],
+   [
+    "AUOH",
+    0.18
+   ],
+   [
+    "TEA",
+    0.222
+   ]
+  ],
+  "photo_words": [
+   "BLUE",
+   "HOUR",
+   "TEA"
+  ],
+  "kept": [
+   [
+    "BLUE",
+    null
+   ],
+   [
+    "HOUR",
+    null
+   ],
+   [
+    "TEA",
+    null
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-blanked",
+  "name": "box",
+  "ok": false,
+  "code": "text",
+  "seconds": 6.2,
+  "match": 0.62,
+  "hue_shift": 4.2,
+  "chroma": 0.0112,
+  "words": [],
+  "photo_words": [
+   "BLUE",
+   "HOUR",
+   "TEA"
+  ],
+  "kept": [
+   [
+    "BLUE",
+    null
+   ],
+   [
+    "HOUR",
+    null
+   ],
+   [
+    "TEA",
+    null
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-word-removed",
+  "name": "box",
+  "ok": false,
+  "code": "text",
+  "seconds": 6.3,
+  "match": 0.579,
+  "hue_shift": 4.1,
+  "chroma": 0.0159,
+  "words": [
+   [
+    "TEA",
+    0.231
+   ]
+  ],
+  "photo_words": [
+   "BLUE",
+   "HOUR",
+   "TEA"
+  ],
+  "kept": [
+   [
+    "BLUE",
+    null
+   ],
+   [
+    "HOUR",
+    null
+   ],
+   [
+    "TEA",
+    null
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-model",
+  "name": "bottle",
+  "ok": false,
+  "code": "text",
+  "seconds": 21.0,
+  "match": 0.752,
+  "hue_shift": 2.3,
+  "chroma": 0.0088,
+  "words": [
+   [
+    "GOLDEN",
+    0.203
+   ],
+   [
+    "PRESS",
+    0.216
+   ]
+  ],
+  "photo_words": [
+   "OLIV"
+  ],
+  "kept": [
+   [
+    "OLIV",
+    0.22
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-model",
+  "name": "box",
+  "ok": false,
+  "code": "match",
+  "seconds": 9.1,
+  "match": 0.449,
+  "hue_shift": 3.9,
+  "chroma": 0.0187,
+  "words": [
+   [
+    "BLUE",
+    0.222
+   ],
+   [
+    "BLUE",
+    0.173
+   ],
+   [
+    "HOUR",
+    0.295
+   ],
+   [
+    "HOUR",
+    0.283
+   ],
+   [
+    "TEA",
+    0.353
+   ],
+   [
+    "TEA",
+    0.378
+   ]
+  ],
+  "photo_words": [
+   "BLUE",
+   "HOUR",
+   "TEA"
+  ],
+  "kept": [
+   [
+    "BLUE",
+    0.231
+   ],
+   [
+    "HOUR",
+    0.161
+   ],
+   [
+    "TEA",
+    null
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": true
+ },
+ {
+  "kind": "bad-model",
+  "name": "coffee",
+  "ok": false,
+  "code": "colour",
+  "seconds": 9.3,
+  "match": 0.721,
+  "hue_shift": 29.2,
+  "chroma": 0.2256,
+  "words": [],
+  "photo_words": [
+   "ARK",
+   "RIDGE",
+   "ROAS"
+  ],
+  "kept": [
+   [
+    "RIDGE",
+    0.738
+   ],
+   [
+    "ROAS",
+    0.532
+   ],
+   [
+    "ARK",
+    0.751
+   ]
+  ],
+  "text_changed": false,
+  "text_removed": false
+ },
+ {
+  "kind": "bad-model",
+  "name": "jar",
+  "ok": false,
+  "code": "text",
+  "seconds": 10.6,
+  "match": 0.667,
+  "hue_shift": 2.0,
+  "chroma": 0.0471,
+  "words": [
+   [
+    "SUNNY",
+    0.282
+   ],
+   [
+    "HONEY",
+    0.642
+   ],
+   [
+    "RAW",
+    0.494
+   ],
+   [
+    "WILDFLOWER",
+    0.297
+   ]
+  ],
+  "photo_words": [
+   "HONE",
+   "ILDFLOWER"
+  ],
+  "kept": [
+   [
+    "HONE",
+    0.678
+   ],
+   [
+    "ILDFLOWER",
+    0.459
+   ]
+  ],
+  "text_changed": true,
+  "text_removed": false
+ }
+]

@@ -1,0 +1,62 @@
+{
+ "run": "phone-on",
+ "name": "Mesa raw wildflower honey",
+ "found": true,
+ "loaded": true,
+ "natural": [
+  800,
+  800
+ ],
+ "alt": "Mesa Honey raw wildflower honey in a glass jar",
+ "card": {
+  "x": 51.1875,
+  "y": 594.34375,
+  "w": 278,
+  "h": 404
+ },
+ "image": {
+  "x": 51.1875,
+  "y": 594.34375,
+  "w": 278,
+  "h": 208
+ },
+ "neighbours": [
+  [
+   "photo-product-018",
+   278,
+   524,
+   278,
+   208
+  ],
+  [
+   "photo-product-024",
+   278,
+   474,
+   278,
+   208
+  ],
+  [
+   "photo-product-025",
+   278,
+   505,
+   278,
+   208
+  ]
+ ],
+ "same_size_as_neighbours": true,
+ "changed_files": [
+  "assets/products/photo-f389e77cdb578a8c.jpg",
+  "catalog-products.js"
+ ],
+ "banned_words": {
+  "card_html": [],
+  "catalog_entry": []
+ },
+ "money_words": {
+  "card_html": [],
+  "catalog_entry": []
+ },
+ "picture_metadata_hits": [],
+ "screenshot": "t4-card-phone-on.png",
+ "pass": true
+}

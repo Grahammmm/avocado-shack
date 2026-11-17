@@ -291,6 +291,7 @@ _LIMIT_BEFORE = re.compile(r"\b(?:max(?:imum)?|limit(?:ed)?(?:\s+to|\s+of)?|capa
                            r"up\s+to|at\s+most|no\s+more\s+than)\s*(?:of\s+|to\s+)?(\d+)\b", re.I)  # "cap Cass Hill at 3" too
 _UNIT_AFTER = re.compile(r"^\s*(?:liters?|litres?|l|ml|miles?|mi|km|kms|kilometers?|meters?|m|feet|ft|hours?|hrs?|"
                          r"minutes?|mins?|lbs?|kg|oz|degrees?|dollars?|bucks|layers?|bottles?|snacks?|sandwich\w*)\b", re.I)
+_DECIMAL = re.compile(r"\b\d+\.\d+\b")  # "3.5 spots": neither the 3 nor the 5 is a guest count the owner gave
 _REPLACED = re.compile(r"\b(?:not|instead\s+of|rather\s+than|other\s+than|no\s+longer)\s+(?:the\s+)?\d+\b", re.I)
 
 
@@ -333,7 +334,7 @@ def _said_limits(said):
     "12 spots" then "actually make it 20 spots" leaves only 20, and a later "no limit" leaves none. Two different counts
     in the latest instruction ("15 spots or 20 spots") are both kept: the result has several values, which is unresolved."""
     effective = set()
-    for clause in _clauses(said):
+    for clause in _clauses(_DECIMAL.sub("decimal", said)):  # before the split on periods, or "3.5 spots" reads as "5 spots"
         if _NO_LIMIT.search(clause):
             effective = set()
         text = re.sub(r"\b(cap(?:ped)?|limit(?:ed)?)\b(?:\s+[a-z']+){0,4}?\s+(?:at|to)\s+(\d+)\b", r"\1 \2", clause.lower())  # "cap Cass Hill at 3": not a time

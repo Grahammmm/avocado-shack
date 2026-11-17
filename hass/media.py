@@ -365,7 +365,7 @@ def verify_store(root) -> dict:
     (`web content mismatch`); an original the sanitizer refuses gives `web unverifiable`. Nothing is written."""
     bad, root = _verify_unsafe(root)
     if bad is not None: return {"result": "unsafe", "problems": [bad]}
-    problems, found, short = set(), {"originals": {}, "web": {}}, lambda rel: SHA_RE.sub(lambda m: m[0][:12], rel)
+    problems, found, short = set(), {"originals": {}, "web": {}, "polish": {}}, lambda rel: SHA_RE.sub(lambda m: m[0][:12], rel)
     good = {}  # (sha, ext) -> bytes of a hash-valid original of the right kind, kept to check its web copy
     def walk(path, rel, depth):  # depth 0 root, 1 originals|web, 2 <aa> (files live here only); links never followed
         try:  # an access error is a redacted one-line problem (relative name only), never a crash or a path
@@ -378,11 +378,12 @@ def verify_store(root) -> dict:
             sub, m = e.name if depth == 0 else f"{rel}/{e.name}", depth == 2 and re.fullmatch(r"([0-9a-f]{64})\.(jpg|png|json)", e.name)
             try:
                 if e.is_symlink(): problems.add(f"symlink: {short(sub)}")
-                elif depth < 2 and e.is_dir(follow_symlinks=False) and re.fullmatch(("originals|web", "[0-9a-f]{2}")[depth], e.name):
+                elif depth < 2 and e.is_dir(follow_symlinks=False) and re.fullmatch(("originals|web|polish", "[0-9a-f]{2}")[depth], e.name):
                     walk(Path(e.path), sub, depth + 1)
                 elif depth == 2 and e.name.startswith(".tmp-") and e.is_file(follow_symlinks=False):
                     problems.add(f"leftover temp: {path.name}")
-                elif m and e.is_file(follow_symlinks=False) and m[1][:2] == path.name and not (rel[:3] == "web" and m[2] == "json"):
+                elif m and e.is_file(follow_symlinks=False) and m[1][:2] == path.name and not (rel[:3] == "web" and m[2] == "json") \
+                        and not (rel[:6] == "polish" and m[2] == "png"):  # HASS-IMAGE-1: polish/<aa>/<sha>.json + .jpg
                     if stat.S_IMODE(e.stat(follow_symlinks=False).st_mode) != 0o600: problems.add(f"mode: {short(sub)}")
                     found[rel.split("/")[0]].setdefault(m[1], {})[m[2]] = e.path
                 else: problems.add(f"unknown entry: {short(sub)}")
@@ -412,6 +413,7 @@ def verify_store(root) -> dict:
             try: want = (_jpeg_copy if ext == "jpg" else _png_copy)(good[sha, ext])[0]
             except (Refused, ValueError, IndexError): problems.add(f"web unverifiable: {sha[:12]}"); continue
             if (actual := read(files[ext], sha)) is not None and actual != want: problems.add(f"web content mismatch: {sha[:12]}")
+    problems.update(f"polish orphan: {sha[:12]}" for sha in found["polish"] if sha not in found["originals"])  # HASS-IMAGE-1
     return {"result": "problems" if problems else "ok", "problems": sorted(problems), "web": sum(map(len, found["web"].values())),
             "originals": sum(len(f) - ("json" in f) for f in found["originals"].values())}
 
