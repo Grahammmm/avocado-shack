@@ -24,7 +24,7 @@ _MON = r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug
 _END, _AMPM = r"(?!\d|[.,:/-]\d)", r"\s*(?:am|pm|a\.m\.?|p\.m\.?)(?![a-z])"  # a time/date ends where no digit continues it
 WHEN = re.compile(rf"\b\d{{4}}-\d\d-\d\d(?:[t ]\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:z|[+-]\d\d:\d\d)?)?{_END}|\b\d{{1,2}}:\d\d(?:{_AMPM})?{_END}"
                   rf"|\b\d{{1,2}}{_AMPM}|\b(?:1[0-2]|0?[1-9])/(?:3[01]|[12]\d|0?[1-9])(?:/(?:\d{{4}}|\d\d))?{_END}"
-                  rf"|\b{_MON}\.? \d{{1,2}}(?:st|nd|rd|th)?(?:,? \d{{4}})?{_END}|\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?{_MON}\b(?:,?\s+\d{{4}})?")
+                  rf"|\b{_MON}\.? \d{{1,2}}(?:st|nd|rd|th)?(?:,? \d{{4}}(?!\w|[.,:/-]\d))?{_END}|\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?{_MON}\b(?:,?\s+\d{{4}}(?!\w|[.,:/-]\d))?")
 NUMBER = re.compile(r"\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen"
                     r"|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|dozen|couple"
                     r"|zero|million|billion|trillion|grand|score|pair|quarter|gross|nil|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth"

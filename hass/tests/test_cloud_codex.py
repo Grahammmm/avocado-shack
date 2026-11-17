@@ -51,7 +51,8 @@ TILL = ["change the price of X to 5", "set X to 7", "change the price of website
 CLOUD = ["when should the hours change?", "move saturday's hike to 5pm", "change the hike to 10:30 am", "put the new photo on the website"]
 NUMBERS = ["honey is 4.50 a jar", "we have 7 jars of honey", "seven jars of honey left", "honey's four fifty now", "a dozen eggs came in",
            "we have zero jars of honey", "we have a million jars of honey", "the 7th jar of honey is damaged", "the seventh jar is damaged",
-           "honey is two grand", "half a dozen eggs", "on the 16th", "a pair of mugs left"]
+           "honey is two grand", "half a dozen eggs", "on the 16th", "a pair of mugs left",
+           "16 November 2026th jar is damaged", "Nov 16, 2026th jar is damaged"]
 ORDINARY = ["are we open tomorrow", "move the hike to 5pm", "open at 10:30 am on Nov 18", "make the home page photo brighter",
             "open on the 16th of November", "the hike is November 16th", "we have a few new mugs"]
 
@@ -211,10 +212,11 @@ class HassSideTests(unittest.TestCase):
 
     def test_only_clock_times_and_dates_are_not_numbers(self):
         for text in ("are we open tomorrow", "at 5pm", "5 pm", "10:30", "10:30am", "at noon", "11/16", "2026-11-16", "nov 16", "16th of november", "16 november 2026",
-                     "open at 10:30 am on nov 18.", "a few jars", "2026-11-16t10:00:00-08:00", "someone often said so"):
+                     "open at 10:30 am on nov 18.", "november 16, 2026", "16 november 2026.", "a few jars", "2026-11-16t10:00:00-08:00", "someone often said so"):
             with self.subTest(text=text): self.assertFalse(cloud_codex.numbered(text))
         for text in ("4.50", "7 jars", "seven", "four fifty", "a dozen", "half a jar", "a couple of jars", "maybe 5", "decided 12",
-                     "5-7pm", "10:30.5", "2 jars at 5pm", "one", "twenty-two", "hundreds", "16th", "the 7th jar", "zero", "two grand"):
+                     "5-7pm", "10:30.5", "2 jars at 5pm", "one", "twenty-two", "hundreds", "16th", "the 7th jar", "zero", "two grand",
+                     "16 november 2026th", "nov 16, 2026th", "16 november 20260", "nov 16, 2026.5"):
             with self.subTest(text=text): self.assertTrue(cloud_codex.numbered(text))
 
     def test_a_slow_runner_and_a_slow_fallback_finish_inside_the_worker_deadline(self):
