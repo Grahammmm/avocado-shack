@@ -86,6 +86,7 @@ class SimpleIntake(unittest.TestCase):
         self.assertIn("great for furniture", product["description"])
         self.assertNotIn("Made in USA", product["description"])
         self.assertEqual(product["brand"], "Gorilla")
+        self.assertEqual(product["sellingPrice"], "3.00")
         chat.say("undo")
         chat.say("yes " + chat.drafts()[-1]["code"])
         self.assertEqual(chat.commits(), 2)

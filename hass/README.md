@@ -273,3 +273,12 @@ Operator only, never in CI: `python3 hass/label_eval.py --live --url http://127.
 The home page (which is also the shop page: the catalog is on it) shows "This week’s specials" at the top of `<main>` only for specials with start <= Pacific today <= end; with none active nothing is rendered. Expiry uses the build date plus a small inline script (`hass/specials.py`) that hides a card, and the whole section, once the visitor's Pacific day passes its last day. `sitegen --check` accepts the exact earlier page of a special that has since ended (as for the notice) and flags any other difference.
 
 Ops (`hass/ops/specials.py`), all through draft, preview, approval and `history.revert`: `specials.add` {title, deal, end, start?, product?, picture?, order?}, `specials.edit` {id, title?, deal?, start?, end?, product?, picture?, clearProduct?, order?}, `specials.remove` {id}, `specials.clear_expired` {}.
+
+## AV1422: owner-visible behaviour (see BUILD_LEDGER.md)
+
+- The published home page shows the owner's home photo (AV1422-01); `put the old photo back` (`store.clear_home_image`) restores the shop's own photo (AV1422-12).
+- The published site has a 404 page, a small header logo and favicon, and image sizes that stop the page jumping (AV1422-02 to 04).
+- `/hike`: a past sample invitation reads `Date to be confirmed` (05), static hikes show no invented guest count (06), signup says it is closed up front (07), the trail map loads near view (08) and headings run in order (09).
+- `hide the sample hikes` / `show the sample hikes` (`hike.samples`) switch the sample invitation and archive (AV1422-10).
+- The home page carries local-business data without quoting the phone (AV1422-11).
+- Docs and acceptance: FEATURES states match main (AV1422-13); the H25 acceptance map runs the H04 and H13 modules (AV1422-14).

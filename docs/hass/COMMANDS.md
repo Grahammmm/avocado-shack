@@ -182,6 +182,14 @@ Checking the selection (change requests, not commands; each still needs `yes <co
   It never sets "Sold out" and leaves the store's selection check and every other product alone. It needs `yes <code>`
   even if shelf-check changes are set to apply automatically. It is refused when the product has no word set, is
   hidden or is held. `undo` puts the word and its day back exactly as they were.
+- `product.set_availability_all`: one change for a whole shelf or maker ("all the vegetables are in today", "everything
+  from Cal Poly is sold out"), instead of one change per product. Name a shelf, a maker or both (both means only the
+  products on that shelf from that maker); with neither Hass asks which. It changes only the active products that do not
+  have that word yet; hidden and held products and products already showing it stay as they are, and it is refused when
+  none would change. The proposal gives the count and up to 10 names (with ids), then "... and N more". It needs the
+  ordinary `yes <code>` (even if shelf-check changes are set to apply automatically), is one change, and `undo` puts each
+  product's old word back. It changes words only: it records no shelf-check date and does not renew "Last confirmed";
+  only `store.confirm_selection` records that you checked the shelves.
 - Until the first check the site shows no check line and no availability words. If
   the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
   visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.
@@ -220,3 +228,5 @@ product id it will hide. Hidden and held products are left exactly as they are. 
 still has active products is refused and the reply names them. `undo` brings the maker and every product back together.
 
 When you ask for a design change (colours, fonts, layout, a new page) Hass says it cannot be made by message yet, keeps your first 500 characters as a dated note `design.<n>` for the developer, and says so. The note is kept here only: nothing is sent, the website does not change, and it is never used as a preference by the interpreter. `forget design.<n>` removes it.
+
+Notice windows and shelf checks in a proposal: when a change touches the home notice or the shelf check date, the proposal and a later `show` repeat both the old and the new value in words, for example `Home notice: from nothing to Closed Thanksgiving Day - through Thursday, November 26` (or `- from Wednesday, November 25 through Thursday, November 26` when a first day is set) and `Shelf check: from Monday, November 2 to Tuesday, November 3`, so a wrong day is visible before you say yes. `undo` reads the same way with the days reversed and still needs your yes.

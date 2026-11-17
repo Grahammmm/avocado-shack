@@ -12,9 +12,13 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from hass.content_model import ID_RE, IMAGE_RE, SITE_DIR, _https, _text, special_text_problem
+from hass.content_model import (ID_RE, IMAGE_RE, SELLING_PRICE_ERROR, SITE_DIR, _https, _text,
+                                special_text_problem, valid_selling_price)
 
 KINDS = ("id", "maker_key", "text", "text_list", "url", "enum", "bool", "int", "date", "time", "image", "deal")  # deal: AVO-SPECIALS-1 owner deal line
+# Only the checked intake planner sets this kind in chat, not the legacy ops interpreter.
+INTAKE_PRICE = "intake_price"
+KINDS += (INTAKE_PRICE,)
 # clocks are ASCII HH:MM (consumed by time.fromisoformat); \d would also match Unicode digits
 TIME_RE = re.compile(r"([01][0-9]|2[0-3]):[0-5][0-9]")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -133,6 +137,8 @@ def _check_value(problems, where, arg: Arg, value, makers, site_dir):
         problems.append(f"{where}: not a maker in makers.json")
     elif kind == "text":
         _text(problems, where, value)
+    elif kind == INTAKE_PRICE and not valid_selling_price(value):
+        problems.append(f"{where}: {SELLING_PRICE_ERROR}")
     elif kind == "deal":  # the one text that may carry a price ($); markup, links and contact details stay out
         if (why := special_text_problem(value, deal=True)):
             problems.append(f"{where}: {why}")

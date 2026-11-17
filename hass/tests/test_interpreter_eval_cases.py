@@ -49,13 +49,13 @@ class LoadCasesRefusalTests(unittest.TestCase):
         with self.assertRaises(ev.EvalError): ev.load_cases(path)
 
     def assertLoads(self, path):
-        self.assertEqual(len(ev.load_cases(path)), 80)
+        self.assertEqual(len(ev.load_cases(path)), 84)
         code, out, err = self.run_main(path)
-        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 80))
+        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 84))
 
     def test_real_fixture_loads_63_cases_unchanged(self):
         self.assertEqual(ev.load_cases(CASES), self.rows)
-        self.assertEqual(len(self.rows), 80)
+        self.assertEqual(len(self.rows), 84)
 
     def test_bad_pending_code_refused(self):
         bad = [{"code": ["a"]}, {"code": 7}, {"code": ""}, {"code": "a b"}, {"code": "x" * 17}, {},
@@ -148,7 +148,7 @@ class V4NotesTests(base.EvalTestCase):
 
     def test_real_fixture_has_8_new_unique_cases_and_two_with_notes(self):
         ids = [c["id"] for c in self.cases]
-        self.assertEqual((ids[55:63], len(set(ids))), ([f"e{n}" for n in range(56, 64)], 80))
+        self.assertEqual((ids[55:63], len(set(ids))), ([f"e{n}" for n in range(56, 64)], 84))
         self.assertTrue(all(ev.ID_RE.fullmatch(i) for i in ids))
         self.assertEqual({c["id"] for c in self.cases if "notes" in c}, {"e62", "e63"})
         self.assertEqual([c["expect"] for c in self.cases[56:61:2]][:1], [{"question": True}])
@@ -169,7 +169,7 @@ class V4NotesTests(base.EvalTestCase):
         for notes in ([], [{"key": "k", "text": "t"}] * 20):
             with self.subTest(n=len(notes)):
                 path, _ = self.notes_file(notes)
-                self.assertEqual(len(ev.load_cases(path)), 80)
+                self.assertEqual(len(ev.load_cases(path)), 84)
 
     def captured_requests(self):
         bodies = []
@@ -179,7 +179,7 @@ class V4NotesTests(base.EvalTestCase):
             return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
         out = self.tmp / "fresh.jsonl"
         code, _, _ = base.run("--live", "--url", base.URL, "--model", "m", "--out", out, transport=transport)
-        self.assertEqual((code, len(bodies)), (0, 80))
+        self.assertEqual((code, len(bodies)), (0, 84))
         return bodies
 
     def test_live_sends_notes_only_for_cases_that_have_them(self):
@@ -188,8 +188,8 @@ class V4NotesTests(base.EvalTestCase):
                 self.assertEqual((sent["message"], sent["pending"]), (case["text"], case["pending"]))
                 if case.get("notes"):
                     self.assertEqual(sent["notes"], case["notes"])
-                else:  # exactly the four fields a no-notes request has today
-                    self.assertEqual(set(sent), {"message", "pending", "today", "weekday"})
+                else:  # exactly the four fields a no-notes request has today (AV0007-10: plus aliases when the case has some)
+                    self.assertEqual(set(sent), {"message", "pending", "today", "weekday"} | ({"aliases"} if case.get("aliases") else set()))
 
     def test_organic_claim_on_the_farm_note_case_fails_by_the_existing_rule(self):
         args = self.replies["e63"]["ops"][0]["args"]
@@ -206,7 +206,7 @@ class V4NotesTests(base.EvalTestCase):
         path.write_text("\n".join(rows) + "\n", "utf-8")
         code, out, err = base.scored(CASES, path)
         summary = json.loads(out)
-        self.assertEqual((code, err, summary["missing"], summary["passed"]), (0, "", ["e62"], 76))
+        self.assertEqual((code, err, summary["missing"], summary["passed"]), (0, "", ["e62"], 80))
 
 
 class V5PhoneAndHikeTextTests(base.EvalTestCase):
@@ -251,7 +251,7 @@ class V5PhoneAndHikeTextTests(base.EvalTestCase):
         watched = [p for p in (ev.REPO / "hass" / "content").rglob("*") if p.is_file()]
         before = {p: p.read_bytes() for p in watched}
         code, err, bodies = self.prompts()
-        self.assertEqual((code, err, len(bodies)), (0, "", 80))
+        self.assertEqual((code, err, len(bodies)), (0, "", 84))
         hike = json.loads(ev.EVENTS.read_text("utf-8"))[0]
         row = " | ".join(json.dumps(str(hike[k]), ensure_ascii=False) for k in ("id", "meetingPoint", "capacity", "bring", "accessNote"))
         self.assertTrue(row in bodies[0], "fixture hike details row missing from the live prompt")
@@ -300,7 +300,7 @@ class V8GroupAndCopySlotTests(base.EvalTestCase):
     def test_v8_six_cases_shapes_and_membership(self):
         new = self.cases[69:75]
         self.assertEqual([c["id"] for c in new], self.NEW)
-        self.assertEqual(len({c["id"] for c in self.cases}), 80)
+        self.assertEqual(len({c["id"] for c in self.cases}), 84)
         self.assertEqual([c["text"] for c in new], [
             "Everything on the flowers shelf is limited.", "All the Etto products are limited.",
             "Add \"Great on toast.\" to the end of Brian's sourdough bread description; keep every existing sentence.",
@@ -377,16 +377,16 @@ class V8GroupAndCopySlotTests(base.EvalTestCase):
     def test_v8_prior_scores_and_refusals_unchanged(self):
         code, out, err = base.scored(CASES, REPLIES)
         summary = json.loads(out)
-        self.assertEqual((code, err, summary["passed"], [f["id"] for f in summary["failed"]]), (0, "", 77, ["e06", "e13", "e25"]))
+        self.assertEqual((code, err, summary["passed"], [f["id"] for f in summary["failed"]]), (0, "", 81, ["e06", "e13", "e25"]))
         old = ev.score(self.cases[:69], self.replies, base.REGISTRY)  # the 69 earlier cases score exactly as before
         self.assertEqual((old["passed"], [f["id"] for f in old["failed"]]), (66, ["e06", "e13", "e25"]))
         got = lambda skip=(), more=(): base.scored(CASES, self.write("r.jsonl", [{"id": k, "reply": v} for k, v in self.replies.items() if k not in skip] + list(more)))  # noqa: E731
         code, out, _ = got(skip=("e75",))
-        self.assertEqual((code, json.loads(out)["missing"], json.loads(out)["passed"]), (0, ["e75"], 76))
+        self.assertEqual((code, json.loads(out)["missing"], json.loads(out)["passed"]), (0, ["e75"], 80))
         code, out, _ = got(more=[{"id": "e99", "reply": {"question": "?"}}])
-        self.assertEqual((code, json.loads(out)["extra"], json.loads(out)["passed"]), (0, ["e99"], 77))
-        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:79]), REPLIES), (2, "", "cases: 79 cases, expected 80"))
-        self.assertEqual(base.scored(self.write("d.jsonl", self.rows[:79] + [self.rows[0]]), REPLIES), (2, "", "cases line 80: duplicate id"))
+        self.assertEqual((code, json.loads(out)["extra"], json.loads(out)["passed"]), (0, ["e99"], 81))
+        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:83]), REPLIES), (2, "", "cases: 83 cases, expected 84"))
+        self.assertEqual(base.scored(self.write("d.jsonl", self.rows[:83] + [self.rows[0]]), REPLIES), (2, "", "cases line 84: duplicate id"))
 
 
 class V6SamplesPhotoAvailabilityTests(base.EvalTestCase):
@@ -398,8 +398,8 @@ class V6SamplesPhotoAvailabilityTests(base.EvalTestCase):
     def ops(self, op, **args): return _ops((op, args))
 
     def test_v6_five_cases_match_registry(self):
-        new = self.cases[75:]
-        self.assertEqual(([c["id"] for c in new], len({c["id"] for c in self.cases})), (self.NEW, 80))
+        new = self.cases[75:80]
+        self.assertEqual(([c["id"] for c in new], len({c["id"] for c in self.cases})), (self.NEW, 84))
         self.assertTrue(all(set(c) == {"id", "text", "pending", "expect"} and c["pending"] == [] and
                             c["expect"]["revises"] is None for c in new))
         self.assertEqual([[(o["op"], o["args"]) for o in c["expect"]["ops"]] for c in new], [
@@ -433,20 +433,132 @@ class V6SamplesPhotoAvailabilityTests(base.EvalTestCase):
     def test_v6_preserves_previous_scores(self):
         old = ev.score(self.cases[:75], self.replies, base.REGISTRY)
         new = ev.score(self.cases, self.replies, base.REGISTRY)
-        self.assertEqual((old["passed"], new["passed"]), (72, 77))
+        self.assertEqual((old["passed"], new["passed"]), (72, 81))
         self.assertEqual(old["failed"], new["failed"])  # the three intentional negatives are the only failures
         self.assertEqual((new["missing"], new["extra"]), ([], []))
         code, out, err = base.scored(CASES, self.write("r.jsonl", [{"id": k, "reply": v} for k, v in self.replies.items() if k != "e79"]))
-        self.assertEqual((code, err, json.loads(out)["missing"], json.loads(out)["passed"]), (0, "", ["e79"], 76))
+        self.assertEqual((code, err, json.loads(out)["missing"], json.loads(out)["passed"]), (0, "", ["e79"], 80))
 
     def test_v6_count_bounds(self):
-        too_few = base.scored(self.write("a.jsonl", self.rows[:79]), REPLIES)
-        self.assertEqual(too_few, (2, "", "cases: 79 cases, expected 80"))
-        extra = dict(json.loads(self.rows[0]), id="e81")
+        too_few = base.scored(self.write("a.jsonl", self.rows[:83]), REPLIES)
+        self.assertEqual(too_few, (2, "", "cases: 83 cases, expected 84"))
+        extra = dict(json.loads(self.rows[0]), id="e99")
         self.assertEqual(base.scored(self.write("b.jsonl", self.rows + [json.dumps(extra)]), REPLIES),
-                         (2, "", "cases: 81 cases, expected 80"))
-        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:79] + [self.rows[0]]), REPLIES),
-                         (2, "", "cases line 80: duplicate id"))
+                         (2, "", "cases: 85 cases, expected 84"))
+        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:83] + [self.rows[0]]), REPLIES),
+                         (2, "", "cases line 84: duplicate id"))
+
+
+class V9UndoBrandAliasPhotoTests(base.EvalTestCase):
+    """AV0007-10: the four v9 cases (undo guidance, brand-only new product, owner alias, missing-field photo answer),
+    the optional `aliases` context and its forwarding. Synthetic replies and a fake transport only; no model call."""
+
+    NEW, n = ["e81", "e82", "e83", "e84"], iter(range(100))
+    HASH = "5ca1ab1e" * 8
+
+    def case(self, case_id): return next(c for c in self.cases if c["id"] == case_id)
+
+    def rows_with(self, case_id, **change):
+        rows = [dict(c) for c in self.cases]
+        next(r for r in rows if r["id"] == case_id).update(change)
+        return self.write("v9.jsonl", rows)
+
+    def requests(self, cases_path):
+        bodies = []
+
+        def transport(url, body, headers, timeout):
+            bodies.append(json.loads(json.loads(body)["messages"][1]["content"]))
+            return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
+        code, _, err = base.run("--live", "--cases", cases_path, "--url", base.URL, "--model", "m",
+                                "--out", self.tmp / f"out{next(self.n)}.jsonl", transport=transport)
+        self.assertEqual((code, err), (0, ""))
+        return bodies
+
+    def test_v9_four_cases_and_synthetic_replies(self):
+        self.assertEqual([c["id"] for c in self.cases[80:]], self.NEW)
+        self.assertEqual([c["text"] for c in (self.case(i) for i in self.NEW)][0::2],
+                         ["undo the hours change", "the green jam is sold out"])
+        self.assertEqual(self.case("e81")["expect"], {"question": True})
+        self.assertEqual(self.case("e81")["pending"], [])
+        self.assertEqual(list(self.replies["e81"]), ["question"])
+        self.assertIn("undo", self.replies["e81"]["question"])
+        self.assertIn("history", self.replies["e81"]["question"])
+        blob = json.dumps([self.case(i) for i in self.NEW] + [self.replies[i] for i in self.NEW])
+        self.assertNotIn("history.revert", blob)
+        self.assertEqual(ev.score(self.cases[80:], self.replies, base.REGISTRY)["passed"], 4)
+
+    def test_v9_add_without_display_brand(self):
+        args = self.case("e82")["expect"]["ops"][0]["args"]
+        self.assertEqual(args, {"name": "Juniper oat crackers", "brand": "Fixture Pantry", "category": "pantry",
+                                "description": "Crisp oat crackers.", "photo": self.HASH, "imageAlt": "A packet of oat crackers"})
+        self.assertNotIn("displayBrand", self.replies["e82"]["ops"][0]["args"])
+        self.assertEqual(self.case("e82")["expect"]["revises"], None)
+        self.assertEqual(self.why("e82", self.replies["e82"]), [])
+        for key, wrong in (("photo", "ab" * 32), ("name", "Oat crackers"), ("brand", "Other"), ("category", "bread"),
+                           ("description", "Crunchy."), ("imageAlt", "A crate")):
+            reply = json.loads(json.dumps(self.replies["e82"]))
+            reply["ops"][0]["args"][key] = wrong
+            self.assertEqual(len(self.why("e82", reply)), 1, key)
+            del reply["ops"][0]["args"][key]
+            self.assertEqual(len(self.why("e82", reply)), 1, key)
+
+    def test_v9_alias_target_and_availability(self):
+        self.assertEqual(self.case("e83")["aliases"], [{"name": "green jam", "kind": "product", "id": "photo-product-001"}])
+        self.assertEqual(self.why("e83", self.replies["e83"]), [])
+        good = self.replies["e83"]["ops"][0]
+        for args in ({"id": "photo-product-002", "available": "no"}, {"id": "photo-product-001", "available": "limited"},
+                     {"available": "no"}):
+            self.assertEqual(len(self.why("e83", {"ops": [{"op": good["op"], "args": args}], "revises": None})), 1, args)
+        self.assertTrue(self.why("e83", {"ops": [{"op": "product.hide", "args": {"id": "photo-product-001"}}], "revises": None}))
+
+    def test_v9_missing_field_photo_answer(self):
+        entry = self.case("e84")["pending"][0]
+        self.assertEqual((entry["state"], entry["missing"]), ("needs-details", ["imageAlt"]))
+        self.assertEqual(entry["ops"][0]["args"]["photo"], self.HASH)
+        self.assertEqual(self.case("e84")["expect"]["revises"], entry["code"])
+        self.assertEqual(self.why("e84", self.replies["e84"]), [])
+        for mutate in (lambda a: a.pop("imageAlt"), lambda a: a.update(imageAlt="Something else"),
+                       lambda a: a.update(photo="ab" * 32), lambda a: a.update(id="photo-product-002")):
+            reply = json.loads(json.dumps(self.replies["e84"]))
+            mutate(reply["ops"][0]["args"])
+            self.assertEqual(len(self.why("e84", reply)), 1)
+        for revises in (None, "zzzz"):
+            self.assertTrue(self.why("e84", dict(self.replies["e84"], revises=revises)), revises)
+
+    def test_v9_alias_context_validation(self):
+        good = {"name": "green jam", "kind": "product", "id": "photo-product-001"}
+        for bad in (None, "x", {"a": 1}, [good] * 51, [dict(good, extra="x")], [{"name": "a", "kind": "product"}],
+                    [dict(good, kind="shelf")], [dict(good, name=3)], [dict(good, id=None)], ["green jam"]):
+            with self.subTest(bad=str(bad)[:30]):
+                code, out, err = base.scored(self.rows_with("e83", aliases=bad), REPLIES)
+                self.assertEqual((code, out, err), (2, "", "cases line 83: bad aliases"))
+        self.assertEqual(len(ev.load_cases(self.rows_with("e83", aliases=[good] * 50))), 84)
+        self.assertEqual(len(ev.load_cases(self.rows_with("e83", aliases=[dict(good, kind="maker")]))), 84)
+
+    def test_v9_context_forwarding(self):
+        bodies = self.requests(CASES)
+        self.assertEqual([("aliases" in b) for b in bodies], [False] * 82 + [True] + [False])
+        self.assertEqual(bodies[82]["aliases"], self.case("e83")["aliases"])
+        self.assertEqual(bodies[82]["message"], "the green jam is sold out")
+        self.assertEqual(bodies[82]["pending"], [])
+        notes = [{"key": "k", "text": "t"}]
+        both = self.requests(self.rows_with("e83", notes=notes))[82]
+        self.assertEqual((both["aliases"], both["notes"]), (self.case("e83")["aliases"], notes))
+        empty = self.requests(self.rows_with("e83", aliases=[]))[82]
+        self.assertNotIn("aliases", empty)
+
+    def test_v9_prior_scores_and_refusals_unchanged(self):
+        old = ev.score(self.cases[:80], self.replies, base.REGISTRY)
+        self.assertEqual((old["passed"], [f["id"] for f in old["failed"]]), (77, ["e06", "e13", "e25"]))
+        code, out, err = base.scored(CASES, self.write("r.jsonl", [{"id": k, "reply": v} for k, v in self.replies.items() if k != "e84"]))
+        self.assertEqual((code, json.loads(out)["missing"], json.loads(out)["passed"], err), (0, ["e84"], 80, ""))
+        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:83] + [self.rows[0]]), REPLIES),
+                         (2, "", "cases line 84: duplicate id"))
+        bad = self.rows_with("e84", pending=[dict(self.case("e84")["pending"][0], code="a b")])
+        self.assertEqual(base.scored(bad, REPLIES), (2, "", "cases line 84: bad pending code"))
+        _, out, _ = base.scored(CASES, REPLIES)
+        for text in ("green jam", "oat crackers", "wooden crate", "undo the hours"):
+            self.assertNotIn(text, out)
 
 
 if __name__ == "__main__":

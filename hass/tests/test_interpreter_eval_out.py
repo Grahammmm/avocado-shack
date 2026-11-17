@@ -30,15 +30,15 @@ class OutFileTests(base.EvalTestCase):
             code, stdout, err, calls = self.live(out)
         finally:
             os.umask(old)
-        self.assertEqual((code, err, calls, stat.S_IMODE(out.stat().st_mode)), (0, "", 80, 0o600))
-        self.assertEqual(len(out.read_text("utf-8").splitlines()), 80)
+        self.assertEqual((code, err, calls, stat.S_IMODE(out.stat().st_mode)), (0, "", 84, 0o600))
+        self.assertEqual(len(out.read_text("utf-8").splitlines()), 84)
         self.assertEqual(list(ev.load_replies(out)), [c["id"] for c in self.cases])
         self.assertEqual((self.temps(), out.stat().st_nlink), ([], 1))
 
     def test_fsync_failure_leaves_nothing(self):
         out = self.tmp / "full.jsonl"
         code, stdout, err, calls = self.live(out, fsync=OSError(errno.ENOSPC, "No space left on device"))
-        self.assertEqual((code, stdout, err, calls), (2, "", "--out could not be created", 80))
+        self.assertEqual((code, stdout, err, calls), (2, "", "--out could not be created", 84))
         self.assertEqual(list(self.tmp.iterdir()), [])
 
     def test_link_lost_race_keeps_other_file_and_removes_temp(self):
@@ -48,18 +48,18 @@ class OutFileTests(base.EvalTestCase):
             with open(dst, "xb") as fh: fh.write(b"theirs\n")
             return real_link(src, dst, *a, **k)  # raises FileExistsError: os.link never replaces
         code, stdout, err, calls = self.live(out, link=other_writer_wins)
-        self.assertEqual((code, stdout, err, calls), (2, "", "--out already exists", 80))
+        self.assertEqual((code, stdout, err, calls), (2, "", "--out already exists", 84))
         self.assertEqual((out.read_bytes(), self.temps()), (b"theirs\n", []))
 
     def test_link_unsupported_leaves_nothing(self):
         out = self.tmp / "nolinks.jsonl"
         code, stdout, err, calls = self.live(out, link=PermissionError(errno.EPERM, "Operation not permitted"))
-        self.assertEqual((code, stdout, err, calls), (2, "", "--out could not be created", 80))
+        self.assertEqual((code, stdout, err, calls), (2, "", "--out could not be created", 84))
         self.assertEqual(list(self.tmp.iterdir()), [])
 
     def test_missing_parent_fails_after_the_calls_and_creates_nothing(self):
         code, stdout, err, calls = self.live(self.tmp / "absent" / "r.jsonl")
-        self.assertEqual((code, stdout, err, calls), (2, "", "--out could not be created", 80))  # calls come first
+        self.assertEqual((code, stdout, err, calls), (2, "", "--out could not be created", 84))  # calls come first
         self.assertEqual(list(self.tmp.iterdir()), [])
 
     def test_temp_name_never_printed(self):

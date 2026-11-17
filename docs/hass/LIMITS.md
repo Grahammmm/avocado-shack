@@ -67,6 +67,10 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - The store phone is a US number of **10 digits** <!-- ops.store.PHONE_DIGITS --> (spaces, dashes and brackets are fine); anything else is refused.
 - A purchase cost (`cost`, `margin`) is private and up to **100000 dollars** <!-- margins.PACK_COST_MAX --> for **1** <!-- margins.UNITS_MIN -->–**10000** <!-- margins.UNITS_MAX --> units.
 
+## New badge
+
+- A product you add through Hass normally shows New for **14** <!-- shop.NEW_BADGE_DAYS --> Pacific calendar days, counting the day it was added. In the sandbox, you can ask for no New badge. Products already on the shop before this feature have no added date and do not show it. Editing or restoring a product does not start or restart the badge period; a recently added product can still show New after an edit or restore.
+
 ## Home page
 
 - Intro: at most **160 characters** <!-- content_model.MAX_INTRO -->.
