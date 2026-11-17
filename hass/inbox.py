@@ -184,6 +184,8 @@ class Inbox:
             try:  # last_try only on the last try, so a plain handle(msg) stand-in still works
                 photos = getattr(getattr(conversation, "conversation", conversation), "photos", None)
                 lifetime = getattr(photos, "retry_seconds", 0) if msg is not None and msg.attachments else 0
+                if not isinstance(lifetime, (int, float)) or isinstance(lifetime, bool):
+                    lifetime = 0  # Mock/fake photo sources retain the legacy attempt limit.
                 last = (self.clock() >= parse_aware(row["enqueued_at"]) + timedelta(seconds=lifetime)) if lifetime else row["tries"] + 1 >= MAX_TRIES
                 disposition = "unreadable" if msg is None else \
                     conversation.handle(msg, last_try=True) if last else conversation.handle(msg)
