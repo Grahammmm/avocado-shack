@@ -62,8 +62,8 @@ class LabelReaderTests(unittest.TestCase):
         for name in ("Organic Lion's Mane", "ORGANICALLY grown mane", "Pesticide free mane", "Lion's Mane, grown in CA",
                      "Non‑GMO mane", "Locally foraged", "Certified Lion's Mane"):
             with self.subTest(name):
-                self.assertEqual(self.read({**LION, "name": name}), {"brand": LION["brand"], "category": "mushrooms"})
-        self.assertEqual(self.read({**LION, "brand": "Organic Valley"}), {"name": LION["name"], "category": "mushrooms"})
+                self.assertEqual(self.read({**LION, "name": name}), {"brand": LION["brand"], "category": "mushrooms", "printed_claims": [name]})
+        self.assertEqual(self.read({**LION, "brand": "Organic Valley"}), {"name": LION["name"], "category": "mushrooms", "printed_claims": ["Organic Valley"]})
 
     def test_bad_values_are_dropped_one_by_one(self):
         for bad, keep in (({"category": "gadgets"}, ("name", "brand")), ({"brand": "B" * 61}, ("name", "category")),
@@ -194,7 +194,7 @@ class LabelConversationTests(unittest.TestCase):
     def test_failed_or_empty_read_keeps_todays_reply_exactly(self):
         for answer in (TimeoutError(), urllib.error.URLError(ConnectionRefusedError()), (500, b""),
                        (200, b"x" * (300 * 1024)), (200, b"{"), recorded([LION]), recorded({"maker": "Farm"}),
-                       recorded({"name": "Organic"})):
+                       recorded({"name": "unknown"})):
             with self.subTest(answer=repr(answer)[:40]):
                 self.fresh()
                 self.open(answer)

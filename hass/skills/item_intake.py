@@ -110,6 +110,89 @@ def enabled(ctx) -> bool:
     return getattr(ctx, "intake", False) is True
 
 
+def caption_answers(caption):
+    """Separate complete typed finance clauses from public words. Never called on image output.
+
+    Ambiguous clauses stay untouched for the existing refusal/question path, not guessed.
+    Repeated conflicting answers are not seeded.
+    """
+    public, answers, conflicts = [], {}, set()
+    for part in re.split(r"[,;\n]+|\s+and\s+(?=(?:sell|selling|bought|paid|\d)\b)", caption, flags=re.I):
+        text = part.strip().rstrip(".!")
+        got = {}
+        money = re.fullmatch(r"(?:bought|paid|cost|sell|selling|price)(?:\s+(?:it|them))?(?:\s+for)?\s+(\$?\d+(?:\.\d{1,2})?)(?:\s+each)?", text, re.I)
+        qty = re.fullmatch(r"(?:bought\s+|got\s+|stock\s*:?\s*)?(\d+(?:\.\d+)?)\s+(of them|each|[a-z]+)", text, re.I)
+        if money:
+            key = "cost" if re.match(r"bought|paid|cost", text, re.I) else "price"
+            value = _parse_money(money[1])
+            if value is not None: got[key] = value
+        elif qty:
+            parsed = _parse_qty(qty[1] + " " + ("each" if qty[2].lower() == "of them" else qty[2]))
+            if parsed: got.update(qty=parsed[0], qty_unit=parsed[1])
+        if not got:
+            if part.strip(): public.append(part.strip())
+            continue
+        if money and text.lower().endswith("each"): got["sold_by"] = "item"
+        for key, value in got.items():
+            if key in answers and answers[key] != value: conflicts.add(key)
+            answers[key] = value
+    return "; ".join(public), {k: v for k, v in answers.items() if k not in conflicts}
+
+
+def photo_step(intake):
+    """Explicit confirmation of the reading, then one separate yes/no per printed claim."""
+    details = intake.get("photo_details") or {}
+    if not details: return None
+    if "photo_confirmed" not in intake:
+        lines = []
+        for key, value in details.items():
+            if key != "printed_claims":
+                lines.append(key.replace("_", " ") + ": " + _q("; ".join(value) if isinstance(value, list) else value))
+        return "photo_confirm", "I read the photo as " + "; ".join(lines) + ". Use these details for this product?"
+    if intake.get("photo_confirmed") is True:
+        decisions = intake.get("photo_claim_answers", {})
+        for i, claim in enumerate(details.get("printed_claims", [])):
+            if str(i) not in decisions:
+                return f"photo_claim_{i}", f"The label says: {_q(claim)}. Put that on the website?"
+    return None
+
+
+def photo_answer(key, text, slots):
+    """A plain explicit yes is the ONLY inclusion path. Skip/no never grants consent."""
+    got = dict(slots.get("intake") or {})
+    words = _clean(text)
+    if ABORT.fullmatch(words): return {"abort": True}
+    yes = bool(re.fullmatch(r"yes[.!]*", words, re.I))
+    if not yes and not (NO_FULL.fullmatch(words) or SKIP.fullmatch(words)):
+        step = photo_step(got)
+        return {"again": "Please say yes, no or skip. " + (step[1] if step else "")}
+    extra, said = {}, ""
+    details = got.get("photo_details") or {}
+    if key == "photo_confirm":
+        got["photo_confirmed"] = yes
+        if yes:
+            for source, target in (("name", "name"), ("brand", "maker"), ("category", "shelf")):
+                if details.get(source) and not slots.get(target):
+                    extra[target] = details[source]
+            # Only the confirmed identification supports public source-word checks.
+            said = " ".join(details.get(k, "") for k in ("name", "brand", "category"))
+            if details.get("size") and "variety" not in got: got["variety"] = details["size"]
+    else:
+        index = key.removeprefix("photo_claim_")
+        got["photo_claim_answers"] = {**got.get("photo_claim_answers", {}), index: yes}
+        if yes: said = details["printed_claims"][int(index)]
+    return {"slots": {"intake": got, **extra}, "public": bool(said), "text": said}
+
+
+def photo_description(intake):
+    details = intake.get("photo_details") or {}
+    if intake.get("photo_confirmed") is not True: return ""
+    text = details.get("description", "")
+    accepted = [claim for i, claim in enumerate(details.get("printed_claims", []))
+                if intake.get("photo_claim_answers", {}).get(str(i)) is True]
+    return " ".join([text, *(c.rstrip(".") + "." for c in accepted)]).strip()
+
+
 def acknowledge(db, provider_id, now) -> bool:
     """The photo message ``provider_id`` has had its first question. True the first time, False when it was already answered (a
     photo that could not be fetched is tried again later and must not be answered twice)."""
@@ -526,12 +609,16 @@ def skipped_names(intake) -> list:
 
 def record(draft_code, name, maker, shelf, product_id, photo, intake, now) -> dict:
     """The private intake record, as it is kept. Owner texts are never in it; only his answers to these questions."""
-    answers = {k: v for k, v in (intake or {}).items() if k in ORDER}
+    intake = intake if isinstance(intake, dict) else {}
+    answers = {k: v for k, v in intake.items() if k in ORDER}
     named = _clean((intake or {}).get("maker_named")) or None  # the maker he named when he skipped their town
     return {"schema": 1, "kind": "item.intake", "status": "saved", "draft": draft_code, "product": product_id, "name": name,
             "maker": maker or named, "maker_unknown": maker is None and named is None, "shelf": shelf, "photo": photo,
             "answers": answers, "skipped": skipped_names(intake),
-            "claims_unverified": bool(answers.get("claims") and answers["claims"] != "none"),
+            **({"photo_read": {"details": intake["photo_details"], "confirmed": intake.get("photo_confirmed"),
+                               "claim_answers": intake.get("photo_claim_answers", {})}} if intake.get("photo_details") else {}),
+            "claims_unverified": bool(answers.get("claims") and answers["claims"] != "none"
+                                      or (intake.get("photo_details") or {}).get("printed_claims")),
             "drafted_at": now.isoformat() if hasattr(now, "isoformat") else str(now)}
 
 

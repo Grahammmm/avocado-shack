@@ -39,9 +39,9 @@ class LookalikeTests(unittest.TestCase):
         for bad in LOOKALIKES:
             with self.subTest(bad=bad):
                 self.assertEqual(keep({"name": bad, "brand": "Etto", "category": "tea"}, CATS),
-                                 {"brand": "Etto", "category": "tea"})
-                self.assertEqual(keep({"name": "Plain Tea", "brand": bad}, CATS), {"name": "Plain Tea"})
-                self.assertEqual(keep({"name": "Plain Tea", "category": bad}, [bad, "tea"]), {"name": "Plain Tea"})
+                                 {"brand": "Etto", "category": "tea", "printed_claims": [bad]})
+                self.assertEqual(keep({"name": "Plain Tea", "brand": bad}, CATS), {"name": "Plain Tea", "printed_claims": [bad]})
+                self.assertEqual(keep({"name": "Plain Tea", "category": bad}, [bad, "tea"]), {"name": "Plain Tea", "printed_claims": [bad]})
 
     def test_clean_unicode_names_are_not_transliterated(self):
         names = ("Cuv\u00e9e Tea", "\u0427\u0430\u0439 \u0414\u043e\u043c", "Pl" + A + "in  Tea", "\u65e5\u672c\u8336")
@@ -56,7 +56,9 @@ class LookalikeTests(unittest.TestCase):
         for bad in ("Organic Tea", "\uff2f\uff52\uff47\uff41\uff4e\uff49\uff43 Tea", "Org\u00e0nic Tea", "Cage\u2010Free Eggs",
                     "Org\u200banic Tea", "Org\u2028anic Tea"):
             with self.subTest(bad=bad):
-                self.assertEqual(keep({"name": bad, "brand": "Etto"}, CATS), {"brand": "Etto"})
+                expected = {"brand": "Etto"}
+                if "\u200b" not in bad and "\u2028" not in bad: expected["printed_claims"] = [bad]
+                self.assertEqual(keep({"name": bad, "brand": "Etto"}, CATS), expected)
 
     def test_real_reads_drop_lookalikes_for_both_apis(self):
         for api, wrap, url in (("ollama", ollama, URL), ("openai", openai, "http://127.0.0.1:8010")):
@@ -64,7 +66,8 @@ class LookalikeTests(unittest.TestCase):
                 fake = Fake(wrap({"name": LOOKALIKES[0], "brand": "Etto", "category": "tea", "origin": "X"}))
                 labels = LabelReader(url, "m", transport=fake, api=api)
                 found = labels.read(JPG, CATS)
-                self.assertEqual((found, labels.last_error, len(fake.calls)), ({"brand": "Etto", "category": "tea"}, None, 1))
+                self.assertEqual((found, labels.last_error, len(fake.calls)),
+                                 ({"brand": "Etto", "category": "tea", "printed_claims": [LOOKALIKES[0]]}, None, 1))
                 self.assertIn("Etto (tea)", question(found))
                 self.assertNotIn(A, question(found))
 
@@ -74,15 +77,16 @@ class LookalikeTests(unittest.TestCase):
         labels = LabelReader("http://127.0.0.1:8010", "m", transport=Fake(openai(every)), api="openai",
                              fallback=LabelReader(URL, "m2", transport=spare))
         self.assertEqual((labels.read(JPG, [LOOKALIKES[2]]), labels.last_error, labels.last_fallback, spare.calls),
-                         ({}, None, False, []))
+                         ({"printed_claims": list(every.values())}, None, False, []))
         failing = LabelReader("http://127.0.0.1:8010", "m", transport=Fake((500, b"")), api="openai",
                               fallback=LabelReader(URL, "m2", transport=Fake(ollama(every | {"brand": "Etto"}))))
-        self.assertEqual((failing.read(JPG, CATS), failing.last_fallback), ({"brand": "Etto"}, True))
+        self.assertEqual((failing.read(JPG, CATS), failing.last_fallback),
+                         ({"brand": "Etto", "printed_claims": [LOOKALIKES[0], LOOKALIKES[2]]}, True))
 
     def test_dropping_claim_does_not_rewrite_or_add_facts(self):
         row = {"name": LOOKALIKES[0], "brand": "Etto"}
         found = keep(row, CATS)
-        self.assertEqual(found, {"brand": "Etto"})
+        self.assertEqual(found, {"brand": "Etto", "printed_claims": [LOOKALIKES[0]]})
         self.assertNotIn("name", found)
         self.assertEqual(row, {"name": LOOKALIKES[0], "brand": "Etto"})
         self.assertNotIn(LOOKALIKES[0], question(found))
