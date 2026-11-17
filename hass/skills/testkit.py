@@ -542,10 +542,27 @@ def _subset(want, got):
     return want == got
 
 
+def _reply_problem(replies):
+    """Why the recorded replies cannot be walked safely, or None (container and name types only)."""
+    if not isinstance(replies, list): return "replies must be a list of recorded reply objects"
+    for i, r in enumerate(replies):
+        if not isinstance(r, dict): return f"replies[{i}] must be an object"
+        if not (r.get("skill") is None or isinstance(r["skill"], str)): return f"replies[{i}].skill must be text or null"
+        if "calls" in r:
+            if not (isinstance(r["calls"], list) and all(isinstance(c, dict) for c in r["calls"])): return f"replies[{i}].calls must be a list of objects"
+            if any(not (c.get("skill") is None or isinstance(c["skill"], str)) for c in r["calls"]): return f"replies[{i}].calls skill must be text or null"
+    return None
+
+
+def _walkable(row):
+    return isinstance(row, dict) and _reply_problem(row.get("replies", [])) is None
+
+
 def run_case_row(row, skills, skill=None, selftest=False):
     res = Result(row.get("id", "?") if isinstance(row, dict) else "?", row.get("kind", "") if isinstance(row, dict) else "")
     bad = _row_problems(row, CASE_KEYS, ("id", "kind", "texts", "replies", "expect"))
     if not bad and row["kind"] not in KINDS: bad = f"kind must be one of {', '.join(KINDS)}"
+    if not bad: bad = _reply_problem(row["replies"])
     if not bad and not (isinstance(row["texts"], list) and row["texts"] and len(row["texts"]) == len(row["replies"])
                         and all(isinstance(t, str) and t for t in row["texts"]) and len(set(row["texts"])) == len(row["texts"])):
         bad = "texts must be distinct non-empty strings, one recorded reply each"
@@ -784,7 +801,7 @@ def registry_skills():
 def skill_for(skills, path, rows):
     by_name = {s.name: s for s in skills}
     if Path(path).stem in by_name: return by_name[Path(path).stem]  # fixtures/skills/<group>/<name>.jsonl
-    named = {c.get("skill") for r in rows if isinstance(r, dict) for c in ([x for x in r.get("replies", []) if isinstance(x, dict)])}
+    named = {c.get("skill") for r in rows if _walkable(r) for c in r.get("replies", [])}
     named |= {c for r in rows if isinstance(r, dict) and r.get("plan") for c in [r.get("skill")] if c}
     named.discard(None)
     return by_name.get(next(iter(named))) if len(named) == 1 else None
@@ -813,7 +830,7 @@ def run_file(path, skills, selftest=False, only=None):
 
 
 def _row_skill(row, by_name, file_skill):
-    names = [c.get("skill") for r in row.get("replies", []) if isinstance(r, dict) for c in [r] + list(r.get("calls", [])) if isinstance(c, dict) and c.get("skill")]
+    names = [c.get("skill") for r in (row.get("replies", []) if _walkable(row) else []) for c in [r] + list(r.get("calls", [])) if c.get("skill")]
     return by_name.get(names[0]) if names else file_skill
 
 
