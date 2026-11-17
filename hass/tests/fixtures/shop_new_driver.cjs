@@ -1,5 +1,6 @@
 // Test driver for hass/tests/test_product_new.py (AV1622-06): loads storefront-mockup/shop.js in node:vm with stub page
 // globals (empty catalog) and, for each case {"product": {...}, "now": ISO instant}, prints the real badges(p) markup
+// (or the whole card with "card": true)
 // as a JSON array of strings. The case list is JSON on stdin; the clock the page sees is exactly the case's "now".
 // esc() and $() are the real one-line definitions from script.js, as in shop_organic_driver.cjs.
 const fs=require('fs'),path=require('path'),vm=require('vm');
@@ -18,5 +19,5 @@ ctx.cases=cases;
 ctx.RealDate=Date;
 const out=vm.runInContext(`cases.map(c=>{const D=RealDate,fake=new D(c.now);
   Date=class extends D{constructor(...a){a.length?super(...a):super(+fake)}static now(){return +fake}};
-  try{return badges(c.product)}finally{Date=D}})`,ctx);
+  try{return c.card?card(c.product):badges(c.product)}finally{Date=D}})`,ctx);
 process.stdout.write(JSON.stringify(Array.from(out))+'\n');

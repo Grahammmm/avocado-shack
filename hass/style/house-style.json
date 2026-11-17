@@ -1489,7 +1489,8 @@
   ],
   "product_optional_public": [
    "imageAlt",
-   "addedOn"
+   "addedOn",
+   "sellingPrice"
   ],
   "product_public_fields": [
    "id",
@@ -1520,8 +1521,8 @@
    "drinks": "Drinks & coffee",
    "eggs": "Eggs",
    "flowers": "Flowers",
-   "general": "General",
    "fruit": "Fruit",
+   "general": "General",
    "meat": "Meat",
    "pantry": "Pantry",
    "vegetables": "Vegetables"

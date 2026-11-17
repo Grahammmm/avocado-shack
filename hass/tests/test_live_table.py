@@ -43,7 +43,7 @@ class TableShape(unittest.TestCase):
         self.assertEqual(policy.LIVE["product.edit"], {"id", "description", "category"})
         self.assertEqual(policy.LIVE["maker.edit"], {"key", "story"})
         self.assertEqual(policy.LIVE["product.add"], {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey",
-                                                      "displayBrand", "labelText", "ownerText"})  # never `image`; private photo-bound receipts
+                                                      "displayBrand", "labelText", "ownerText", "sellingPrice"})  # never `image`
         self.assertEqual(policy.LIVE["maker.add"], {"key", "name", "place", "story"})  # never `url`
         self.assertEqual(policy.LIVE["product.set_photo"], {"id", "photo", "imageAlt"})
 
@@ -118,6 +118,17 @@ class RealDrafts(unittest.TestCase):
         self.assertEqual(reasons, ["not live: product.set_restock"])
         text = policy.refusal(reasons)
         self.assertIn("a kind of change I can't put on the website from chat yet", text)
+        self.assertIn("I've kept it on the list of changes to make by hand", text)
+        self.assertEqual(voice.check(text), [])
+
+    def test_bulk_availability_stays_private(self):
+        name = "product.set_availability_all"
+        self.assertIn(name, policy.PRIVATE)
+        self.assertNotIn(name, policy.LIVE)
+        reasons = self.refused(op(name, shelf="vegetables", available="yes"))
+        self.assertIn(f"not live: {name}", reasons)
+        text = policy.refusal(reasons)
+        self.assertIn("changes availability for a shelf or maker", text)
         self.assertIn("I've kept it on the list of changes to make by hand", text)
         self.assertEqual(voice.check(text), [])
 

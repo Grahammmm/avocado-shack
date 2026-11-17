@@ -1,5 +1,5 @@
 """AVO-LAUNCH-1 tests: ``sitegen.py --publish DIR`` builds only the website, and the PUBLISHED output carries no
-commerce surface, pre-launch copy, private files, contact data or location metadata.
+commerce surface beyond the read-only selling price, pre-launch copy, private files, contact data or location metadata.
 
 These checks read every file in the published folder, not just the home page: the archived commerce preview passed
 the home-page-only catalog check because nothing looked anywhere else. Failure messages name files and counts only,
@@ -91,6 +91,8 @@ class PublishedSite(unittest.TestCase):
         for rel, text in self.text.items():
             if rel.endswith(".css"):
                 continue  # stylesheet selectors are not a visitor surface; markup and copy are checked below
+            if rel == "shop.js":  # HASS-SITE-PRICE-1: exempt only the approved read-only card fragment
+                text = text.replace('<p class="product-meta product-price">$${esc(p.sellingPrice)}</p>', '', 1)
             with self.subTest(rel=rel):
                 self.assertEqual(len(COMMERCE_MARKUP.findall(text)), 0, f"commerce markup in {rel}")
                 self.assertEqual(len(COMMERCE_WORDS.findall(text)), 0, f"commerce wording in {rel}")

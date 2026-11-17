@@ -8,6 +8,7 @@ from unittest import mock
 from hass import content_model, media
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "hass" / "LIMITS.md"
+SHOP_JS = Path(__file__).resolve().parents[2] / "storefront-mockup" / "shop.js"
 CLAIM_RE = re.compile(r"\*\*(\d+)(?: ([A-Za-z]+))?\*\*\s*<!--\s*([\w.]+)\.(\w+)((?:\[\w+\])*)\s*-->")
 BOLD_NUMBER_RE = re.compile(r"\*\*\d")
 UNITS = {None: 1, "characters": 1, "MB": 2**20, "digits": 1, "dollars": 1}
@@ -17,7 +18,7 @@ REQUIRED = {"media.MAX_BYTES", "media.MAX_PHOTOS_PER_MESSAGE", "conversation.HIS
             "conversation.FIND_TEXT_MAX", "conversation.ALIAS_NAME_MAX", "content_model.MAX_INTRO",
             "content_model.MAX_HEADLINE_LINE", "content_model.MAX_STORY", "content_model.MAX_NOTICE",
             "content_model.MAX_NOTICE_DAYS", "ops.store.PHONE_DIGITS", "margins.PACK_COST_MAX",
-            "margins.UNITS_MIN", "margins.UNITS_MAX"}  # AV0022-15, AV1322-12, AV1222-12
+            "margins.UNITS_MIN", "margins.UNITS_MAX", "shop.NEW_BADGE_DAYS"}  # AV0022-15, AV1322-12, AV1222-12, AV1622-11
 
 
 def claims(doc: str) -> list:
@@ -26,7 +27,17 @@ def claims(doc: str) -> list:
             for m in CLAIM_RE.finditer(doc)]
 
 
-def problems(doc: str) -> list:
+def js_const(source: str, name: str) -> int:
+    """The one numeric literal `const NAME = <digits>` in JavaScript text; anything else is a ValueError."""
+    found = re.findall(rf"\b(?:const|let|var)\s+{name}\s*=([^;,\n]*)", source)
+    if len(found) != 1:
+        raise ValueError(f"{len(found)} declarations of {name}")
+    if not re.fullmatch(r"\s*\d+\s*", found[0]):
+        raise ValueError(f"{name} is not a number literal")
+    return int(found[0])
+
+
+def problems(doc: str, shop_js: str = None) -> list:
     """Every disagreement between the doc and the code, one string each (empty when the page is current)."""
     out, paired = [], {m.start() for m in CLAIM_RE.finditer(doc)}
     for m in BOLD_NUMBER_RE.finditer(doc):
@@ -38,9 +49,12 @@ def problems(doc: str) -> list:
             out.append(f"line {line}: unknown unit {unit!r} for {source}")
             continue
         try:
-            value = getattr(importlib.import_module(f"hass.{module}"), name)
-            for key in keys: value = value[key]
-        except (ImportError, AttributeError, KeyError, TypeError) as exc:
+            if (module, name) == ("shop", "NEW_BADGE_DAYS") and not keys:  # AV1622-11: the one JavaScript source
+                value = js_const(SHOP_JS.read_text("utf-8") if shop_js is None else shop_js, name)
+            else:
+                value = getattr(importlib.import_module(f"hass.{module}"), name)
+                for key in keys: value = value[key]
+        except (ImportError, AttributeError, KeyError, TypeError, ValueError, OSError) as exc:
             out.append(f"line {line}: {source} not found ({exc!r})")
             continue
         if value / UNITS[unit] != number:
@@ -145,6 +159,29 @@ class LimitsDocTest(unittest.TestCase):
         self.assertEqual(named_image_types("JPEG, PNG or HEIC"), {"jpeg", "png", "heic"})
         self.assertEqual(private_text("Call 209-555-0100 or a@b.co, see hass/media.py or config.json"),
                          ["209-555-0100", "@", "hass/media.py", "config.json"])
+
+    def test_new_badge_constant_goes_red(self):  # AV1622-11
+        line = {c[4]: c[0] for c in claims(self.doc)}["NEW_BADGE_DAYS"]
+        source = SHOP_JS.read_text("utf-8")
+        self.assertEqual(js_const(source, "NEW_BADGE_DAYS"), 14)
+        self.assertEqual(problems(self.doc), [])
+        changed = source.replace("const NEW_BADGE_DAYS=14;", "const NEW_BADGE_DAYS=15;")
+        self.assertNotEqual(changed, source)
+        self.assertEqual(problems(self.doc, changed), [f"line {line}: doc says 14, shop.NEW_BADGE_DAYS is 15"])
+
+    def test_new_badge_source_is_required(self):  # AV1622-11
+        self.assertIn("shop.NEW_BADGE_DAYS", {f"{c[3]}.{c[4]}" for c in claims(self.doc)})
+        no_claim = re.sub(r"\*\*14\*\* <!-- shop\.NEW_BADGE_DAYS -->", "14", self.doc)
+        self.assertNotIn("shop.NEW_BADGE_DAYS", {f"{c[3]}.{c[4]}" for c in claims(no_claim)})
+        self.assertEqual(problems(no_claim), [])  # the doc check alone is clean; REQUIRED coverage is what fails
+        self.assertFalse(REQUIRED <= {f"{c[3]}.{c[4]}" for c in claims(no_claim)})
+        for bad in ("", "const NEW_BADGE_DAYS=14;const NEW_BADGE_DAYS=14;", "const NEW_BADGE_DAYS=7*2;", "const NEW_BADGE_DAYS=days();",
+                    "const NEW_BADGE_DAYS=", "const OTHER=14;"):
+            with self.subTest(bad=bad):
+                self.assertIn("shop.NEW_BADGE_DAYS not found", problems(self.doc, bad)[0])
+        self.assertEqual(js_const("const  NEW_BADGE_DAYS = 14 ;", "NEW_BADGE_DAYS"), 14)
+        self.assertEqual(problems("**5** <!-- conversation.NO_SUCH -->")[0][:7], "line 1:")
+        self.assertIn("not found", problems("**3** <!-- shop.NEW_BADGE_DAYS[x] -->")[0])
 
     def test_store_undo_wording(self):  # AV2152-11
         section = self.doc.split("## Undoing a store change")[1].split("\n## ")[0]

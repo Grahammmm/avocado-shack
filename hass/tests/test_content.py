@@ -132,6 +132,17 @@ class ValidationTests(unittest.TestCase):
     def test_checkout_content_is_valid(self):
         validate(self.base, SITE_DIR)
 
+    def test_selling_price_bounds_and_closed_finance_fields(self):
+        for value in ("0.00", "999999.99 per lb", "1.05 each"):
+            content = copy.deepcopy(self.base)
+            content.products[0]["sellingPrice"] = value
+            validate(content, SITE_DIR)
+        for value in (None, True, 2, "-0.01", "1000000.00", "2.001", "2.00\n", "2.00 private cost"):
+            with self.subTest(value=value):
+                self.assertRejected(lambda c: c.products[0].update(sellingPrice=value), ".sellingPrice:")
+        for field in ("cost", "quantity"):
+            self.assertRejected(lambda c: c.products[0].update({field: 42}), f"unknown field {field!r}")
+
     def test_rejections(self):
         event = {"id": "hike-2026-12-05", "title": "Morning walk", "startsAt": "2026-12-05T09:00:00-08:00",
                  "timezone": "America/Los_Angeles", "status": "scheduled"}

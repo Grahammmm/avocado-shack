@@ -37,4 +37,19 @@ function qaEnv({preview=true}={}){
   out=fs.mkdtempSync(path.join(tmp,'avoshack-qa-'));process.stderr.write('QA_OUT_DIR='+out+'\n')}
  return {out,base};
 }
-module.exports={qaEnv};
+// Excise only the exact read-only amount from a real card for the commerce-word audit.
+// Keep the normal whole-body innerText semantics, and never mask extra text or markup.
+const commerceAuditText=page=>page.evaluate(()=>{
+ const retained=[];
+ try{
+  for(const p of document.querySelectorAll('#catalog-grid article[data-product-id] .food-identity > p.product-meta.product-price')){
+   const id=p.closest('article').dataset.productId;
+   const price=catalog.find(record=>record.id===id)?.sellingPrice;
+   if(typeof price!=='string'||!/^(?:0|[1-9][0-9]{0,5})\.[0-9]{2}(?: per lb| each)?$/.test(price)||
+      p.childNodes.length!==1||p.firstChild.nodeType!==Node.TEXT_NODE||p.textContent!=='$'+price)continue;
+   retained.push([p.firstChild,p.textContent]);p.firstChild.data='';
+  }
+  return document.body.innerText;
+ }finally{for(const [node,text] of retained)node.data=text}
+});
+module.exports={qaEnv,commerceAuditText};

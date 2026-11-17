@@ -1,7 +1,7 @@
-"""Single editable catalog draft. Typed finances are private; photo text is data, never ops.
+"""Single editable catalog draft. Only the typed selling price is public; photo text is data, never ops.
 
-The catalog still has no public price field. This adapter uses its existing product.add
-model and the ordinary editor/approval/live-policy gates, not a second publication path.
+This adapter uses product.add and the ordinary editor/approval/live-policy gates,
+not a second publication path.
 """
 import re
 
@@ -135,7 +135,7 @@ def plan(slots, content):
         if len(value) > TEXT_LIMITS["product"][key] or any(bad in value for bad in FORBIDDEN_TEXT) or INVISIBLE_RE.search(value):
             raise ValueError("I can't use that wording. The listing is unchanged; send the change in plain words.")
         if re.search(r"[$€£]|\b(?:prices?|costs?|dollars?|bucks?|usd|euros?|eur|gbp|cents?)\b", value, re.I):
-            raise ValueError("Prices stay in your private notes, not the website wording. The listing is unchanged.")
+            raise ValueError("Give the selling price separately, not in the website wording. The listing is unchanged.")
     if args["category"] not in CATEGORIES:
         raise ValueError("That shelf isn't on the website. The listing is unchanged.")
     labels = product_claims.sanitize(slots, photo_details(slots.get("intake") or {}))
@@ -151,6 +151,10 @@ def plan(slots, content):
     matches = [key for key, maker in content.makers.items() if maker.get("name", "").casefold() == brand.casefold()]
     if len(matches) == 1:
         args["producerKey"] = matches[0]
+    intake = slots.get("intake") or {}
+    if intake.get("price") is not None:
+        unit = {"pound": " per lb", "item": " each"}.get(intake.get("sold_by", ""), "")
+        args["sellingPrice"] = intake["price"] + unit
     ops = [{"op": "product.add", "args": args}]
     if slots.get("availability"):
         ops.append({"op": "store.confirm_selection", "args": {slots["availability"]: [newitem.next_product_id(content)]}})
