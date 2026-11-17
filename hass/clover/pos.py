@@ -1,23 +1,22 @@
 """HASS-POS-1: plain-English till views from the PRIVATE cache only: fixed templates, no model, no network, no token (docs/hass/POS.md).
-Staleness is reads.freshness. Count drops come from the cache's per-read snapshots; Hass's own journalled receipts are added back, a hand edit
-at the register is not, so every drops reply says "count drops, not exact sales".
+Staleness is reads.freshness. "Sold" is the sum of the positive count drops between consecutive per-read snapshots of the cache (a count
+that went up is a restock, never a negative sale). Nothing is added back: a stock edit (Hass's own or a hand edit at the register) between
+two reads shows as a drop too, so every sold number says "includes stock edits".
 """
 import json
 import os
 import re
-import sqlite3
 import stat
 import tempfile
-from contextlib import closing
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
-from urllib.parse import quote
 
 from hass.clover import cache, reads, reports
 from hass.clover.mapper import format_quantity
 
-NOTE = "(count drops, not exact sales: a recount or a till edit also shows here)"
+LABEL = "includes stock edits"
+NOTE = "(count drops between till reads, not exact sales)"
 DATED = re.compile(r"(\d{4}-\d{2}-\d{2})-pos\.md")
 low = reads.low_stock
 
@@ -31,71 +30,42 @@ def since_day(now, days):
     return now.astimezone(reads.PACIFIC).date() - timedelta(days=days - 1)
 
 
-def journal_deltas(state, identity, since=None):
-    """[(lo, hi, item id, change)]: every journalled count change of Hass's (`since` is unused: no day filter). lo/hi are the journal's own stamps
-    (intent written / settled), None when unstamped or not settled (unbounded). change is the stock difference for an applied change with known
-    before and after, else None (amount unknown). [] when there is no journal."""
-    path = Path(state) / "clover" / "journal.sqlite3"
-    cols = "SELECT c.draft, c.status, c.result, {} FROM changes c {} WHERE c.status != 'draft'"
-    try:
-        if not cache._private_dir(path.parent, False) or not cache._private_file(path, False):
-            return []
-        with closing(sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=5)) as db:
-            if db.execute("SELECT v FROM meta WHERE k='identity'").fetchone()[0] != json.dumps(list(identity)):
-                return []
-            try:
-                rows = db.execute(cols.format("s.intent_at, s.settled_at", "LEFT JOIN stamps s ON s.code = c.code")).fetchall()
-            except sqlite3.OperationalError:   # no stamps table: every row is unstamped
-                rows = db.execute(cols.format("NULL, NULL", "")).fetchall()
-        out = []
-        for draft, status, result, lo, hi in rows:
-            draft = json.loads(draft)
-            if draft.get("kind") != "set_stock":
-                continue
-            seen = json.loads(result) if status == "applied" and result else {}
-            before, after = (seen.get(k, {}).get("stock") for k in ("before", "after"))
-            change = Decimal(after) - Decimal(before) if None not in (before, after) else None
-            out.append(tuple(None if t is None else datetime.fromtimestamp(t, timezone.utc) for t in (lo, hi)) + (draft["item_id"], change))
-        return out
-    except (cache.CacheUnsafe, sqlite3.Error, ValueError, KeyError, TypeError, ArithmeticError):
-        return []
-
-
-def drop_rows(snapshot, snaps, deltas, now, days, unsure=None):
-    """[(item, units)] biggest first, or None when no earlier count covers the period. units = count before - count now + Hass's own change.
-    A Hass change is ignored only when its stamps prove it settled by the first count or began at or after the last; it is added back only when it
-    began and settled between the two counts with a known amount. Anything else is ambiguous: its item gets no number and is appended to `unsure`."""
-    first = since_day(now, days)
-    start = datetime.combine(first, time.min, reads.PACIFIC) - timedelta(hours=1)
-    began, base = next(((t, c) for t, c in snaps if start <= t < snapshot.fetched_at), (None, None))
-    if base is None:
+def drop_rows(snapshot, snaps, now, days, unsure=None):
+    """[(item, units)] biggest first, or None when no earlier count covers the period. units = the sum of the positive drops of the item's count
+    between consecutive reads from one hour before Pacific midnight of the first day up to the read now (a rise is a restock: ignored, never
+    negative). An item with a count now that is missing from some read of the period has no number and is appended to `unsure`: never guessed."""
+    start = datetime.combine(since_day(now, days), time.min, reads.PACIFIC) - timedelta(hours=1)
+    series = [c for t, c in sorted(snaps, key=lambda s: s[0]) if start <= t < snapshot.fetched_at]
+    if not series:
         return None
-    own, vague = {}, set()
-    for lo, hi, iid, change in deltas:
-        if (hi is not None and hi <= began) or (lo is not None and lo >= snapshot.fetched_at):
+    series.append({i.id: i.stock for i in snapshot.items if i.stock is not None})
+    rows, vague = [], []
+    for item in snapshot.items:
+        if item.stock is None or not any(item.id in c for c in series[:-1]):
             continue
-        if lo is not None and began < lo and hi is not None and hi < snapshot.fetched_at and change is not None:
-            own[iid] = own.get(iid, 0) + change
-        else:
-            vague.add(iid)
-    rows = [(i, base[i.id] - i.stock + own.get(i.id, 0)) for i in snapshot.items if i.stock is not None and i.id in base and i.id not in vague]
+        if not all(item.id in c for c in series):
+            vague.append(item.name)
+            continue
+        counts = [c[item.id] for c in series]
+        rows.append((item, sum((a - b for a, b in zip(counts, counts[1:]) if a > b), Decimal(0))))
     if unsure is not None:
-        unsure += sorted(i.name for i in snapshot.items if i.stock is not None and i.id in base and i.id in vague)
+        unsure += sorted(vague)
     return sorted(((i, n) for i, n in rows if n > 0), key=lambda r: (-r[1], r[0].name))
 
 
-def drops(snapshot, snaps, deltas, now, reachable=True, days=1, show=reads._as_is):
-    """'what sold today' (days=1) or 'this week' (days=7): the biggest count drops, never claimed as sales."""
+def drops(snapshot, snaps, now, reachable=True, days=1, show=reads._as_is):
+    """'what sold today' (days=1) or 'this week' (days=7): count drops between reads, labelled as including stock edits."""
     left = []
-    label, rows = ("today" if days == 1 else "this week"), drop_rows(snapshot, snaps, deltas, now, days, left)
+    when, rows = ("today" if days == 1 else "this week"), drop_rows(snapshot, snaps, now, days, left)
+    head = f"Sold {when} ({LABEL})"
     if rows is None:
-        body = f"I don't have an earlier till count to compare with yet, so no count drops {label} {NOTE}"
+        body = f"I don't have an earlier till count to compare with yet, so I can't say what sold {when} ({LABEL}) {NOTE}"
     elif not rows:
-        body = f"No count drops {label} {NOTE}"
+        body = f"{head}: nothing, no count dropped {NOTE}"
     else:
-        body = f"Biggest count drops {label}: " + ", ".join(f"{show(i.name)} {format_quantity(n)}" for i, n in rows[:5]) + f" {NOTE}"
+        body = f"{head}: " + ", ".join(f"{show(i.name)} {format_quantity(n)}" for i, n in rows[:5]) + f" {NOTE}"
     if left:
-        body += f" Left out: {', '.join(show(n) for n in left)} (a Hass till change landed close to a count)."
+        body += f" Left out: {', '.join(show(n) for n in left)} (a count was missing in one of the reads)."
     return _say(snapshot, now, reachable, body)
 
 
@@ -103,14 +73,14 @@ def _units(rows):
     return format_quantity(sum((n for _, n in rows), Decimal(0)))
 
 
-def summary(snapshot, snaps, deltas, now, content, links, reachable=True, threshold=5):
+def summary(snapshot, snaps, now, content, links, reachable=True, threshold=5):
     sold, few, none = (len(r) for r in reports.low_stock(snapshot, threshold)["sections"].values())
     sec = reports.till_vs_site(snapshot, content, links)["sections"]
-    rows = drop_rows(snapshot, snaps, deltas, now, 1)
+    rows = drop_rows(snapshot, snaps, now, 1)
     tail = "not enough history yet" if rows is None else f"{len(rows)} items, {_units(rows)} units"
     return _say(snapshot, now, reachable, f"Till at {reads.when(snapshot.fetched_at, now)}: {len(snapshot.items)} items, {sold} sold out, "
                 f"{few} running low, {none} with no count. Website: {len(links) - len(sec['Broken links'])} linked, "
-                f"stock words waiting: not available yet. Count drops today: {tail}.")
+                f"stock words waiting: not available yet. Sold today ({LABEL}): {tail}.")
 
 
 def price_of(query, snapshot, now, reachable=True, show=reads._as_is):
@@ -131,18 +101,18 @@ def website_vs_till(snapshot, content, links, now, reachable=True, show=reads._a
     return _say(snapshot, now, reachable, "Website vs till. " + ". ".join(parts) + ".")
 
 
-def build(snapshot, snaps, deltas, now, content, links, reachable=True, threshold=5):
+def build(snapshot, snaps, now, content, links, reachable=True, threshold=5):
     """(markdown, totals): the private daily report, and the totals-only dict (counts, flags and a date: no name, price or SKU)."""
-    today = drop_rows(snapshot, snaps, deltas, now, 1)
+    today = drop_rows(snapshot, snaps, now, 1)
     sold, few, none = (len(r) for r in reports.low_stock(snapshot, threshold)["sections"].values())
     totals = {"asOf": snapshot.fetched_at.isoformat(), "items": len(snapshot.items), "soldOut": sold, "low": few, "noCount": none,
               "stockWordsWaiting": None,   # unavailable until the STOCK-SITE totals integration: a till/site mismatch is not a pending count
               "countDropItems": None if today is None else len(today),
-              "countDropUnits": None if today is None else _units(today), "tillReachable": bool(reachable),
+              "countDropUnits": None if today is None else _units(today), "countDropNote": LABEL, "tillReachable": bool(reachable),
               "snapshot": reads.freshness(snapshot, now, reachable)[0]}
-    a, safe = (snapshot, snaps, deltas, now, reachable), reports._safe
-    lines = ["# Till summary", "", summary(snapshot, snaps, deltas, now, content, links, reachable, threshold), "",
-             "## Count drops today", "", drops(*a, 1, safe), "", "## Count drops this week", "", drops(*a, 7, safe), "",
+    a, safe = (snapshot, snaps, now, reachable), reports._safe
+    lines = ["# Till summary", "", summary(snapshot, snaps, now, content, links, reachable, threshold), "",
+             f"## Sold today ({LABEL})", "", drops(*a, 1, safe), "", f"## Sold this week ({LABEL})", "", drops(*a, 7, safe), "",
              "## Low stock", "", low(snapshot, now, threshold, reachable, safe), "", "## Website versus till", "",
              website_vs_till(snapshot, content, links, now, reachable, safe), ""]
     return "\n".join(lines), totals

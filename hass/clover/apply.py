@@ -59,7 +59,6 @@ class ApplyEngine:
             self._gate(db, entry["undo_of"])
             client = self._client()
             db.execute("UPDATE changes SET status='intent',day=? WHERE code=?", (self._day(), row["code"]))
-            db.execute("INSERT OR REPLACE INTO stamps(code, intent_at, settled_at) VALUES(?, ?, NULL)", (row["code"], self.clock()))
             draft = d.Draft(**{k: entry[k] for k in d.Draft.__dataclass_fields__})
             item_id = draft.item_id
             try:
@@ -80,10 +79,10 @@ class ApplyEngine:
                         item_id = result["id"]
                 raw = client.get_item(item_id)
                 status = "applied" if self._matches(entry, raw) else "failed"
-                self.journal.settle(db, row["code"], status, self._result(entry, raw), at=self.clock())
+                self.journal.settle(db, row["code"], status, self._result(entry, raw))
                 return status
             except d.DraftRefused:
-                self.journal.settle(db, row["code"], "failed", at=self.clock())
+                self.journal.settle(db, row["code"], "failed")
                 raise
             except Exception:
                 return "uncertain"  # leave intent durable; never resend even if the call succeeded
@@ -113,7 +112,7 @@ class ApplyEngine:
                 return "held", False
             status = row["status"]
             if status == "intent":
-                self.journal.settle(db, code, "uncertain", at=self.clock())
+                self.journal.settle(db, code, "uncertain")
                 status = "uncertain"
             return status, bool(json.loads(row["draft"]).get("site_ops"))
 
@@ -125,7 +124,7 @@ class ApplyEngine:
                 candidates = [client.get_item(entry["item_id"])] if entry["item_id"] else client.find_by_sku(entry["after"]["sku"])
                 raw = candidates[0] if len(candidates) == 1 else None
                 applied = raw is not None and self._matches(entry, raw)
-                self.journal.settle(db, row["code"], "applied" if applied else "uncertain", self._result(entry, raw) if applied else None, at=self.clock())
+                self.journal.settle(db, row["code"], "applied" if applied else "uncertain", self._result(entry, raw) if applied else None)
 
     def undo(self, code, *, sender, chat):
         if (sender, chat) not in self.owners:

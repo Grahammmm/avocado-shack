@@ -195,11 +195,10 @@ def report(args, clock=_now):
     kinds = reports.KINDS if args.all else (args.kind,)
     if not args.all and args.kind is None or args.all and args.kind is not None:
         raise Stop({"result": "report", "problem": "choose-kind-or-all"})
-    if args.kind == "pos":   # HASS-POS-1: the private till summary plus pos-totals.json (totals only); cache and journal, no token
+    if args.kind == "pos":   # HASS-POS-1: the private till summary plus pos-totals.json (totals only); cache only, no token
         from hass.clover import pos
         ident, content_links = cache.identity_of(clover), reports.read_inputs(state, worktree)
-        deltas = pos.journal_deltas(state, ident, pos.since_day(now, 7).isoformat())
-        pos.write_files(state, pos.build(snapshot, cache.history(state, ident), deltas, now, *content_links, reachable,
+        pos.write_files(state, pos.build(snapshot, cache.history(state, ident), now, *content_links, reachable,
                                          clover.low_stock_threshold), now, args.out)
         return {"result": "ok", "reports": 1, "asOf": cache._iso(snapshot.fetched_at)}, 0
     prepared = []

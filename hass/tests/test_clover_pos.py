@@ -1,40 +1,31 @@
-"""HASS-POS-1: till summary, price of, low stock, count drops (with Hass's own receipts added back), website vs till and the private
+"""HASS-POS-1: till summary, price of, low stock, "what sold" as count drops between reads (labelled "includes stock edits"), website vs till and the private
 report + pos-totals.json. Synthetic fixtures only (FAKEMERCH0001, FAKE token); sockets are patched, the token and client are never touched.
 Run: python3 -B -m unittest hass.tests.test_clover_pos
 """
 import json
 import sqlite3
-import itertools
 import os
 import stat
-import tempfile
 import unittest
 from datetime import timedelta
 from decimal import Decimal
-from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
-from hass.clover import cache, cli, drafts as d, pos, reads, sync
-from hass.clover.apply import ApplyEngine
-from hass.clover.client import CloverWriteClient
-from hass.clover.config import from_settings
-from hass.clover.mapper import parse_item
-from hass.clover.journal import Journal
+from hass.clover import cache, cli, pos, reads, sync
 from hass.tests.test_clover_chat import identity
-from hass.tests.test_clover_cli import MID, CliCase, T0
-from hass.tests.test_clover_apply import Till
-from hass.tests.test_clover_client import FAKE_TOKEN, NoNetwork, fixture
+from hass.tests.test_clover_cli import CliCase, T0
+from hass.tests.test_clover_client import fixture
 from hass.tests.test_clover_reports import CONTENT, LINKS, put_inputs
 
 IDS = [f"FAKEITEM0000{n}" for n in range(1, 7)]    # oil, avocado, eggs, honey (hidden), tomatoes, special (no count)
 BASE = ["25", "50", "14", "0", "7.5", None]         # 08:30 Pacific today
 NOW_COUNTS = ["11", "40", "0", "0", "7.5", None]    # 12:00 Pacific today (= T0)
 EARLIER = ["30", "50", "14", "0", "7.5", None]      # yesterday 06:00 Pacific
-NOTE = "(count drops, not exact sales: a recount or a till edit also shows here)"
-GONE = "I don't have an earlier till count to compare with yet, so no count drops today"
+LABEL = "includes stock edits"
+NOTE = "(count drops between till reads, not exact sales)"
+GONE = f"I don't have an earlier till count to compare with yet, so I can't say what sold today ({LABEL})"
 SUMMARY = ("Till at 12:00 pm: 6 items, 2 sold out, 0 running low, 1 with no count. Website: 2 linked, stock words waiting: not available yet. "
-           "Count drops today: 3 items, 33 units.")   # 14 + 14 + 5 (the avocado's 10 less Hass's own 5)
+           f"Sold today ({LABEL}): 3 items, 38 units.")   # 14 + 14 + 10
 
 
 def put(state, when, counts):
@@ -52,116 +43,57 @@ class PosCase(CliCase):
         self.snaps = cache.history(self.state, identity())
         self.snapshot, self.reachable = cache.read(self.state, identity())
 
-    def journal(self, day, item_id, before, after, kind="set_stock", status="applied", at=None, stamp=True):
-        """stamp: True = intent at `at`, settled 15 minutes later; (intent, settled) datetimes or None; False = no stamps row."""
-        at = at or T0 - timedelta(hours=1)
-        lo, hi = (at, at + timedelta(minutes=15)) if stamp is True else stamp or (None, None)
-        with Journal(self.state, SimpleNamespace(environment="production", merchant_id=MID)).locked() as db:
-            result = json.dumps({"kind": kind, "item_id": item_id, "before": {"stock": before}, "after": {"stock": after}})
-            n = db.execute("SELECT count(*) FROM changes").fetchone()[0]
-            db.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?,?)", (f"c{n}", json.dumps({"kind": kind, "item_id": item_id}), "s", "c", at.timestamp() + 600, status, day, result if status == "applied" else None))
-            if stamp is not False:
-                db.execute("INSERT INTO stamps VALUES(?,?,?)", (f"c{n}", lo and lo.timestamp(), hi and hi.timestamp()))
-
-    def deltas(self):
-        return pos.journal_deltas(self.state, identity(), "2026-11-04")
+    def with_series(self, *series):
+        """Replace the stored reads with (hours before T0, counts) pairs; returns (snapshot, snaps)."""
+        for when, counts in series:
+            put(self.state, T0 - timedelta(hours=when), counts)
+        return cache.read(self.state, identity())[0], cache.history(self.state, identity())
 
 
 class ViewTests(PosCase):
-    def test_summary_word_for_word_with_hass_receipts_added_back(self):
-        self.journal("2026-11-10", IDS[1], "50", "45")     # Hass lowered the avocado count itself: not a drop to show
-        self.assertEqual(pos.summary(self.snapshot, self.snaps, self.deltas(), T0, CONTENT, LINKS), SUMMARY)
-        self.assertEqual(pos.drops(self.snapshot, self.snaps, self.deltas(), T0),
-                         f"Biggest count drops today: Eggs, dozen 14, Sunshine olive oil 14, Hass avocado 5 {NOTE}")
+    def test_summary_word_for_word_and_every_sold_number_carries_the_label(self):
+        self.assertEqual(pos.summary(self.snapshot, self.snaps, T0, CONTENT, LINKS), SUMMARY)
+        self.assertEqual(pos.drops(self.snapshot, self.snaps, T0),
+                         f"Sold today ({LABEL}): Eggs, dozen 14, Sunshine olive oil 14, Hass avocado 10 {NOTE}")
 
-    def test_receipt_added_back_the_other_way_and_only_set_stock_applied_in_period(self):
-        self.journal("2026-11-10", IDS[0], "25", "31")      # received 6 at the shelf: the drop is 14 + 6
-        self.journal("2026-11-10", IDS[2], "14", "99", status="draft")
-        self.journal("2026-11-10", IDS[2], "14", "99", kind="set_price")
-        self.journal("2026-11-09", IDS[1], "50", "10", at=T0 - timedelta(hours=26))      # yesterday: not in today's reply
-        self.assertEqual(pos.drops(self.snapshot, self.snaps, self.deltas(), T0),
-                         f"Biggest count drops today: Sunshine olive oil 20, Eggs, dozen 14, Hass avocado 10 {NOTE}")
-        self.assertEqual(pos.drops(self.snapshot, self.snaps, self.deltas(), T0, days=7),
-                         f"Biggest count drops this week: Sunshine olive oil 25, Eggs, dozen 14 {NOTE}")
+    def test_drops_are_summed_and_increases_are_ignored(self):
+        # oil 25 -> 20 (drop 5) -> 30 (restock +10, ignored) -> 24 (drop 6): 11. Net change is a rise of -1, yet the sold number is 11.
+        snapshot, snaps = self.with_series((3, ["20", "50", "14", "0", "7.5", None]), (2, ["30", "50", "14", "0", "7.5", None]),
+                                           (0.0, ["24", "50", "14", "0", "7.5", None]))
+        rows = dict((i.name, n) for i, n in pos.drop_rows(snapshot, snaps, T0, 1))
+        self.assertEqual(rows.get("Sunshine olive oil"), 11)
 
-    def test_only_changes_strictly_between_the_first_and_last_count_are_added_back(self):
-        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=5))   # +10 on the oil before the first count (25 -> 11: drop 14)
-        self.assertEqual(pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1)[1][1], 14)     # already in the first count: no 24
-        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=3, minutes=45))     # window [offered, offered + 15 min] ends at the first count: already in it
-        self.journal("2026-11-10", IDS[0], "25", "35", at=T0)                                      # at the last count: not before it
-        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 + timedelta(hours=1))                 # after the last count
-        self.assertEqual([(i.name, n) for i, n in pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1)][:2],
-                         [("Eggs, dozen", 14), ("Sunshine olive oil", 14)])
-        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=2))                 # between the two counts: added back
-        self.assertEqual(pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1)[0][1], 24)
+    def test_a_count_that_only_rose_is_never_a_negative_sale(self):
+        snapshot, snaps = self.with_series((0.0, ["50", "50", "14", "0", "7.5", None]))     # the oil only went up since the first read: 25 -> 50
+        self.assertEqual(pos.drop_rows(snapshot, snaps, T0, 1), [])
+        self.assertEqual(pos.drops(snapshot, snaps, T0), f"Sold today ({LABEL}): nothing, no count dropped {NOTE}")
 
-    def window(self, at):
-        self.journal("2026-11-10", IDS[0], "25", "35", at=at)     # +10 on the oil; counts: first at T0-3h30, last at T0 (oil 25 -> 11)
+    def test_hass_own_set_stock_between_reads_counts_as_a_drop_and_the_label_says_so(self):
+        # Hass lowered the avocado from 50 to 45 itself between two reads: nothing is added back, so it is part of the sold number.
+        snapshot, snaps = self.with_series((3, ["25", "50", "14", "0", "7.5", None]), (2, ["25", "45", "14", "0", "7.5", None]),
+                                           (0.0, ["11", "40", "0", "0", "7.5", None]))
+        text = pos.drops(snapshot, snaps, T0)
+        self.assertIn("Hass avocado 10", text)          # 5 (Hass's own edit) + 5
+        self.assertIn(f"Sold today ({LABEL})", text)
+        self.assertIn("includes stock edits", pos.summary(snapshot, snaps, T0, CONTENT, LINKS))
+
+    def test_an_item_missing_from_a_read_is_left_out_not_guessed(self):
+        mid = ["25", "50", "14", "0", None, None]       # tomatoes have no count in the middle read: no row for it
+        snapshot, snaps = self.with_series((3, ["25", "50", "14", "0", "9", None]), (2, mid), (0.0, ["11", "40", "0", "0", "7.5", None]))
         left = []
-        rows = pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1, left)
-        return dict((i.name, n) for i, n in rows), left
+        names = [i.name for i, _ in pos.drop_rows(snapshot, snaps, T0, 1, left)]
+        self.assertEqual((left, "Heirloom tomatoes" in names), (["Heirloom tomatoes"], False))
+        self.assertIn(" Left out: Heirloom tomatoes (a count was missing in one of the reads).", pos.drops(snapshot, snaps, T0))
+        self.assertIn("Sunshine olive oil 14", pos.drops(snapshot, snaps, T0))
 
-    def test_change_window_wholly_between_is_added_back(self):
-        self.assertEqual(self.window(T0 - timedelta(hours=2)), ({"Eggs, dozen": 14, "Hass avocado": 10, "Sunshine olive oil": 24}, []))
-
-    def test_change_window_ending_one_second_before_the_last_count_is_added_back(self):
-        self.assertEqual(self.window(T0 - timedelta(minutes=15, seconds=1))[0]["Sunshine olive oil"], 24)
-
-    def test_change_window_wholly_before_or_after_is_ignored(self):
-        self.assertEqual(self.window(T0 - timedelta(hours=3, minutes=45)), ({"Eggs, dozen": 14, "Hass avocado": 10, "Sunshine olive oil": 14}, []))   # window ends at the first count
-        self.assertEqual(self.window(T0), ({"Eggs, dozen": 14, "Hass avocado": 10, "Sunshine olive oil": 14}, []))    # starts at the last count
-        self.assertEqual(self.window(T0 + timedelta(hours=2)), ({"Eggs, dozen": 14, "Hass avocado": 10, "Sunshine olive oil": 14}, []))
-
-    def test_change_window_crossing_the_first_count_is_left_out_with_no_number(self):
-        for at in (T0 - timedelta(hours=3, minutes=44), T0 - timedelta(hours=3, minutes=30)):    # offered before the count, may have landed after it
-            self.assertEqual(self.window(at), ({"Eggs, dozen": 14, "Hass avocado": 10}, ["Sunshine olive oil"]))
-
-    def test_change_window_crossing_the_last_count_is_left_out_with_no_number(self):
-        self.assertEqual(self.window(T0 - timedelta(minutes=1)), ({"Eggs, dozen": 14, "Hass avocado": 10}, ["Sunshine olive oil"]))   # offered 11:59, count at 12:00, applied up to 12:01
-        self.assertEqual(self.window(T0 - timedelta(minutes=15)), ({"Eggs, dozen": 14, "Hass avocado": 10}, ["Sunshine olive oil"]))   # window ends exactly at the last count: not provably before it
-        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(minutes=1))
-        self.assertEqual(pos.drops(self.snapshot, self.snaps, self.deltas(), T0),
-                         f"Biggest count drops today: Eggs, dozen 14, Hass avocado 10 {NOTE} Left out: Sunshine olive oil (a Hass till change landed close to a count).")
-
-    def left(self, **kw):
-        self.journal("2026-11-10", IDS[0], "25", "35", **kw)
-        left = []
-        rows = dict((i.name, n) for i, n in pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1, left))
-        return rows.get("Sunshine olive oil"), left
-
-    def sql(self, text):
-        with Journal(self.state, SimpleNamespace(environment="production", merchant_id=MID)).locked() as db:
-            db.execute(text)
-
-    def test_stamps_decide_each_case(self):
-        mins = lambda a, b: (T0 - timedelta(minutes=a), T0 - timedelta(minutes=b))   # counts: first at T0-210 min, last at T0
-        oil = ["Sunshine olive oil"]
-        for name, kw, number, out in (
-                ("(a) wholly between, applied: added back", dict(stamp=mins(120, 100)), 24, []),
-                ("(b) settled at the first count: ignored", dict(stamp=mins(300, 210)), 14, []),
-                ("(c) begun at the last count: ignored", dict(stamp=mins(0, -5)), 14, []),
-                ("(d) delayed write settled after the last count", dict(stamp=mins(60, -30)), None, oil),
-                ("(e) recovered intent from before the first count", dict(stamp=mins(400, 100)), None, oil),
-                ("(f) intent never settled", dict(stamp=(T0 - timedelta(minutes=60), None)), None, oil),
-                ("(g) applied but no stamps row", dict(stamp=False), None, oil),
-                ("unknown amount inside the period", dict(stamp=mins(120, 100), status="uncertain"), None, oil)):
-            with self.subTest(name):
-                self.assertEqual(self.left(**kw), (number, out))
-                self.sql("DELETE FROM changes")
-                self.sql("DELETE FROM stamps")
-
-    def test_journal_without_a_stamps_table_leaves_every_row_unstamped(self):
-        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=2))
-        self.sql("ALTER TABLE stamps RENAME TO gone")
-        self.assertEqual([(lo, hi, c) for lo, hi, _, c in self.deltas()], [(None, None, 10)])
-
-    def test_week_and_the_note_is_always_present(self):
-        self.assertEqual(pos.drops(self.snapshot, self.snaps, [], T0, days=7),
-                         f"Biggest count drops this week: Sunshine olive oil 19, Eggs, dozen 14, Hass avocado 10 {NOTE}")
-        flat = [(T0 - timedelta(hours=2), {i: Decimal(c or 0) for i, c in zip(IDS, NOW_COUNTS)})]
-        for snaps, text in (([], GONE), (self.snaps[-1:], GONE), (flat, "No count drops today")):
-            self.assertEqual(pos.drops(self.snapshot, snaps, [], T0), f"{text} {NOTE}")
-        self.assertTrue(pos.summary(self.snapshot, [], [], T0, CONTENT, LINKS).endswith("Count drops today: not enough history yet."))
+    def test_label_in_every_reply_shape(self):
+        for snaps, text in (([], GONE), (self.snaps[-1:], GONE), ([(T0 - timedelta(hours=2), {i: Decimal(c or 0) for i, c in zip(IDS, NOW_COUNTS)})],
+                                                                   f"Sold today ({LABEL}): nothing, no count dropped")):
+            self.assertEqual(pos.drops(self.snapshot, snaps, T0), f"{text} {NOTE}")
+        self.assertIn(LABEL, GONE)
+        self.assertEqual(pos.drops(self.snapshot, self.snaps, T0, days=7),
+                         f"Sold this week ({LABEL}): Sunshine olive oil 19, Eggs, dozen 14, Hass avocado 10 {NOTE}")
+        self.assertTrue(pos.summary(self.snapshot, [], T0, CONTENT, LINKS).endswith(f"Sold today ({LABEL}): not enough history yet."))
 
     def test_price_of_and_how_many(self):
         self.assertEqual(pos.price_of("Eggs, dozen", self.snapshot, T0), "Eggs, dozen: $7.00 each, 0 in the till (as of 12:00 pm).")
@@ -176,9 +108,10 @@ class ViewTests(PosCase):
         self.assertEqual(pos.price_of("eggs, dozen", self.snapshot, stale), "Eggs, dozen: $7.00 each, 0 in the till (as of 12:00 pm). (till count as of 12:00 pm)")
         self.assertEqual(pos.price_of("eggs, dozen", self.snapshot, gone, False),
                          "I can't reach the till right now. The last count I have is from 12:00 pm, so treat it as old. Eggs, dozen: $7.00 each, 0 in the till.")
-        self.assertTrue(pos.drops(self.snapshot, self.snaps, [], gone, False).startswith("I can't reach the till right now."))
-        for text in (pos.price_of("eggs, dozen", self.snapshot, old), pos.drops(self.snapshot, self.snaps, [], old),
-                     pos.summary(self.snapshot, self.snaps, [], old, CONTENT, LINKS), pos.low(self.snapshot, old, 5),
+        for p in (pos.drops(self.snapshot, self.snaps, gone, False),):
+            self.assertTrue(p.startswith("I can't reach the till right now."))
+        for text in (pos.price_of("eggs, dozen", self.snapshot, old), pos.drops(self.snapshot, self.snaps, old),
+                     pos.summary(self.snapshot, self.snaps, old, CONTENT, LINKS), pos.low(self.snapshot, old, 5),
                      pos.website_vs_till(self.snapshot, CONTENT, LINKS, old)):
             self.assertEqual(text, reads.freshness(self.snapshot, old)[1])
             self.assertTrue(text.startswith("I have not been able to read the till since Tue 12:00 pm"), text)
@@ -205,7 +138,6 @@ class ReportTests(PosCase):
             return self.run_cli("report", "pos")
 
     def test_report_pos_writes_private_files_and_totals_only(self):
-        self.journal("2026-11-10", IDS[1], "50", "45")
         code, out, stdout = self.run_pos()
         self.assertEqual((code, out), (0, {"result": "ok", "reports": 1, "asOf": "2026-11-10T20:00:00+00:00"}))
         self.assertEqual(stat.S_IMODE(self.folder.stat().st_mode), 0o700)
@@ -214,7 +146,8 @@ class ReportTests(PosCase):
             self.assertEqual(stat.S_IMODE(p.stat().st_mode), 0o600)
         md = (self.folder / "2026-11-10-pos.md").read_text()
         self.assertIn(SUMMARY, md)
-        self.assertIn("Biggest count drops this week: Sunshine olive oil 19, Eggs, dozen 14, Hass avocado 5", md.replace("\\", ""))
+        self.assertIn(f"## Sold today ({LABEL})", md)
+        self.assertIn(f"Sold this week ({LABEL}): Sunshine olive oil 19, Eggs, dozen 14, Hass avocado 10", md.replace("\\", ""))
         for value in ("Olive", "1250", "12.50", str(self.folder)):
             self.assertNotIn(value, stdout)
         self.assertEqual(self.run_pos()[0], 0)    # the same day replaces the files
@@ -224,7 +157,7 @@ class ReportTests(PosCase):
         text = (self.folder / "pos-totals.json").read_text()
         self.assertEqual(json.loads(text), {
             "asOf": "2026-11-10T20:00:00+00:00", "items": 6, "soldOut": 2, "low": 0, "noCount": 1, "stockWordsWaiting": None,
-            "countDropItems": 3, "countDropUnits": "38", "tillReachable": True, "snapshot": "fresh"})
+            "countDropItems": 3, "countDropUnits": "38", "countDropNote": LABEL, "tillReachable": True, "snapshot": "fresh"})
         rows, _ = sync.rows(fixture("items.json")["elements"], fixture("item_stocks.json")["elements"])
         for row in rows:
             cents = () if row["price_cents"] is None else (str(row["price_cents"]), f"{row['price_cents'] / 100:.2f}")
@@ -283,36 +216,6 @@ class HistoryTests(PosCase):
         db.commit()
         db.close()
         self.assertEqual(cache.history(self.state, other), [])
-        self.assertEqual(pos.journal_deltas(self.state, identity(), "2026-01-01"), [])     # no journal yet
-
-
-class StampWriteTests(NoNetwork):
-    def test_handle_and_recover_write_the_stamps(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            state, till, tick = Path(tmp), Till(), itertools.count(1800000000)
-            os.chmod(state, 0o700)
-            token = state / "fake-write"
-            token.write_text(FAKE_TOKEN)
-            token.chmod(0o600)
-            cfg = from_settings({"environment": "sandbox", "merchantId": "FAKEMERCH0001", "tokenFile": str(state / "fake-read"), "writeTokenFile": str(token),
-                                 "writes": True, "liveApproved": True, "categoryMap": {"pantry": "Pantry"}})
-            engine = ApplyEngine(state, cfg, lambda t: CloverWriteClient("FAKEMERCH0001", t, till, min_interval=0), mike=("mike", "private"), clock=lambda: next(tick))
-            offer = lambda n: engine.offer(d.build_set_stock(parse_item(till.items["FAKEITEM00001"]), n, cfg), sender="mike", chat="private")[0]
-
-            def stamp(code):
-                with engine.journal.locked() as db:
-                    return tuple(db.execute("SELECT intent_at, settled_at FROM stamps WHERE code=?", (code,)).fetchone())
-            done = offer(7)
-            self.assertEqual(engine.handle("yes " + done, sender="mike", chat="private"), "applied")
-            lost = offer(9)
-            till.crash = True
-            with self.assertRaises(KeyboardInterrupt):
-                engine.handle("yes " + lost, sender="mike", chat="private")
-            till.crash = False
-            self.assertLess(*stamp(done))
-            self.assertIsNone(stamp(lost)[1])
-            engine.recover()
-            self.assertLess(*stamp(lost))
 
 
 if __name__ == "__main__":
