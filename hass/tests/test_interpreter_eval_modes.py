@@ -72,7 +72,7 @@ class ScoreModeTests(base.EvalTestCase):
             code, out, err = base.run(*argv)
             summary = json.loads(out)
             self.assertEqual((code, err, {k: summary[k] for k in ("cases", "passed", "missing", "extra")}),
-                             (0, "", {"cases": 80, "passed": 77, "missing": [], "extra": []}))
+                             (0, "", {"cases": 86, "passed": 83, "missing": [], "extra": []}))
             self.assertEqual([f["id"] for f in summary["failed"]], ["e06", "e13", "e25"])
         short = self.write("short.jsonl", [{"id": "e01", "reply": {"unsupported": "x"}}])
         code, out, _ = base.run("score", "--replies", short)
