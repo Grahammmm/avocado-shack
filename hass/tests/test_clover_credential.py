@@ -66,6 +66,8 @@ class TokenFileTests(unittest.TestCase):
 
         def other_owner(fd):
             st = real(fd)
+            if not stat.S_ISREG(st.st_mode):   # only the token file's descriptor is foreign-owned, not its folder
+                return st
             return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, st.st_uid + 1, st.st_gid, st.st_size,
                                    int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
         with mock.patch.object(credential.os, "fstat", other_owner):
