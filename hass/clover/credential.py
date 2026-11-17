@@ -128,8 +128,11 @@ def _read(path, uid):
         return "folder", None
     # Anchor the folder: the leaf is opened relative to this descriptor, never by resolving the full pathname again.
     cloexec = getattr(os, "O_CLOEXEC", 0)
+    # O_PATH anchors a searchable directory without requiring permission to list it (Linux service host).
+    # On platforms without O_PATH retain the previous directory-open behaviour.
+    dir_access = getattr(os, "O_PATH", os.O_RDONLY)
     try:
-        dfd = os.open(os.path.dirname(os.path.abspath(path)), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | cloexec)
+        dfd = os.open(os.path.dirname(os.path.abspath(path)), dir_access | os.O_DIRECTORY | os.O_NOFOLLOW | cloexec)
     except FileNotFoundError:
         return "missing", None
     except (OSError, ValueError):

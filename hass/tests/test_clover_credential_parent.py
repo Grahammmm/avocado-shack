@@ -58,6 +58,12 @@ class ParentAnchorTests(unittest.TestCase):
     def test_healthy_read_still_works(self):
         self.assertEqual(load_token(self.path).authorization(), "Bearer " + GOOD)
 
+    def test_searchable_non_readable_parent_loads(self):
+        os.chmod(self.parent, 0o300)
+        self.addCleanup(os.chmod, self.parent, 0o700)
+        self.assertIsNone(inspect(self.path))
+        self.assertEqual(load_token(self.path).authorization(), "Bearer " + GOOD)
+
     def test_parent_symlink_swap_after_lstat_is_refused(self):
         evil = os.path.join(self.root, "evil")
         put(evil, EVIL, 0o777)
