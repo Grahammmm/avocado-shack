@@ -54,6 +54,16 @@ def fill(slots, texts):
         parts += [details[k] for k in ("size", "count", "colour", "finish", "materials") if details.get(k)]
         label_features = details.get("features", []) + details.get("printed_claims", []) + details.get("warnings", [])
         if label_features: parts.append(", ".join(p.rstrip(".") for p in dict.fromkeys(label_features)))
+        # A caption's explicit origin/organic words are owner statements, not label
+        # inference. Add them only on the first photo fill so later removals stay removed.
+        if details and not got.get("photo_applied"):
+            for text in texts:
+                for shown, sentence in product_claims.live_policy._pieces(text):
+                    phrase = re.sub(r"^\s*add\s*:?\s*", "", shown, flags=re.I).strip()
+                    if (product_claims.live_policy._protected(phrase)[1] == {"origin/organic"}
+                            and product_claims.live_policy._owner_said(sentence, product_claims.live_policy.claims.fold("\n".join(texts)))
+                            and phrase.casefold() not in " ".join(parts).casefold()):
+                        parts.append(phrase)
         kept, overflow = [], []
         for part in dict.fromkeys(p.rstrip(".") + "." for p in parts if p):
             if len(" ".join([*kept, part])) <= TEXT_LIMITS["product"]["description"]:
@@ -158,8 +168,10 @@ def preview(slots, code=None):
                                     *details.get("features", []), *details.get("printed_claims", []), *details.get("warnings", [])] if p),
                        key=len, reverse=True):
         if part and part.casefold() in description.casefold():
-            features.append(part.rstrip("."))
-            description = re.sub(re.escape(part) + r"[.!]?(?:,\s*)?", "", description, flags=re.I)
+            quoted = 'Label says: “' + part + '”'
+            shown = quoted if quoted.casefold() in description.casefold() else part
+            features.append(shown.rstrip("."))
+            description = re.sub(re.escape(shown) + r"[.!]?(?:,\s*)?", "", description, flags=re.I)
     description = " ".join(description.split()).strip(" ,;.")
     if description: description += "."
     lines = ["Here's the listing:", "Name: " + voice.quote(slots.get("name") or "Not read yet"),

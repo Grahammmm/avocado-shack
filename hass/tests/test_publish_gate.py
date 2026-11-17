@@ -30,6 +30,16 @@ class PublishGate(unittest.TestCase):
         draft = chat.conv.editor.show(chat.drafts()[0]['change_id'])['draft']
         return next(r['after'] for r in draft['records'] if r['collection'] == 'products'), draft
 
+    def real_previewer(self, chat):
+        for rel in base.testkit._git(REPO_ROOT, 'ls-files', 'storefront-mockup').splitlines():
+            if not rel.startswith('storefront-mockup/assets/') and not (chat.kit.wt / rel).exists():
+                (chat.kit.wt / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(REPO_ROOT / rel, chat.kit.wt / rel)
+        base.testkit._git(chat.kit.wt, 'add', '-A')
+        base.testkit._git(chat.kit.wt, 'commit', '-s', '-m', 'Full fixture site')
+        chat.base_commits = int(base.testkit._git(chat.kit.wt, 'rev-list', '--count', 'HEAD'))
+        chat.conv.previewer = preview.Previewer(chat.kit.wt, viewports=('phone',))
+
     def test_exact_glue_photo_then_price_label_allowed_and_one_yes_applies_exact_copy(self):
         chat = self.chat()
         chat.say('', base.JAR)
@@ -59,6 +69,8 @@ class PublishGate(unittest.TestCase):
         self.assertEqual(disposition, 'proposed', said)
         product, draft = self.product(chat)
         self.assertIn('Label says: “Organic”', product['description'])
+        self.assertIn('Features: Label says: “Organic”', said[0])
+        self.assertNotIn('Label says: “”', said[0])
         self.assertIn('Good on toast.', product['description'])
         self.assertNotIn('cures cancer', product['description'])
         self.assertIn('Dropped from the listing: cures cancer.', said[0])
@@ -162,15 +174,68 @@ class PublishGate(unittest.TestCase):
         self.assertTrue(product_claims.protected('Cures cancer.', product)[1])
         self.assertTrue(product_claims.protected('Organic.', {'category': 'fruit'})[1])
 
+    def test_exact_text_only_persimmon_units_generate_render_and_publish_frozen_picture(self):
+        from types import SimpleNamespace
+        from PIL import Image
+        for unit, shown in (('lb', 'per lb'), ('each', 'each')):
+            with self.subTest(unit=unit):
+                chat = self.chat()
+                self.real_previewer(chat)
+                prompts = []
+                def generate(prompt, out, timeout):
+                    prompts.append(prompt)
+                    # Offline transport fixture only; actual Codex route has a separate receipt.
+                    Image.new('RGB', (800, 800), '#eab04a').save(out, 'JPEG')
+                    return {'ok': True, 'code': 'ok'}
+                chat.conv.polish_transport = SimpleNamespace(generate=generate)
+                chat.script('add persimmons; Fuyu', base.reply(name='Persimmons', shelf='fruit',
+                    description='Fuyu persimmons are sweet and crisp. Eat firm or let soften. Store in a cool place.'))
+                disposition, said = chat.say('add persimmons, Fuyu, $3.50/' + unit + ', 40 lb in stock, cost $1.75')
+                self.assertEqual(disposition, 'proposed', said)
+                code = chat.live()['draft_code']
+                self.assertIn('Price: $3.50 ' + shown, said[0].splitlines())
+                self.assertIn('Private (not shown on the website): cost $1.75, quantity 40 lb', said[0].splitlines())
+                self.assertIn('generated illustration', said[0])
+                self.assertIn('All website card text:', said[0])
+                self.assertNotIn("couldn't render", said[0])
+                self.assertIn('yes ' + code, said[0])
+                with Image.open(chat.out.sent[-1]['attachments'][0]) as image:
+                    self.assertEqual(image.format, 'PNG')
+                self.assertEqual(len(prompts), 1)
+                self.assertNotIn('1.75', prompts[0])
+                self.assertNotIn('40', prompts[0])
+                product, draft = self.product(chat)
+                self.assertEqual(live_policy.check(draft), [])
+                rendered = chat.conv.editor.render_draft(draft['change_id'])
+                public = b'\n'.join(rendered['files'].values())
+                self.assertNotIn(b'1.75', public)
+                self.assertNotIn(b'40 lb', public)
+                image_key = 'storefront-mockup/' + product['image']
+                picture = rendered['assets'][image_key]
+                chat.say('yes ' + code)
+                self.assertEqual(chat.commits(), 1)
+                self.assertEqual((chat.kit.wt / image_key).read_bytes(), picture)
+                saved = json.loads((chat.kit.wt / 'hass/content/products.json').read_text())['products'][-1]
+                self.assertEqual(saved['description'], product['description'])
+                self.doCleanups()
+
+    def test_photo_persimmon_typed_organic_and_origin_survive_real_claim_gate(self):
+        chat = self.chat({'name': 'Persimmons', 'category': 'fruit', 'description': 'Sweet crisp Fuyu persimmons.'})
+        chat.script('add persimmons; Fuyu; Organic; Made in USA', base.reply(name='Persimmons', shelf='fruit',
+                    description='Organic Fuyu persimmons. Made in USA. Sweet and crisp.'))
+        disposition, said = chat.say('add persimmons, Fuyu, Organic, Made in USA, $3.50/lb, 40 lb in stock, cost $1.75', base.JAR)
+        self.assertEqual(disposition, 'proposed', said)
+        product, draft = self.product(chat)
+        self.assertIn('Organic', product['description'])
+        self.assertIn('Made in USA', product['description'])
+        self.assertEqual(product['ownerSource']['source'], 'owner')
+        self.assertEqual(live_policy.check(draft), [])
+        self.assertIn('Price: $3.50 per lb', said[0].splitlines())
+        self.assertIn('yes ' + chat.live()['draft_code'], said[0])
+
     def test_real_generator_card_png_attached_and_edit_rerenders_same_code(self):
         chat = self.chat()
-        for rel in base.testkit._git(REPO_ROOT, 'ls-files', 'storefront-mockup').splitlines():
-            if not rel.startswith('storefront-mockup/assets/') and not (chat.kit.wt / rel).exists():
-                (chat.kit.wt / rel).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(REPO_ROOT / rel, chat.kit.wt / rel)
-        base.testkit._git(chat.kit.wt, 'add', '-A')
-        base.testkit._git(chat.kit.wt, 'commit', '-s', '-m', 'Full fixture site')
-        chat.conv.previewer = preview.Previewer(chat.kit.wt, viewports=('phone',))
+        self.real_previewer(chat)
         _, said = chat.say('sell for $2', base.JAR)
         code = chat.live()['draft_code']
         sent = chat.out.sent[-1]

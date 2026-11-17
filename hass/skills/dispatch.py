@@ -570,7 +570,7 @@ class Dispatcher:
                     attachments = [sha]
                 else:
                     slots['intake']['generation_error'] = error
-        if slots.get('photo'):
+        if slots.get('photo') and slots.get('name'):
             from hass import product_claims
             product_claims.remember_owner(conv.settings['mediaRoot'], slots['photo'], texts)
             ops = simple.plan(slots, ctx.content)

@@ -244,7 +244,9 @@ class SimpleIntake(unittest.TestCase):
                     _, said = chat.say(sentence)
                 self.assert_preview(chat, said)
                 preview = said[0]
-                self.assertEqual(preview.count("4 fl. oz. (118 mL)"), 1)
+                # The structured listing shows size once; the publish-card lane also
+                # includes the exact full website description for owner review.
+                self.assertEqual(preview.split("Website description:")[0].count("4 fl. oz. (118 mL)"), 1)
                 self.assertEqual(chat.live()["slots"]["description"].count("4 fl. oz. (118 mL)"), 1)
                 self.assertIn("Category: General (say 'category X' to change)", preview)
                 self.assertNotIn("pantry", preview.lower())
