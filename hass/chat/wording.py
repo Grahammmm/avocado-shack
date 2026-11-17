@@ -8,7 +8,7 @@ from datetime import datetime
 
 from hass import live_policy, sitegen, voice
 from hass.chat.shared import q
-from hass.content_model import PHONE_RE
+from hass.content_model import AVAILABILITY, PHONE_RE
 
 PHOTO_PATH_RE = re.compile(r"assets/products/photo-[0-9a-f]{16}\.(jpg|png)")
 
@@ -98,9 +98,41 @@ def _phone_phrase(r: dict, b, a) -> str:
     return f"{voice.field_phrase('phone')} from {old or _shown('phone', b)} to {new or _shown('phone', a)}"
 
 
+BULK_AVAILABILITY, BULK_NAMES = "product.set_availability_all", 10  # AV1052-04
+
+
+def _bulk_groups(draft: dict):
+    """AV1052-04: for a draft holding product.set_availability_all, ({word: [(id, name), ...] by id}, {ids}) from the records'
+    net first-before/last-after change of `available`; None for any other draft (full detail, unchanged)."""
+    if not any(isinstance(c, dict) and c.get("op") == BULK_AVAILABILITY for c in draft.get("ops") or []): return None
+    groups = {}
+    for r in draft.get("records") or []:
+        b, a = r.get("before"), r.get("after")
+        if r.get("collection") != "products" or not (isinstance(b, dict) and isinstance(a, dict)): continue
+        if a.get("available") in AVAILABILITY and b.get("available") != a.get("available"):
+            groups.setdefault(a["available"], []).append((str(r.get("key")), _side_name(a) or str(r.get("key"))))
+    groups = {w: sorted(groups[w]) for w in AVAILABILITY if w in groups}
+    return (groups, {pid for g in groups.values() for pid, _ in g}) if groups else None
+
+
+def _bulk_lines(groups: dict) -> list:
+    lines = []
+    for word, items in groups.items():
+        lines.append(f"{len(items)} product{'s' if len(items) != 1 else ''} marked available={word}:")
+        lines += [f"  {name} ({pid})" for pid, name in items[:BULK_NAMES]]
+        if len(items) > BULK_NAMES: lines.append(f"  ... and {len(items) - BULK_NAMES} more")
+    return lines
+
+
+def _fields(r: dict, bulk) -> list:
+    """The record's changed fields, without `available` when a bulk group already tells it."""
+    return [c for c in _changes(r) if not (bulk and r.get("key") in bulk[1] and c[0] == "available" and r.get("collection") == "products")]
+
+
 def _summary(draft: dict) -> str:
     """One plain phrase for a draft, stored with it and shown in status and history: `the description for Hass avocado`."""
-    parts = []
+    bulk = _bulk_groups(draft)
+    parts = [f"{len(items)} product{'s' if len(items) != 1 else ''} marked available={word}" for word, items in bulk[0].items()] if bulk else []
     for r in draft["records"]:
         name, word = _name(r), COLLECTION_WORDS.get(r.get("collection"), "")
         if r.get("before") is None and isinstance(r.get("after"), dict):
@@ -109,7 +141,9 @@ def _summary(draft: dict) -> str:
         if _removed(r):
             parts.append(f"taking away the {word or 'entry'}" + (f": {name}" if name else ""))
             continue
-        fields = list(dict.fromkeys(_phone_phrase(r, b, a) if _is_phone(r, f) else voice.field_phrase(f) for f, b, a in _changes(r)))
+        changes = _fields(r, bulk)
+        if bulk and not changes: continue
+        fields = list(dict.fromkeys(_phone_phrase(r, b, a) if _is_phone(r, f) else voice.field_phrase(f) for f, b, a in changes))
         what = ", ".join(fields[:3]) + (" and more" if len(fields) > 3 else "")
         parts.append(f"{what} for {_label(r) or WHOLE_WORDS.get(r.get('collection'), 'this')}")
     return _value("; ".join(parts) or "no changes")
@@ -199,10 +233,11 @@ def _removal(r: dict, done: bool = False) -> str:
 
 
 def _record_lines(draft: dict, undo: bool = False, full_before=False, done: bool = False, routes=None) -> list:  # AV0022-08: proposal_text and show
-    lines = []
+    bulk = _bulk_groups(draft)
+    lines = _bulk_lines(bulk[0]) if bulk else []
     for r in draft["records"]:
         lines += [_removal(r, done)] if _removed(r) else _added(r, routes) if r.get("before") is None and isinstance(r.get("after"), dict) else [
-            _change_line(r, f, b, a, undo, full_before, routes) for f, b, a in _changes(r)]
+            _change_line(r, f, b, a, undo, full_before, routes) for f, b, a in _fields(r, bulk)]
     return lines + [f"Heads up: {voice.explain_warning(w)}" for w in draft.get("warnings") or []]
 
 

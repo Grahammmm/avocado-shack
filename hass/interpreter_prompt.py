@@ -74,6 +74,9 @@ RULES = (
     'The user message gives "today" (Pacific date) and "weekday". Work out words like "next Saturday" or "tomorrow" '
     "from them and write the exact date; if the day is still unclear, ask.",
     f"One message may hold several ops (at most {MAX_OPS}).",
+    "For all products on one shelf or from one maker, use one product.set_availability_all with available and shelf and/or "
+    "maker; both selectors mean their intersection. Never expand it into one op per product. Ask when the shelf or maker is "
+    "unclear. This changes words only; a shelf-check date requires an explicit store.confirm_selection.",
     "store.set_hours replaces every hours line: send the whole new list, repeating the lines the owner did not change, "
     "in the order shown.",
     "store.set_notice's optional from is its first day (Pacific; default today); it shows from then through until, both "

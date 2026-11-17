@@ -206,6 +206,7 @@ NEW_RECORD_FIELDS = {"products": ("product.add", {"brand", "displayBrand", "prod
 LONE_MAKER = "maker.add without a new product"
 # Why an operation stays private. Plain words, finishing "it ..."; an operation in neither table gets the general line.
 PRIVATE = {
+    "product.set_availability_all": "changes availability for a shelf or maker",
     "maker.hide": "takes a maker off the website", "maker.restore": "brings a maker back onto the website",
     "hike.repeat": "copies a hike", "hike.complete": "records how a hike went", "hike.recap": "records how a hike went",
     "hike.samples": "changes the sample hikes",

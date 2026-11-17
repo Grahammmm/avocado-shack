@@ -85,6 +85,7 @@ class WiredTest(unittest.TestCase):
                                               "hass/tests/test_auto_policy_shapes.py",
                                               "hass/tests/test_clear_availability.py",
                                               "hass/tests/test_maker_hide_products.py",
+                                              "hass/tests/test_set_availability_all.py",
                                               "hass/tests/test_stock_site.py"])  # exactly one production caller
         self.assertIn("WIRED only by stock_site", auto_policy.__doc__ or "")
 
