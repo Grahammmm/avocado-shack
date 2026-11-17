@@ -315,6 +315,28 @@ def _drop_new_assets(wt: Path, paths) -> None:
             _git(wt, "rm", "-q", "--cached", "--ignore-unmatch", "--", p)
             if (wt / p).parent.resolve().is_relative_to(wt.resolve()): (wt / p).unlink(missing_ok=True)
 
+def _design_undo_problems(wt: Path, journal: dict, draft: dict) -> list[str]:
+    """Interrupted design apply: refuse unless every dirty path is exactly the apply's own staged content (HEAD's or the landed
+    commit's blob); else return [] after restoring just those paths (never a blanket reset --hard: it would eat unrelated edits)."""
+    ops, paths = draft.get("ops") or [{}], journal.get("paths") or []
+    args = (ops[0].get("args") or {}) if isinstance(ops[0], dict) else {}
+    target = args.get("head") if ops[0].get("op") == "design.apply" else "HEAD^"
+    blob = lambda ref, p: _out(wt, "rev-parse", "-q", "--verify", f"{ref}:{p}") if ref else ""  # noqa: E731
+    dirty = [e[3:] for e in _out(wt, "status", "--porcelain", "-z", "--no-renames", "-uall").split("\0") if e]
+    if not paths or not target or set(dirty) - set(paths): return ["interrupted design apply: other worktree changes; needs reconciliation"]
+    for p in dirty:
+        ours = {blob("HEAD", p), blob(target, p)}
+        staged = _out(wt, "ls-files", "-s", "--", p).split()[1:2]
+        work = _out(wt, "hash-object", "--", p) if (wt / p).is_file() else ""
+        if work not in ours or (staged[0] if staged else "") not in ours:
+            return [f"interrupted design apply: {p} changed since the crash; needs reconciliation"]
+    for p in dirty:
+        if blob("HEAD", p): _git(wt, "checkout", "HEAD", "--", p)
+        else:
+            _git(wt, "rm", "-q", "--cached", "--ignore-unmatch", "--", p)
+            (wt / p).unlink(missing_ok=True)
+    return []
+
 def _recover_locked(sdir: Path, wt: Path, now, guard=None) -> dict:
     """Resolve every journal: committed -> applied; HEAD still at base -> restore and failed. Never re-apply."""
     if problems := worktree_problems(wt, recovering=True): return {"result": "refused", "problems": problems}
@@ -329,8 +351,9 @@ def _recover_locked(sdir: Path, wt: Path, now, guard=None) -> dict:
                    **({"environment": draft["environment"]} if "environment" in draft else {}),
                    **({"kind": "design"} if journal.get("kind") == "design" else {})}
         elif CHANGE_ID_RE.fullmatch(cid) and head == journal.get("base_commit"):
-            _git(wt, "checkout", "HEAD", "--", *OWNED_PATHS)
-            if journal.get("kind") == "design": _git(wt, "reset", "-q", "--hard", "HEAD")  # an interrupted design apply's own files
+            if journal.get("kind") == "design":  # only the interrupted apply's own files are taken back
+                if problems := _design_undo_problems(wt, journal, draft): return {"result": "refused", "problems": problems}
+            else: _git(wt, "checkout", "HEAD", "--", *OWNED_PATHS)
             _drop_new_assets(wt, journal.get("paths"))
             rec = {"state": "failed", "change_id": cid, "problems": ["interrupted; needs a new approval"],
                    "failed_at": _now(now)}

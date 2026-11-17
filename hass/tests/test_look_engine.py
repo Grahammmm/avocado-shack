@@ -133,6 +133,42 @@ class LookEngine(unittest.TestCase):
         self.assertEqual((git(self.bare, "rev-parse", "main"), self.published("style.css")), (pushed, css))
 
 
+    def crash(self):
+        """A tracked unrelated file, then a design apply cut off after the cherry-pick staged the look (journal left behind)."""
+        (self.repo.wt / "hass/voice.py").write_text("voice = 1\n")
+        git(self.repo.wt, "add", "-A")
+        git(self.repo.wt, "commit", "-q", "-m", "voice")
+        self.before, self.ok = self.repo.head(), self.look("crash", css_edit)
+        self.cut = self.design(self.ok)["draft"]
+        with mock.patch.object(editor, "_post_checks", side_effect=RuntimeError("power cut")), self.assertRaises(RuntimeError):
+            editor.apply(self.cut["change_id"], self.cut["draft_hash"], state=str(self.repo.state))
+        self.assertIn(CSS, self.repo.status())
+
+    def refused_and_kept(self, rel, text):
+        (self.repo.wt / rel).write_text(text)
+        status, out = self.repo.status(), editor.recover(state=str(self.repo.state))
+        self.assertEqual(out["result"], "refused")
+        self.assertEqual(((self.repo.wt / rel).read_text(), self.repo.head(), self.repo.status()), (text, self.before, status))
+        self.assertTrue((self.repo.state / "journal" / (self.cut["change_id"] + ".json")).is_file())  # left for the attended path
+
+    def test_recovery_keeps_an_unrelated_tracked_edit(self):
+        self.crash()
+        self.refused_and_kept("hass/voice.py", "voice = 2  # mine\n")
+
+    def test_recovery_keeps_a_post_crash_edit_to_the_design_path(self):
+        self.crash()
+        self.refused_and_kept(CSS, "body { color: blue; }\n")
+
+    def test_crash_alone_recovers_and_a_later_apply_lands(self):
+        self.crash()
+        out = editor.recover(state=str(self.repo.state))
+        self.assertEqual(out["recovered"], [{"change_id": self.cut["change_id"], "state": "failed"}])
+        self.assertEqual((self.repo.head(), self.repo.status()), (self.before, ""))
+        again = self.design(self.ok)["draft"]
+        self.assertEqual(self.live.apply(again["change_id"], again["draft_hash"])["result"], "applied")
+        self.assertEqual(self.css_at("HEAD"), self.css_at(self.ok["head"]))
+
+
 del R  # no module-level ReleaseCase: unittest discovery would run its tests here again
 
 
