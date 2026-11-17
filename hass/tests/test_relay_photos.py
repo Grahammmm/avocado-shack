@@ -89,13 +89,13 @@ class PhotoTests(harness.HostCase):
         srv, _ = self.photo_server()
         self.conv.photos = self.source()
         work = self.worker(False)
-        for i, code in enumerate(("too-large", "unsupported-type", "fetch-failed")):
+        for i, code in enumerate(("too-large", "unsupported-type", "fetch-failed", "size-mismatch")):
             guid = f"refused-{i}"
             body = dict(op="photo-refused", guid=guid, idx=0, count=1, code=code)
             self.assertEqual(self.post(srv, "/v1/photo", self.sealed(body))[0], 200)
             self.inbound(srv, self.seal(self.event_from("new-message", guid=guid, text="", attachments=[{}])))
             work.cycle()
-            self.assertEqual(self.relay_rows()[-1], conversation.FETCH_FAILED if code == "fetch-failed" else media.REPLIES[code])
+            self.assertEqual(self.relay_rows()[-1], conversation.FETCH_FAILED if code in ("fetch-failed", "size-mismatch") else media.REPLIES[code])
         self.assertTrue(all(r["state"] == "done" for r in self.inbound_rows()))
         with sqlite3.connect(self.source().path) as db: self.assertEqual(db.execute("SELECT * FROM photo_in").fetchall(), [])
         src = self.source(); now = int(self.now.timestamp())

@@ -89,6 +89,14 @@ class PhotoTests(ForwarderCase):
         with patch.object(fwd.subprocess, "run", side_effect=subprocess.TimeoutExpired("sips", 30)):
             self.raw = [b"heic"]; self.send("sipstimeout")
 
+    def test_real_fetch_code_is_sent_but_unknown_ones_are_fetch_failed(self):
+        for raised, sent in ((bridge.BridgeError("size-mismatch"), "size-mismatch"), (bridge.BridgeError("http-error", 500), "http-error"),
+                             (bridge.BridgeError("odd-new-code"), "fetch-failed"), (bridge.BridgeError("too-large"), "too-large")):
+            with patch.object(fwd.bridge_photos.BlueBubblesPhotos, "fetch", side_effect=raised):
+                self.send(f"code-{sent}-{raised.code}")
+            self.assertEqual(self.photos[-1]["code"], sent)
+            self.assertEqual(set(self.photos[-1]), {"op", "guid", "idx", "count", "code"})
+
     def test_g_group_echo_edit_stranger_and_invalid_counts_send_no_photos(self):
         self.cfg["gChat"] = "iMessage;-;g@example.invalid"
         for i, kw in enumerate((dict(chats=[{"guid": self.cfg["gChat"]}]),
