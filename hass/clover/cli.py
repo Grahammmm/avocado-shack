@@ -10,7 +10,8 @@
   status  the cache facts (as of, item count, last result, failures) and the till they belong to (environment, merchantId); no
           network, no token. A cache of another till, or with no identity, prints result "identity" (HASS-CLOVER-1-FIX-2).
 
-  report stock|mismatch [--out DIR] (or report --all) writes private local Markdown files from the cache only.
+  report stock|mismatch|pos [--out DIR] (or report --all) writes private local Markdown files from the cache only. `pos` (HASS-POS-1,
+          docs/hass/POS.md) also writes pos-totals.json: totals only, no name, price or SKU.
           No token or network. Stdout remains one redacted JSON status line; details stay in local files.
 
 Exit 0 ok (sync: also "skipped" by the backoff), 1 Clover failed or an unexpected error (class name only), 2 not configured, config,
@@ -184,7 +185,7 @@ def report(args, clock=_now):
     snapshot, reachable = cache.read(state, cache.identity_of(clover))
     if snapshot is None:
         raise Stop({"result": "no-cache"})
-    worktree = editor._load(str(state))[2] if args.out or args.all or args.kind == "mismatch" else None
+    worktree = editor._load(str(state))[2] if args.out or args.all or args.kind in ("mismatch", "pos") else None
     if args.out:
         out = Path(args.out).absolute()
         resolved = out.resolve()
@@ -194,6 +195,13 @@ def report(args, clock=_now):
     kinds = reports.KINDS if args.all else (args.kind,)
     if not args.all and args.kind is None or args.all and args.kind is not None:
         raise Stop({"result": "report", "problem": "choose-kind-or-all"})
+    if args.kind == "pos":   # HASS-POS-1: the private till summary plus pos-totals.json (totals only); cache and journal, no token
+        from hass.clover import pos
+        ident, content_links = cache.identity_of(clover), reports.read_inputs(state, worktree)
+        deltas = pos.journal_deltas(state, ident, pos.since_day(now, 7).isoformat())
+        pos.write_files(state, pos.build(snapshot, cache.history(state, ident), deltas, now, *content_links, reachable,
+                                         clover.low_stock_threshold), now, args.out)
+        return {"result": "ok", "reports": 1, "asOf": cache._iso(snapshot.fetched_at)}, 0
     prepared = []
     for kind in kinds:
         if kind == "stock":
@@ -215,7 +223,7 @@ def main(argv=None, *, transport=None, sleep=time.sleep, monotonic=time.monotoni
         if name == "sync":
             p.add_argument("--force", action="store_true")
     p = sub.add_parser("report")
-    p.add_argument("kind", nargs="?", choices=("stock", "mismatch"))
+    p.add_argument("kind", nargs="?", choices=("stock", "mismatch", "pos"))
     p.add_argument("--all", action="store_true")
     p.add_argument("--host", required=True)
     p.add_argument("--out")
