@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from hass.clover.mapper import CATEGORIES, MAX_PRICE_CENTS
 
 KEYS = {"environment", "merchantId", "tokenFile", "liveApproved", "dailyWriteCap", "priceConfirmPct", "maxPriceCents",
-        "lowStockThreshold", "maxStock", "categoryMap", "writeTokenFile", "writes"}
+        "lowStockThreshold", "maxStock", "categoryMap", "writeTokenFile", "writes", "siteStock", "siteStockWords"}
 REQUIRED = ("environment", "merchantId", "tokenFile")
 
 
@@ -39,6 +39,8 @@ class CloverConfig:
 
     write_token_file: str = ""
     writes: bool = False
+    site_stock: str = "off"
+    site_stock_words: str = "words"
 
     @property
     def writes_allowed(self):
@@ -62,6 +64,8 @@ def from_settings(raw):
         "tokenFile": isinstance(raw.get("tokenFile"), str) and 0 < len(raw["tokenFile"]) <= 4096 and raw["tokenFile"].startswith("/"),
         "writeTokenFile": isinstance(raw.get("writeTokenFile", ""), str) and ("writeTokenFile" not in raw or (raw["writeTokenFile"].startswith("/") and raw["writeTokenFile"] != raw.get("tokenFile"))),
         "writes": type(raw.get("writes", False)) is bool,
+        "siteStock": raw.get("siteStock", "off") in ("off", "auto", "draft"),
+        "siteStockWords": raw.get("siteStockWords", "words") in ("words", "limited"),
         "liveApproved": type(raw.get("liveApproved", False)) is bool,
         "dailyWriteCap": _int(raw.get("dailyWriteCap", 20), 1, 200),
         "priceConfirmPct": _int(raw.get("priceConfirmPct", 25), 1, 1000),
@@ -75,4 +79,5 @@ def from_settings(raw):
         raise ConfigProblem(bad)
     return CloverConfig(raw["environment"], raw["merchantId"], raw["tokenFile"], raw.get("dailyWriteCap", 20), raw.get("priceConfirmPct", 25),
                         raw.get("maxPriceCents", MAX_PRICE_CENTS), raw.get("lowStockThreshold", 5), raw.get("maxStock", 100_000), dict(cmap),
-                        raw.get("liveApproved", False), raw.get("writeTokenFile", ""), raw.get("writes", False))
+                        raw.get("liveApproved", False), raw.get("writeTokenFile", ""), raw.get("writes", False),
+                        raw.get("siteStock", "off"), raw.get("siteStockWords", "words"))
