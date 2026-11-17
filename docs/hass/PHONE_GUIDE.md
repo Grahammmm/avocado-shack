@@ -107,4 +107,9 @@ Prices (private): save what you paid, then ask for a suggested price. The cost i
 Send: `cost Hass avocado: 24 for 12`
 Send: `margin Hass avocado at 35%`
 
+## Ask about the till (arrives once the chat wiring is merged)
+
+Each is its own message, answered from Hass's private till copy only (nothing is sent to the till, and no model sees your numbers): `till summary`, `price of honey`, `what sold today`, `what sold this week`, `website vs till`.
+"What sold" shows **count drops, not exact sales**: a recount or a till edit also shows there.
+
 Forgot a command? Send `help`. For what Hass cannot do yet see [Known limits](LIMITS.md), and for every command see [the command card](COMMANDS.md).
