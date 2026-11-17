@@ -21,19 +21,25 @@ class PhotoRefused(media.Refused):
 
 
 class RelayPhotos:
-    def __init__(self, host_dir, clock=lambda: datetime.now(timezone.utc)):
-        self.path, self.clock = memory.private_db(Path(host_dir), "photos.sqlite3"), clock
-        with self._db() as db:
+    def __init__(self, host_dir, clock=lambda: datetime.now(timezone.utc), inbox_path=None):
+        self.path, self.clock, self.inbox_path = memory.private_db(Path(host_dir), "photos.sqlite3"), clock, inbox_path
+        with self._db(attach_inbox=False) as db:
             db.execute("CREATE TABLE IF NOT EXISTS photo_in(guid TEXT, idx INTEGER, count INTEGER, sha256 TEXT,"
                        " data BLOB, code TEXT, received_at INTEGER, PRIMARY KEY(guid, idx))")
 
     @contextlib.contextmanager
-    def _db(self):
-        with contextlib.closing(sqlite3.connect(self.path, timeout=30)) as db:
+    def _db(self, attach_inbox=True):
+        with contextlib.closing(sqlite3.connect(self.path, timeout=30, uri=True)) as db:
+            if attach_inbox and self.inbox_path is not None:
+                db.execute("ATTACH DATABASE ? AS inbox", (Path(self.inbox_path).absolute().as_uri() + "?mode=rw",))
             with db: yield db
 
     def _expire(self, db, now):
-        db.execute("DELETE FROM photo_in WHERE received_at <= ?", (now - 86400,))
+        # BEGIN IMMEDIATE locks both attached databases: intake cannot race this
+        # decision, and a pending message retains every part until marked done.
+        pending = (" AND NOT EXISTS (SELECT 1 FROM inbox.inbound WHERE provider_id = photo_in.guid AND state = 'pending')"
+                   if self.inbox_path is not None else "")
+        db.execute("DELETE FROM photo_in WHERE received_at <= ?" + pending, (now - 86400,))
 
     def put(self, body, now):
         if not relay._body_ok(body) or body["op"] not in ("photo", "photo-refused"): raise ValueError("photo")

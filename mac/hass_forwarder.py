@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Mac-side Hass forwarder. BlueBubbles REST shapes remain UNVERIFIED on a real Mac."""
 import argparse, base64, functools, hashlib, hmac, ipaddress, json, os, re, secrets, signal, sqlite3, stat, sys, threading, time  # noqa: E401
-import urllib.error, urllib.parse, urllib.request
+import subprocess, tempfile, urllib.error, urllib.parse, urllib.request
 from dataclasses import asdict
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from hass import bridge, bridge_attach, relay, stagelog  # noqa: E402
+from hass import bridge, bridge_attach, bridge_photos, media, relay, stagelog  # noqa: E402
 from hass.conversation import parse_command, read_command, sender_key  # noqa: E402
 
 MAX_BODY = 256 * 1024
@@ -237,14 +237,82 @@ class Forwarder:
         self.query_other = {}  # HASS-OWNERS-2: the other owner chats' page state
         self.ack_thread, self.ack_stop, self.ack_wake = None, threading.Event(), threading.Event()
         self.ack_live, self.ack_lock = set(), threading.Lock()
+        self.photo_worker, self.photo_posts = None, []
 
     def bb(self, path, body=None):
         password = private_read(self.cfg["bbPasswordFile"], 4096).decode().strip()
         sep = "&" if "?" in path else "?"
         return self.transport(f'http://127.0.0.1:{self.cfg["bbPort"]}{path}{sep}{urllib.parse.urlencode({"password": password})}', body)["data"]
 
-    def post(self, path, env, big=False, quick=False):
-        return (self.big if big else self.quick if quick else self.transport)(self.cfg["receiverUrl"] + path, env)
+    def post(self, path, env, big=False, quick=False, timeout=None):
+        transport = self.big if big else self.quick if quick else self.transport
+        if timeout is not None and self.transport is request_json:
+            return request_json(self.cfg["receiverUrl"] + path, env, limit=MAX_REPLY if big else 1024 * 1024, timeout=timeout)
+        return transport(self.cfg["receiverUrl"] + path, env)
+
+    def push_photos(self, msg):
+        """One bounded worker: even a trickling socket cannot hold text or tapbacks."""
+        if (msg.kind != "new" or msg.from_me or msg.chat not in owner_chats(self.cfg)
+                or not re.fullmatch(r"iMessage;-;[^;\s]+", msg.chat)
+                or sender_key(msg.sender) is None or sender_key(msg.sender) != sender_key(msg.chat.split(";", 2)[2])
+                or not 1 <= msg.attachments <= media.MAX_PHOTOS_PER_MESSAGE
+                or not bridge_photos._valid_guid(msg.provider_id)): return
+        if self.photo_worker is not None and self.photo_worker.is_alive(): return
+        done, deadline = threading.Event(), time.monotonic() + 30
+        def work():
+            try: self._push_photos(msg, deadline)
+            except Exception: pass  # no URLs, credentials, bytes or provider ids in errors
+            finally: done.set()
+        self.photo_worker = threading.Thread(target=work, name="hass-photo", daemon=True)
+        self.photo_worker.start()
+        done.wait(max(0, deadline - time.monotonic()))
+
+    def _push_photos(self, msg, deadline):
+        def remaining():
+            left = deadline - time.monotonic()
+            if left <= 0: raise TimeoutError("photo-budget")
+            return left
+        def download(url, headers, timeout, limit):
+            return bridge_photos._urllib_transport(url, headers, min(timeout, remaining()), limit)
+        photos = bridge_photos.BlueBubblesPhotos(f'http://127.0.0.1:{self.cfg["bbPort"]}',
+                                                self.cfg["bbPasswordFile"], transport=download, timeout=30)
+        code = None
+        try: data = photos.fetch(msg.provider_id, msg.attachments)
+        except Exception as exc:
+            code = "too-large" if isinstance(exc, bridge.BridgeError) and exc.code == "too-large" else "fetch-failed"
+            data = [None] * msg.attachments
+        for idx, raw in enumerate(data):
+            remaining()
+            failure = code
+            if raw is not None:
+                try:
+                    if media.sniff(raw) not in ("jpeg", "png") or len(raw) > relay.PHOTO_MAX:
+                        with tempfile.TemporaryDirectory(prefix="hass-photo-") as tmp:
+                            src, dst = Path(tmp) / "in", Path(tmp) / "out.jpg"
+                            src.write_bytes(raw)
+                            subprocess.run(["/usr/bin/sips", "-s", "format", "jpeg", "-s", "formatOptions", "85",
+                                            "-Z", "4096", str(src), "--out", str(dst)],
+                                           timeout=min(30, remaining()), check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            with dst.open("rb") as stream: raw = stream.read(relay.PHOTO_MAX + 1)
+                    failure = "too-large" if len(raw) > relay.PHOTO_MAX else None if media.sniff(raw) in ("jpeg", "png") else "unsupported-type"
+                except (subprocess.CalledProcessError, OSError):
+                    failure = "too-large" if len(raw) > relay.PHOTO_MAX else "unsupported-type"
+            body = {"op": "photo-refused" if failure else "photo", "guid": msg.provider_id, "idx": idx, "count": msg.attachments}
+            if failure: body["code"] = failure
+            else:
+                assert raw is not None
+                body.update(sha256=hashlib.sha256(raw).hexdigest(), b64=base64.b64encode(raw).decode("ascii"))
+            now = time.monotonic()
+            self.photo_posts[:] = [t for t in self.photo_posts if now - t < 60]
+            if len(self.photo_posts) >= 8: return
+            env = relay.seal_control(body, self.secret, nonce=secrets.token_hex(16), now=self.clock())
+            left = remaining()
+            self.photo_posts.append(now)
+            sent = self.post("/v1/photo", env, big=True, timeout=left)
+            spool = Spool(self.spool.directory, self.clock(), ready=True)
+            try: answer = relay.unseal_control(sent, self.secret, now=self.clock(), seen=spool)
+            finally: spool.db.close()
+            if answer != {"op": "photo-ok", "guid": msg.provider_id, "idx": idx}: raise ValueError("photo-reply")
 
     def fetch(self):
         row = self.spool.db.execute("SELECT guid,event,created_at,tries,next_try_at FROM fetch ORDER BY created_at,rowid LIMIT 1").fetchone()
@@ -314,7 +382,9 @@ class Forwarder:
         if db.execute("SELECT 1 FROM fetch WHERE created_at<=? LIMIT 1", (row[4],)).fetchone(): return
         try:
             inbound = bridge.Inbound(**json.loads(row[1]))
-            env = bridge.seal(inbound, self.secret, nonce=secrets.token_hex(16), now=now)
+            try: self.push_photos(inbound)
+            except Exception: pass  # photos never prevent the original inbound delivery
+            env = bridge.seal(inbound, self.secret, nonce=secrets.token_hex(16), now=self.clock())
             self.stage("post-start", inbound.provider_id)
             result = self.post("/v1/inbound", env)["result"]
             if result not in ("queued", "duplicate", "history", "rejected"): raise ValueError("post-shape")

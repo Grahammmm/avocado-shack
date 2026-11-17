@@ -80,6 +80,62 @@ Comparison uses saved links only; unlinked items are gaps, not confirmed absence
 - Market special \(ring up price\) \(FAKEITEM00006\): no count
 ```
 
+## Website stock words
+
+`clover.siteStock` is **off by default**; choices are `off`, `auto`, `draft`.
+`siteStockWords` defaults to `words` (Available today / Sold out); `limited`
+also uses Limited at or below `lowStockThreshold` (5 by default). Activation
+still needs G's STOCK-AUTO/SITE-WORDS choices, reviewed LINK wiring, and an
+attended runtime/service-template move. This code installs/enables nothing.
+
+The sync template adds one `stock_site.py run --host ...` post-step. Because
+the existing unit accepts sync exit 1, the post-step also independently checks
+the identity, successful last attempt, matching asOf/lastAttempt, age <=20
+minutes, strictly newer read, and >=90% of the last item count. Failed, skipped,
+stale or partial reads never touch the queue or the site. The old health alert
+after two hours remains. No network or token is needed to read this cache.
+
+Only a crossing changes a word; a hand-set word otherwise stays. First sync
+and each new/relinked product make a reconcile preview, never an automatic
+release. `stock yes stk-...` approves exactly that set; `stock no stk-...` drops
+the remaining words even between batches. LINK authenticates sender/chat and
+excludes groups before calling `stock_site.approve(state, code, owner_role)`
+or `decline`; these library functions do not authenticate chat themselves.
+Proposals are private files/state, not outbound messages. More than
+max(5, 10% of links) new Sold outs needs that same one yes and a warning.
+
+The private, atomic 0600 `clover/site-stock.json` keeps counts, pending words,
+hashed sets and inflight batch progress, under a nonblocking stock lock. A
+corrupt file fails closed, never resets. Deferred words retry on later good
+reads; latest crossing wins and a later owner edit wins. Before every retry,
+unlinked/relinked/gone entries are dropped with an audit row; missing/no-count,
+hidden till or inactive site items are parked, with no attempt charged.
+Re-eligible words are recomputed; an approved word changing needs a new set
+when it came from reconciliation. Turning off leaves the queue untouched.
+
+At most one batch per read, bounded by min(editor.MAX_OPS,
+live_policy.MAX_RECORDS), currently 10. Automatic crossings go first, then
+oldest approved set; Sold out, Limited, Available today within each batch.
+One live wrapper apply performs its own baseline check and editor apply.
+No editor/live-policy limit, shelf-check-today rule, STOP, sandbox binding,
+writer lock, settling check or read-back gate is bypassed. A not-published
+writer/site divergence stays held for the operator, never treated as success.
+Three daily slots are reserved for owner changes, including approved stock
+sets: normally seven batches (70 words) a day, only on shelf-check days.
+
+`clover/reports/site-stock-totals.json` is counts/reason/age/batches only; POS-2
+and the dashboard can read it. `stock-reconcile-<date>-stk-<code>.md` lists
+the private per-product preview; `stock-reconcile-<date>-gaps.md` lists missing
+and parked links. Folder 0700, files 0600, reconcile reports pruned at 90 days.
+Keep these finance-local files off models, the repo and the website. Site ops
+contain only product ids and words, never count, price or SKU.
+
+Each completed batch adds one audit row (`who: timer`, `skill: stock.sync`)
+and correspondence row (`reason: stock-sync-published`). The stock state also
+records `actor: stock-sync` and the change id. Existing revert-last **does pick
+the latest landed stock release**: POS-2 must read that marker and say
+“That was a stock update from the till”; changing undo targeting is not here.
+
 ## Credential rule (read this first)
 
 G's standing fleet rule is that no agent handles credentials; this design keeps its spirit.
@@ -171,7 +227,7 @@ write card must also hold a separate write token.
 | `price` (cents), `priceType` (`FIXED`, `VARIABLE`, `PER_UNIT`), `unitName` | **never** | prices stay off the site (AGENTS.md catalog-only scope; the live policy refuses price words). Variable-price items have no price to change |
 | `categories` (names) | `category` (one of the nine site words) | a settings map `categoryMap` {site word: Clover category name}; Hass never creates a Clover category |
 | `tags` | none | read and cached, used for nothing in v1 |
-| `itemStock.quantity`, `stockAlertThreshold` | `available` (`yes` / `limited` / `no`) | **only** through an approved draft (see flow 5). The site never shows a count |
+| `itemStock.quantity`, `stockAlertThreshold` | `available` (`yes` / `limited` / `no`) | approved draft (flow 5), or the separately opted-in Website stock words path below. The site never shows a count |
 | `hidden`, `available`, `autoManage` | `status` (`active`/`hidden`/`held`) | different meanings (hidden on the Register vs. hidden on the website); a disagreement is reported, never copied |
 | `modifiedTime` (ms) | (none) | the stale check and the incremental sync |
 | `cost`, tax rates, modifiers, employee or customer fields | n/a | **dropped on read** (the mapper is a whitelist) |

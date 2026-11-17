@@ -7,10 +7,13 @@ import unittest
 from datetime import timedelta
 
 from hass import capabilities, conversation, voice
+from hass.chat import commands
 from hass.tests.test_commands_doc import parser_verbs, verb
 from hass.tests.test_conversation import GROUP, STRANGER, T0, ConversationTestCase, _ops
 from hass.tests.test_editor import HOURS, NEW_HOURS
 
+CAPABILITY = ("what can you do", "what do you do", "what can I say")
+MODES = ("ops-only", "both", "skills-first")
 LINES = voice.plain(conversation.HELP_TEXT).splitlines()  # fixed commands keep their short-list contract
 
 
@@ -55,6 +58,24 @@ class HelpTextTests(unittest.TestCase):
         for text in ("help me with avocados", "help a1b2", "??", "what?", "command"):
             self.assertIsNone(verb(text), text)
         self.assertEqual(conversation.read_command("help?"), ("help", None))  # AV1352-05: a read-only command
+
+    def test_capability_phrases_parse_as_help_without_capture_group_drift(self):
+        for text in CAPABILITY:
+            for variant in (text, text.upper(), f"  {text}  ", text + "!", text + ".", text + "?"):
+                if variant.endswith("?") and variant.count("?") > 1: continue
+                with self.subTest(text=variant):
+                    self.assertEqual(conversation.parse_command(variant), ("help", None))
+        self.assertEqual(commands.COMMAND_RE.groups, 23)  # no capture group added
+        self.assertEqual(conversation.parse_command("history eggs"), ("history", "eggs"))
+        self.assertEqual(conversation.parse_command("show a1b2"), ("show", "a1b2"))
+        self.assertEqual(conversation.parse_command("post eggs"), ("post", "eggs"))
+        self.assertEqual(conversation.parse_command("status"), ("status", None))
+
+    def test_capability_help_is_whole_message_only(self):
+        for text in ("what can you do about eggs", "what do you do with this", "what can I say about the shop",
+                     "please what can you do", "what can you do??", "what can you do now"):
+            with self.subTest(text=text):
+                self.assertIsNone(verb(text))
 
 
 class HelpConversationTests(ConversationTestCase):
@@ -113,4 +134,46 @@ class HelpConversationTests(ConversationTestCase):
     def test_stranger_or_group_help_is_ignored_without_a_reply(self):
         self.assertEqual(self.say("help", sender=STRANGER), "ignored")
         self.assertEqual(self.say("help", chat=GROUP), "ignored")
+        self.assertEqual(self.replies(), [])
+
+
+def conversation_settings(case):
+    import json
+    return json.loads((case.repo.state / "config.json").read_text("utf-8"))["settings"]
+
+
+class CapabilityHelpTests(ConversationTestCase):
+    state = HelpConversationTests.state
+
+    def mode(self, mode):
+        self.set_settings({**conversation_settings(self), "skillsMode": mode})
+        self.conv = self.open()
+
+    def test_capability_questions_reply_help_in_every_mode_without_model(self):
+        def boom(*a, **k): raise AssertionError("the interpreter was called")
+        self.interp.interpret = boom
+        for mode in MODES:
+            self.mode(mode)
+            for text in CAPABILITY + ("what can you do?",):
+                with self.subTest(mode=mode, text=text):
+                    self.assertEqual(self.say(text), "help")
+                    self.assertEqual(self.replies(), [voice.plain(conversation.HELP_TEXT + "\n\n" + capabilities.help_section())])
+
+    def test_capability_help_keeps_paused_lapsed_and_open_request_state(self):
+        draft, _reply = self.propose("hours")
+        self.assertEqual(self.say("pause changes"), "pause")
+        self.replies()
+        self.now = T0 + timedelta(seconds=601)
+        before = self.state()
+        for text in CAPABILITY:
+            self.assertEqual(self.say(text), "help")
+            self.assertEqual((len(self.replies()), self.state()), (1, before))
+        self.assertEqual((self.drafts()[0]["state"], self.editor.applies), ("proposed", 0))
+
+    def test_capability_help_duplicate_and_foreign_chat(self):
+        self.assertEqual(self.say("what can you do?", pid="c1"), "help")
+        self.replies()
+        self.assertEqual((self.say("what can you do?", pid="c1"), self.replies()), ("duplicate", []))
+        self.assertEqual(self.say("what can you do", sender=STRANGER), "ignored")
+        self.assertEqual(self.say("what can you do", chat=GROUP), "ignored")
         self.assertEqual(self.replies(), [])

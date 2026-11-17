@@ -119,7 +119,7 @@ class LabelReader(LocalInterpreter):
 
     def _label_request(self, image_bytes) -> bytes:
         image = bytes(image_bytes)
-        if self.api == "openai":  # HASS-INTERP-OPENAI-1: the photo as a data URI, same prompt, non-thinking JSON reply
+        if self.api != "ollama":  # HASS-INTERP-OPENAI-1: the photo as a data URI, same prompt, non-thinking JSON reply (HASS-CLOUD-CODEX-1: codex too)
             uri = f"data:{interpreter_local.image_type(image)};base64,{base64.b64encode(image).decode('ascii')}"
             return self._openai_body([{"role": "user", "content": [{"type": "text", "text": PROMPT},
                                                                    {"type": "image_url", "image_url": {"url": uri}}]}])

@@ -16,7 +16,7 @@ from hass.tests.test_receiver import SECRET
 
 class PhotoTests(harness.HostCase):
     def source(self):
-        return relay_photos.RelayPhotos(self.hostdir, self.clock)
+        return relay_photos.RelayPhotos(self.hostdir, self.clock, self.inbox.db.execute("PRAGMA database_list").fetchone()[2])
 
     def body(self, guid="photo-1", idx=0, count=1, data=b"photo"):
         return dict(op="photo", guid=guid, idx=idx, count=count, sha256=sha256(data).hexdigest(),
@@ -119,10 +119,17 @@ class PhotoTests(harness.HostCase):
             with self.assertRaises(OSError): self.rx.drain()
         self.assertEqual(self.inbox.state("photo-1"), "pending")
         self.assertEqual(self.drafts(), [])
+        self.conv.photos.put(self.body(guid="orphan"), int(self.now.timestamp()))
+        self.now += timedelta(days=1)
+        # Both fetch and another upload run expiry before the worker restarts.
+        self.assertEqual(self.conv.photos.fetch_for_inbox("photo-1", 1), [data])
+        self.conv.photos.put(self.body(guid="fresh"), int(self.now.timestamp()))
         self.restart()
         self.conv.photos = self.source()
         self.rx.drain()
         self.assertEqual(self.inbox.state("photo-1"), "done")
+        with sqlite3.connect(self.conv.photos.path) as db:
+            self.assertEqual(db.execute("SELECT guid FROM photo_in").fetchall(), [("fresh",)])
         self.assertEqual([r["state"] for r in self.drafts()], ["needs-details"])
         digest = sha256(data).hexdigest()
         self.assertEqual((Path(directory.name) / "originals" / digest[:2] / (digest + ".jpg")).read_bytes(), data)
@@ -203,6 +210,25 @@ class PhotoTests(harness.HostCase):
         self.assertEqual([r["state"] for r in self.inbound_rows()], ["done"])
         self.assertEqual([r["state"] for r in self.drafts()], ["needs-details"])
         self.assertEqual(self.relay_rows(), [conversation.PHOTO_QUESTION])
+
+    def test_codex_photo_worker_builds_label_reader_with_local_fallback(self):
+        import tempfile
+        from hass import cloud_codex
+        media_dir = tempfile.TemporaryDirectory(prefix="relay-media-")
+        self.addCleanup(media_dir.cleanup)
+        from hass.tests.test_receiver import SETTINGS, OWNER_CHAT
+        self.set_settings({**SETTINGS, "ownerChat": OWNER_CHAT, "mediaRoot": media_dir.name})
+        itp = {"api": "codex", "model": "gpt-6.1-sol", "fallback":
+               {"url": "http://127.0.0.1:8010", "model": "qwen", "api": "openai"}}
+        cfg = host.load_host(self.host_json(photos=True, interpreter=itp))
+        work = host.make_worker(cfg, self.store, editor=self.editor, build=lambda: self.interp, clock=self.clock)
+        self.addCleanup(work.conv.db.close)
+        labels = work.conv.labels
+        self.assertIsInstance(work.conv.photos, relay_photos.RelayPhotos)
+        self.assertIsInstance(labels, host.label_reader.LabelReader)
+        self.assertEqual((labels.api, labels.fallback.api), ("codex", "openai"))
+        self.assertIsInstance(labels.transport, cloud_codex.CodexTransport)
+        self.assertIsInstance(labels.fallback.transport, cloud_codex.Remaining)
 
     def test_photo_post_to_real_worker_interview_and_one_coded_proposal(self):
         import tempfile

@@ -6,6 +6,7 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=%h/.local/share/hass/runtime
 ExecStart=/usr/bin/python3 -B %h/.local/share/hass/runtime/hass/clover/cli.py sync --host %h/.local/state/hass/host/host.json
+ExecStartPost=/usr/bin/python3 -B %h/.local/share/hass/runtime/hass/stock_site.py run --host %h/.local/state/hass/host/host.json
 # exit 1 = Clover could not be read this time (recorded in the cache, the chat says so); not a failed unit; exit 2 stays a failure
 SuccessExitStatus=1
 TimeoutStartSec=300
