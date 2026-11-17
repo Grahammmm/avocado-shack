@@ -152,10 +152,9 @@ class CorrLog:
 
 
 def _local(iso, clock) -> str:
-    try: at = datetime.fromisoformat(iso)
-    except (TypeError, ValueError): return "an unknown time"
     from zoneinfo import ZoneInfo
-    at = at.astimezone(ZoneInfo("America/Los_Angeles"))
+    try: at = datetime.fromisoformat(iso).astimezone(ZoneInfo("America/Los_Angeles"))
+    except (TypeError, ValueError, OverflowError): return "an unknown time"  # OverflowError: conversion leaves the calendar
     return f"{at:%a %b} {at.day}, {at.hour % 12 or 12}:{at:%M} {'am' if at.hour < 12 else 'pm'}"
 
 
