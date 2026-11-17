@@ -10,6 +10,14 @@ SECTIONS = ["Add a product", "Add a photo", "Post a hike", "Change opening hours
 SEND_RE = re.compile(r"Send( \(plain words\))?: `([^`]+)`")
 NEW_EXAMPLES = {"hide the sample hikes", "bring the sample hikes back", "put the old photo back", "stop showing the eggs as sold out"}  # AV1622-11
 LISTING = "listing photo-product-001"
+AV1937_PLAIN = (
+    "Use this for the home page, a crate of ripe avocados on the counter",
+    "Add a new maker called Example Orchard and its first product, pear jam",
+    "Add a maker called Example Orchard; it has no website",
+    "Stop stocking Example Orchard and hide its products",
+    "Repeat hike walk-001 on 2026-12-06 at 09:00",
+)  # AV1937-13
+AV1937_POST = "post maker Example Orchard"
 PRIVATE_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w+|\+\d|http://", re.I)
 
 
@@ -33,6 +41,9 @@ def problems(doc: str) -> list:
             out.append(f"plain-words line parses as a command ({verb(text)}): {line}")
         elif not plain and verb(text) is None:
             out.append(f"Send line is not a command: {line}")
+    found = {(plain, text) for plain, text, _ in sends(doc)}
+    out += [f"required example missing or misclassified: {t}" for t in AV1937_PLAIN if (True, t) not in found]
+    out += [f"required example missing or misclassified: {AV1937_POST}"] if (False, AV1937_POST) not in found else []
     headings = re.findall(r"^## (.+)$", doc, re.M)
     if headings != SECTIONS:
         out.append(f"sections are {headings}, not {SECTIONS}")
@@ -66,6 +77,32 @@ class PhoneGuideTest(unittest.TestCase):
             self.assertNotIn(text, {t for _p, t, _l in sends(self.doc.replace(f"`{text}`", "`gone`"))})
         self.assertEqual(problems(self.doc.replace("Send: `listing photo-product-001`", "Send (plain words): `listing photo-product-001`"))[0][:36],
                          "plain-words line parses as a command")
+
+    def test_av1937_examples_required_and_classified(self):  # AV1937-13
+        found = sends(self.doc)
+        self.assertLessEqual(set(AV1937_PLAIN), {t for p, t, _ in found if p})
+        self.assertIn(AV1937_POST, {t for p, t, _ in found if not p})
+        for text in AV1937_PLAIN:
+            self.assertIsNone(verb(text), text)
+        self.assertEqual(verb(AV1937_POST), "post")
+        self.assertEqual(problems(self.doc), [])
+
+    def test_missing_or_reclassified_av1937_example_fails(self):  # AV1937-13
+        for text in (*AV1937_PLAIN, AV1937_POST):
+            missing = f"required example missing or misclassified: {text}"
+            plain = text in AV1937_PLAIN
+            line = f"Send{' (plain words)' if plain else ''}: `{text}`"
+            self.assertIn(line, self.doc)
+            self.assertEqual(problems(self.doc.replace(f"`{text}`", "`gone`")), [f"Send line is not a command: Send: `gone`", missing] if not plain else [missing])
+            flipped = f"Send{'' if plain else ' (plain words)'}: `{text}`"
+            self.assertIn(missing, problems(self.doc.replace(line, flipped)), text)
+
+    def test_photo_reply_is_not_an_approval(self):  # AV1937-13
+        photo = AV1937_PLAIN[0]
+        self.assertIsNone(verb(photo))
+        self.assertEqual(verb("yes a1b2"), "approve")
+        self.assertIn(f"Send (plain words): `{photo}`", self.doc)
+        self.assertIn("send any `yes` as its own message", self.doc)
 
     def test_non_command_send_line_fails(self):
         self.assertEqual(problems(self.doc + "Send: `yes please`\n"), ["Send line is not a command: Send: `yes please`"])

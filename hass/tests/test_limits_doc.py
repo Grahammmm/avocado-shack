@@ -18,7 +18,7 @@ REQUIRED = {"media.MAX_BYTES", "media.MAX_PHOTOS_PER_MESSAGE", "conversation.HIS
             "conversation.FIND_TEXT_MAX", "conversation.ALIAS_NAME_MAX", "content_model.MAX_INTRO",
             "content_model.MAX_HEADLINE_LINE", "content_model.MAX_STORY", "content_model.MAX_NOTICE",
             "content_model.MAX_NOTICE_DAYS", "ops.store.PHONE_DIGITS", "margins.PACK_COST_MAX",
-            "margins.UNITS_MIN", "margins.UNITS_MAX", "shop.NEW_BADGE_DAYS"}  # AV0022-15, AV1322-12, AV1222-12, AV1622-11
+            "margins.UNITS_MIN", "margins.UNITS_MAX", "shop.NEW_BADGE_DAYS", "live_policy.MAX_RECORDS"}  # AV0022-15, AV1322-12, AV1222-12, AV1622-11, AV1937-13
 
 
 def claims(doc: str) -> list:
@@ -182,6 +182,22 @@ class LimitsDocTest(unittest.TestCase):
         self.assertEqual(js_const("const  NEW_BADGE_DAYS = 14 ;", "NEW_BADGE_DAYS"), 14)
         self.assertEqual(problems("**5** <!-- conversation.NO_SUCH -->")[0][:7], "line 1:")
         self.assertIn("not found", problems("**3** <!-- shop.NEW_BADGE_DAYS[x] -->")[0])
+
+    def test_maker_stop_limit_matches_source(self):  # AV1937-13
+        from hass import live_policy
+        lines = [c[0] for c in claims(self.doc) if (c[3], c[4]) == ("live_policy", "MAX_RECORDS")]
+        self.assertEqual(len(lines), 2)  # the live-changes line and the maker-stop line
+        self.assertIn("maker", self.doc.splitlines()[lines[-1] - 2] + self.doc.splitlines()[lines[-1] - 1])
+        self.assertEqual(problems(self.doc), [])
+        with mock.patch.object(live_policy, "MAX_RECORDS", 11):
+            self.assertEqual(problems(self.doc), [f"line {n}: doc says 10, live_policy.MAX_RECORDS is 11" for n in lines])
+
+    def test_maker_stop_limit_source_required(self):  # AV1937-13
+        no_claim = self.doc.replace("**10** <!-- live_policy.MAX_RECORDS -->", "10")
+        self.assertNotIn("live_policy.MAX_RECORDS", {f"{c[3]}.{c[4]}" for c in claims(no_claim)})
+        self.assertEqual(problems(no_claim), [])  # the doc check alone is clean; REQUIRED coverage is what fails
+        self.assertFalse(REQUIRED <= {f"{c[3]}.{c[4]}" for c in claims(no_claim)})
+        self.assertIn("live_policy.MAX_RECORDS", REQUIRED)
 
     def test_store_undo_wording(self):  # AV2152-11
         section = self.doc.split("## Undoing a store change")[1].split("\n## ")[0]

@@ -39,6 +39,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 - A reply sent more than 15 minutes after the message it answers (queued while the shop computer was offline, or a send that
   failed and was retried) starts with `Late reply to your message from <day> <time>:` so you know which message it is for.
 - One message can change at most **20** <!-- editor.MAX_OPS --> things. Split bigger jobs into several messages.
+- Stopping a maker is one thing however many products it hides, and has no cap of its own. A live change still touches at most
+  **10** <!-- live_policy.MAX_RECORDS --> records, and the maker and each product hidden with it count as one record each.
 
 ## Lists
 
