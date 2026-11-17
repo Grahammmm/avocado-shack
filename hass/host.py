@@ -20,16 +20,17 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import answer_reader, bridge, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
-from hass import nl_prep, preview, receiver, relay, sandbox, stagelog  # noqa: E402
+from hass import label_reader, nl_prep, preview, receiver, relay, relay_photos, sandbox, stagelog  # noqa: E402
 from hass.content_model import load_content  # noqa: E402
 from hass.ops import load_registry  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("hass.host")
-MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay")
+MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay", "/v1/photo")
 METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"})  # a logged method is one of these, never client text
-KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "release", "clover", "live", "off", "mode_gen"}
-OPTIONAL = {"previewer", "pictures", "release", "clover", "live", "off", "mode_gen"}  # HASS-CLOVER-2: `clover` absent = Clover not configured; nothing else changes
+KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "photos", "release", "clover", "live", "off", "mode_gen"}
+OPTIONAL = {"previewer", "pictures", "photos", "release", "clover", "live", "off", "mode_gen"}  # HASS-CLOVER-2: `clover` absent = Clover not configured; nothing else changes
+PHOTO_BODY, PHOTOS_PER_MIN = 12 * 1024 * 1024, 8
 PICTURES_PER_MIN = 10  # HASS-ATTACH-1: more picture requests in a minute get `gone` with no data
 TAILSCALE = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 LIVE_REASON = "live release is not installed"
@@ -104,7 +105,7 @@ def load_host(path, allow_port_zero=False) -> dict:
     text = lambda v: isinstance(v, str) and 0 < len(v) <= 4096  # noqa: E731
     itp = raw.get("interpreter")
     peers = raw.get("allowedPeers")
-    checks = {"pictures": type(raw.get("pictures", False)) is bool, "state": text(raw.get("state")), "secretFile": text(raw.get("secretFile")),
+    checks = {"photos": type(raw.get("photos", False)) is bool, "pictures": type(raw.get("pictures", False)) is bool, "state": text(raw.get("state")), "secretFile": text(raw.get("secretFile")),
               "approvals": raw.get("approvals") in ("hold", "private", "live"),
               "previewer": type(raw.get("previewer", False)) is bool,
               "runtimeCommit": isinstance(raw.get("runtimeCommit"), str) and len(raw["runtimeCommit"]) == 40
@@ -132,7 +133,7 @@ def load_host(path, allow_port_zero=False) -> dict:
     if bad: raise HostConfigError(bad)
     ip, port = _listen(raw["listen"], allow_port_zero)
     return {**raw, "addr": (str(ip), port), "peers": frozenset(str(_ip(p)) for p in peers), "previewer": raw.get("previewer", False),
-            "pictures": raw.get("pictures", False), "hostDir": str(Path(path).resolve().parent), "hostPath": str(Path(path).resolve())}
+            "photos": raw.get("photos", False), "pictures": raw.get("pictures", False), "hostDir": str(Path(path).resolve().parent), "hostPath": str(Path(path).resolve())}
 
 
 def runtime_problem(cfg, root=ROOT) -> bool:
@@ -232,7 +233,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard(): return
         length = self.headers.get("Content-Length", "")
         if not length.isdigit(): return self._send(411)
-        if int(length) > MAX_BODY: return self._send(413)
+        if int(length) > (PHOTO_BODY if self.path == "/v1/photo" else MAX_BODY): return self._send(413)
         body, srv = self.rfile.read(int(length)), self.server
         now = srv.clock()
         if self.path == "/v1/inbound":
@@ -243,7 +244,15 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError, RecursionError, bridge.EnvelopeError):
             return self._send(400, {"result": "rejected"})
         secs = int(now.timestamp())
-        if msg["op"] == "pull": out = {"op": "replies", "items": srv.store.pull(msg["max"], secs)}
+        if self.path == "/v1/photo":
+            if msg["op"] not in ("photo", "photo-refused") or not srv.photos: return self._send(400, {"result": "rejected"})
+            while srv.photo_times and secs - srv.photo_times[0] >= 60: srv.photo_times.popleft()
+            if len(srv.photo_times) >= PHOTOS_PER_MIN: return self._send(429)
+            srv.photo_times.append(secs)
+            try: srv.photos.put(msg, secs)
+            except ValueError: return self._send(400, {"result": "rejected"})
+            out = {"op": "photo-ok", "guid": msg["guid"], "idx": msg["idx"]}
+        elif msg["op"] == "pull": out = {"op": "replies", "items": srv.store.pull(msg["max"], secs)}
         elif msg["op"] == "ack": srv.store.ack(msg["ids"], secs); out = {"op": "acked", "ids": msg["ids"]}
         elif msg["op"] == "state" and "paused" not in msg: out = {"op": "state", "paused": srv.paused()}  # HASS-FAST-1, read-only
         elif msg["op"] == "picture":
@@ -261,7 +270,8 @@ class Server(HTTPServer):
         self.address_family = socket.AF_INET6 if ":" in cfg["addr"][0] else socket.AF_INET
         self.peers, self.secret, self.receiver, self.store, self.clock = cfg["peers"], secret, rx, store, clock
         self.paused = paused  # HASS-FAST-1: () -> bool, True when changes are paused or unknown (no 👀)
-        self.pic_times = collections.deque()
+        self.pic_times, self.photo_times = collections.deque(), collections.deque()
+        self.photos = relay_photos.RelayPhotos(cfg["hostDir"], clock) if cfg.get("photos") else None
         super().__init__(cfg["addr"], Handler)
 
     def server_bind(self):  # no reverse DNS lookup of the Tailscale address
@@ -425,8 +435,15 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
             return LiveEditor(cfg['state'], current['release'], current['hostDir'], clock=clock)
 
         editor = SiteEditor(cfg['state'], site_gate(cfg), live_factory, clock=clock)
+    photos, labels = None, None
+    if cfg.get("photos"):
+        photos = relay_photos.RelayPhotos(cfg["hostDir"], clock)
+        itp = cfg["interpreter"]
+        fallback = itp.get("fallback")
+        labels = label_reader.LabelReader(itp["url"], itp["model"], timeout=itp.get("timeout", 30), api=itp.get("api", "ollama"),
+            fallback=label_reader.LabelReader(fallback["url"], fallback["model"], timeout=fallback.get("timeout", 30)) if fallback else None)
     conv = conversation.Conversation(cfg["state"], editor or conversation.Editor(cfg["state"]), build(), clock,
-                                     previewer=preview.Previewer(worktree) if cfg["previewer"] else None)
+                                     previewer=preview.Previewer(worktree) if cfg["previewer"] else None, photos=photos, labels=labels)
     if hasattr(conv.editor, 'sync_settings'):
         conv.editor.conv = conv
         conv.editor.sync_settings(conv.settings)
