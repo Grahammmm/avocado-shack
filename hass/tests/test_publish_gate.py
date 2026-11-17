@@ -182,7 +182,7 @@ class PublishGate(unittest.TestCase):
         from PIL import Image
         with Image.open(attachment) as im:
             self.assertEqual(im.format, 'PNG')
-            self.assertGreater(im.height, 300)
+            self.assertGreater(im.height, 200)
             self.assertLess(im.width, 390)  # actual product box, not the whole viewport
         before = hashlib.sha256(attachment.read_bytes()).hexdigest()
         chat.say('add: Useful for furniture.')

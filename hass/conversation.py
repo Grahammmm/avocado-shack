@@ -843,7 +843,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
     def _listing_public_notes(self, listing, product):
         """Include fixed/generated card text and any expandable maker story, not just slots."""
         maker = self._makers().get(product.get("producerKey")) or {}
-        lines = ["Source line: " + ("Based in " + maker["place"] if maker.get("place") else "Ask us about the source in store."),
+        lines = ["Website description: " + q(product.get("description") or ""),
+                 "Source line: " + ("Based in " + maker["place"] if maker.get("place") else "Ask us about the source in store."),
                  "Picture description: " + q(product.get("imageAlt") or product.get("name") or "")]
         if product.get("addedOn"): lines.append("Badge: New (for the first two weeks).")
         if maker.get("story"): lines.append("Meet the maker: " + q(maker["story"]))
@@ -1029,6 +1030,19 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         except (TypeError, ValueError):
             return False
 
+    def _read_intake(self, msg):
+        """Bounded owner-text read before the write lock, never on photo output or approval commands."""
+        if (not self.dispatch or not getattr(self.dispatch, "simple_intake", lambda: False)() or not self.answer_reader
+                or msg.from_me or msg.kind != "new" or not self._is_owner(msg)
+                or not msg.text or len(msg.text) > MAX_OWNER_TEXT): return {}
+        if re.match(r"\s*(?:(?:add|description)\s*:|(?:remove|delete|yes|no|cancel|stop)\b)", msg.text, re.I): return {}
+        if not re.search(r"\b(?:bought|paid|cost|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$", msg.text, re.I): return {}
+        if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone(): return {}
+        req = self.requests.get(msg.chat, self._now())
+        if req and not self.dispatch.simple_intake(req): return {}
+        try: return self.answer_reader.fields(msg.text)
+        except Exception: return {}  # a failed reader leaves the deterministic parser, never an inferred value
+
     def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
         apply=False (SHOP-3 fixture receiver): an owner approval is rolled back before anything is written (no approval
@@ -1036,6 +1050,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if hasattr(self.editor, "sync_settings"): self.editor.sync_settings(self.settings)
         self._label_jobs = []  # AV2152-04: one job per new photo draft, in the order sent; reset on every message
         self._polish_jobs = []  # HASS-IMAGE-1: stored photos to clean up in the background, after the commit
+        self._intake_fields = self._read_intake(msg)
         self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
         # Intake waits for the label read, then sends one complete preview, not an early interview question.
         self._till_job = None  # HASS-CLOVER-4: the till code an owner's yes approved; the till is called only after this message is saved
@@ -1151,10 +1166,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
         if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
-        memory = None if command or msg.attachments > 0 else read_memory(msg.text)
-        first = None if msg.attachments > 0 or self.till is None else self.till.first(msg.text, self._asker, msg.chat)  # HASS-CLOVER-4: till code words, before commands
+        req = self.requests.get(msg.chat, now) if self.dispatch else None
+        intake_answer = bool(self.dispatch and getattr(self.dispatch, "simple_intake", lambda req: False)(req) and (
+            self.dispatch.takes_answer(msg.text, now) if req else item_intake.caption_answers(msg.text)[1]))
+        memory = None if command or msg.attachments > 0 or intake_answer else read_memory(msg.text)
+        first = None if msg.attachments > 0 or self.till is None or intake_answer else self.till.first(msg.text, self._asker, msg.chat)  # HASS-CLOVER-4: till code words, before commands
         if first: command = memory = None
-        till = first or (None if command or memory or msg.attachments > 0 or self.till is None else self.till.parse(msg.text))  # HASS-CLOVER-2
+        till = first or (None if command or memory or msg.attachments > 0 or self.till is None or intake_answer else self.till.parse(msg.text))  # HASS-CLOVER-2
         if memory and memory[0] == "memory" or till: expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
         for row in expired:
             self._move(row, "expired", expires_at=_iso(self._expiry(row)))
@@ -2015,21 +2033,32 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         return "photo-drafts"
 
     def _read_label(self, code, sha, reply_id):  # AV1537-15: a read label joins the waiting question; never ops
+        from hass.content_model import CATEGORIES
         try:
             web = Path(media.web_copy(self.settings["mediaRoot"], sha)["path"]).read_bytes()  # metadata-free copy only
             products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
-            found = self.labels.read(web, sorted({p["category"] for p in products if isinstance(p.get("category"), str)}))
+            context = ""
+            if code is None:
+                msg, request_id, now, question_id = reply_id
+                req = self.requests.get(msg.chat, now)
+                context = " ".join(req["texts"]) if req else ""
+            found = (self.labels.read(web, CATEGORIES, owner_text=context)
+                     if context and isinstance(self.labels, label_reader.LabelReader) else self.labels.read(web, CATEGORIES))
             if found:
                 from hass import product_claims
                 product_claims.remember(self.settings["mediaRoot"], sha, found)
         except Exception: found, products = {}, []  # noqa: BLE001 - one honest missing-detail preview, not a silent reading state
+        category = found.get("category")
         if code is None:
             msg, request_id, now, question_id = reply_id
+            if category == "pantry" and re.search(r"\b(?:glue|adhesive|hardware|screws?|nails?)\b", found.get("product_type", "") + " " + found.get("name", ""), re.I):
+                category = "general"
             with self._answer_to(msg.chat), self._tx():
                 req = self.requests.get(msg.chat, now)
                 if (req is None or req["request_id"] != request_id or req["state"] != "open"
                         or req["skill"] != "item.add" or req["attachments"] != [sha]): return
                 slots = {**req["slots"], "intake": {**req["slots"].get("intake", {}), "photo_details": found,
+                                                   "category_choice": category or "general",
                                                    "reading_photo": False, "simple": True}}
                 # Replace only this message's unsent question; an early receipt already sent stays sent.
                 self.db.execute("DELETE FROM outbox WHERE id = ? AND sent_at IS NULL", (question_id,))

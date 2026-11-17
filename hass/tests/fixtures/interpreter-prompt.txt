@@ -47,7 +47,7 @@ Rules:
 
 Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):
 test.set_capacity(eventId: id, required; capacity: int, >= 1)
-test.set_category(id: id, required; category: enum, required, one of fruit|vegetables|dairy|eggs|meat|pantry|drinks|bread|flowers)
+test.set_category(id: id, required; category: enum, required, one of fruit|vegetables|dairy|eggs|meat|pantry|drinks|bread|flowers|general)
 test.set_maker_story(key: maker_key, required; story: text, required)
 
 Catalog.
