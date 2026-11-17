@@ -286,7 +286,12 @@ def lint_plan_output(skill, ops, ops_registry) -> list:
         out.append(f"{skill.name}: plan: more than {MAX_OPS} ops")
     if skill.approval == "none" and ops:
         out.append(f"{skill.name}: plan: a read-only skill plans no op")
-    for o in ops:
+    for i, o in enumerate(ops, 1):
+        if not isinstance(o["op"], str):
+            out.append(f"{skill.name}: plan: op {i} must be text")
+            continue
+        if not isinstance(o["args"], dict):
+            out.append(f"{skill.name}: plan: args of op {i} must be an object")
         if o["op"] not in ops_registry:
             out.append(f"{skill.name}: plan: {o['op']} is not a registered op")
     return out
