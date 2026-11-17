@@ -85,6 +85,18 @@ class CommandsDocTest(unittest.TestCase):
         undo = {conv.parse_command(ex) for ex in self.examples if verb(ex) == "undo"}
         self.assertEqual(undo, {("undo", None), ("undo", "a1b2")})
 
+    def test_undo_cancel_aliases_documented_and_parsed(self):
+        doc = " ".join(DOC.read_text("utf-8").split())
+        for phrase in conv.UNDO_PHRASES + conv.CANCEL_PHRASES:
+            self.assertIn(f"`{phrase}`", doc)
+            self.assertEqual(conv.parse_command(phrase.upper() + "!.") if phrase in conv.UNDO_PHRASES
+                             else conv.parse_keyword(" " + phrase.title() + "! "),
+                             ("undo", None) if phrase in conv.UNDO_PHRASES else ("reject", None))
+        self.assertIsNone(conv.parse_command("undo that a1b2"))
+        self.assertIsNone(conv.parse_keyword("never mind the eggs"))
+        self.assertEqual(conv.parse_memory("forget it"), ("forget", "it", None))
+        self.assertIsNone(conv.parse_keyword("forget it"))
+
     def test_note_command_punctuation_exceptions(self):
         """The intro's remember/forget exceptions match parse_memory (t_527e1533 RETURN item 1)."""
         doc = " ".join(DOC.read_text("utf-8").split())
