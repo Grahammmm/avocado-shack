@@ -199,7 +199,7 @@ class SimpleIntake(unittest.TestCase):
         chat.say("yes " + code)
         self.assertEqual(chat.commits(), 1)
 
-    def test_live_protected_claim_gate_remains_in_preview_and_approval(self):
+    def test_live_label_text_is_not_a_blocked_claim_in_preview_or_approval(self):
         from hass import live_policy
         chat, _ = self.chat()
         chat.conv.settings["liveSite"] = {"url": "https://example.invalid"}
@@ -208,12 +208,12 @@ class SimpleIntake(unittest.TestCase):
         chat.conv._live_reasons = live_policy.check
         _, said = chat.say(FINANCE, base.JAR)
         self.assertIn("Made in USA", said[0])
-        self.assertIn("I can't put this on the website", said[0])
+        self.assertNotIn("I can't put this on the website", said[0])
         code = chat.live()["draft_code"]
-        self.assertNotIn("yes " + code, said[0])
+        self.assertIn("yes " + code, said[0])
         chat.say("yes " + code)
-        self.assertEqual(chat.commits(), 0)
-        self.assertEqual(chat.drafts()[0]["state"], "proposed")
+        self.assertEqual(chat.commits(), 1)
+        self.assertIn(chat.drafts()[0]["state"], ("applied", "verified"))
 
     def test_photo_and_website_approval_never_call_till_parser_or_writer(self):
         chat, _ = self.chat()

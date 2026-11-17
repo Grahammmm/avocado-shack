@@ -5,7 +5,7 @@ model and the ordinary editor/approval/live-policy gates, not a second publicati
 """
 import re
 
-from hass import newitem, voice
+from hass import newitem, voice, product_claims
 from hass.content_model import CATEGORIES, FORBIDDEN_TEXT, INVISIBLE_RE, TEXT_LIMITS
 from hass.skills import item_intake as ii
 
@@ -124,8 +124,13 @@ def plan(slots, content):
             raise ValueError("Prices stay in your private notes, not the website wording. The listing is unchanged.")
     if args["category"] not in CATEGORIES:
         raise ValueError("That shelf isn't on the website. The listing is unchanged.")
+    labels = product_claims.sanitize(slots, photo_details(slots.get("intake") or {}))
+    args.update(name=slots.get("name") or name, brand=slots.get("maker") or brand,
+                description=slots.get("description") or name)
     if slots.get("photo"):
         args.update(photo=slots["photo"], imageAlt=slots.get("image_alt") or name)
+        if labels:
+            args["labelText"] = labels
     # Reuse an identified catalog maker only; a new printed brand needs no invented town/story.
     matches = [key for key, maker in content.makers.items() if maker.get("name", "").casefold() == brand.casefold()]
     if len(matches) == 1:

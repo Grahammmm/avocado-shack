@@ -771,11 +771,14 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         """The proposal screenshot of ``draft`` (H06): {"ok", "png", "error"}; never raises past the previewer's own guard."""
         rendered = self.editor.render_draft(draft["change_id"])
         extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
-        return self.previewer.capture(rendered["files"], preview_mod.target_for(preview_mod.proposal_record(draft["records"]), shop_today(), store=rendered.get("store")),
+        record = preview_mod.proposal_record(draft["records"])
+        if record.get("collection") == "products":
+            record = next((r for r in reversed(draft["records"]) if r.get("collection") == "products" and r.get("key") == record.get("key")), record)
+        return self.previewer.capture(rendered["files"], preview_mod.target_for(record, shop_today(), store=rendered.get("store")),
                                       self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
             if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
 
-    def _proposal_reply(self, row, draft, prefix="", notes=()):
+    def _proposal_reply(self, row, draft, prefix="", notes=(), shot=None, retry=False):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06). HASS-CHAT-1: a picture
         that could not be drawn is never silent: the text says so first, the proposal is complete without it, and the picture
         is tried once more PREVIEW_RETRY_SECONDS later (retry_previews, outside this message's transaction)."""
@@ -783,14 +786,14 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if reasons: self._save_private(row, reasons)
         shots, head, tail = [], "", ""
         if self.previewer is not None:
-            shot = self._capture(draft)
+            shot = shot or self._capture(draft)
             shots = [shot["png"]] if shot.get("png") else []
             if not shot["ok"]:
                 self._problem("error", "preview-failed", excerpt=preview_mod.failure_kind(shot.get("error")))
                 if shots: tail = "\nThe picture may not show every part of this change; the list above is exactly what will change."
                 else:
                     head, tail = PREVIEW_FAILED_HEAD, "\n" + PREVIEW_RETRY_LINE
-                    self._queue_preview_retry(row)
+                    if not retry: self._queue_preview_retry(row)
         text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._named(row), head=head, undo=_is_undo(row),
                                       live_site=self.settings.get("liveSite") if draft.get("environment", {}).get("env") != "sandbox" else None,
                                       now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
@@ -801,10 +804,65 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 listing = req["slots"]
         if listing:
             from hass.skills import intake_simple
-            text = (head + "\n" if head else "") + intake_simple.preview(listing, None if reasons else row["code"])
-            text += "\n" + (live_policy.refusal(reasons) if reasons else "Nothing changes until your yes.") + tail
+            if shot is not None and not shot.get("ok"):
+                shots = []  # failed semantic checks are not a live-look card
+            product = next((r["after"] for r in reversed(draft["records"]) if r.get("collection") == "products" and r.get("after")), {})
+            # Public copy comes from the frozen draft, not the unsanitized input slots.
+            listing = {**listing, "name": product.get("name", listing.get("name")),
+                       "maker": product.get("brand", listing.get("maker")),
+                       "description": product.get("description", listing.get("description"))}
+            picture = self._listing_picture(listing, product)
+            if not shots and picture:
+                shots = [picture]
+                head = "I couldn't render the website card. Your photo is attached; the text below is the listing."
+                tail = ""
+            can_approve = not reasons and bool(shots)
+            text = (head + "\n" if head else "") + intake_simple.preview(listing, row["code"] if can_approve else None)
+            text += self._listing_public_notes(listing, product)
+            if shot and shot.get("ok") and shot.get("cardText"):
+                text += "\nAll website card text:\n" + q(shot["cardText"])
+            if reasons:
+                text += "\n" + live_policy.refusal(reasons)
+            elif can_approve:
+                text += "\nNothing changes until your yes."
+            else:
+                text += "\nI couldn't attach a picture. Please send the photo again before confirming."
+            text += tail
         if self._paused(): text += "\n" + PAUSED_LINE
         self._reply(text, shots, long_ok=True)
+
+    def _listing_picture(self, listing, product):
+        """An admitted metadata-free owner photo; never an arbitrary attachment path."""
+        sha = listing.get("photo")
+        if not isinstance(sha, str) or not media.SHA_RE.fullmatch(sha): return None
+        try:
+            return str(media.web_copy(self.settings["mediaRoot"], sha)["path"])
+        except (OSError, KeyError, media.Refused, editor_mod.UnsafeState):
+            return None
+
+    def _listing_public_notes(self, listing, product):
+        """Include fixed/generated card text and any expandable maker story, not just slots."""
+        maker = self._makers().get(product.get("producerKey")) or {}
+        lines = ["Source line: " + ("Based in " + maker["place"] if maker.get("place") else "Ask us about the source in store."),
+                 "Picture description: " + q(product.get("imageAlt") or product.get("name") or "")]
+        if product.get("addedOn"): lines.append("Badge: New (for the first two weeks).")
+        if maker.get("story"): lines.append("Meet the maker: " + q(maker["story"]))
+        if maker.get("url"): lines.append("Maker website: " + q(maker["url"]))
+        got = listing.get("intake") or {}
+        if got.get("dropped_claims"):
+            lines.append("Dropped from the listing: " + q("; ".join(got["dropped_claims"])))
+        sha, root = listing.get("photo"), self.settings.get("mediaRoot")
+        if sha and root:
+            try:
+                from hass import photo_polish
+                decision = photo_polish.decision(root, sha) if photo_polish.enabled(self.settings) else None
+                if decision and decision.get("use") == "house":
+                    lines.append("Picture: your photo (styled picture failed: " + photo_polish.plain_reason(decision.get("code")) + ")")
+                elif not photo_polish.enabled(self.settings):
+                    lines.append("Picture: your photo.")
+            except (OSError, media.Refused, editor_mod.UnsafeState):
+                lines.append("Picture: your photo.")
+        return "\n" + "\n".join(lines)
 
     PREVIEW_RETRY = ("CREATE TABLE IF NOT EXISTS preview_retry (row_id INTEGER PRIMARY KEY, change_id TEXT NOT NULL, chat TEXT NOT NULL,"
                      " due_at TEXT NOT NULL)")
@@ -833,12 +891,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             draft = self.editor.show(row["change_id"]).get("draft")
             shot = self._capture(draft) if isinstance(draft, dict) else {"ok": False, "png": None}
             with self._tx(), self._answer_to(due["chat"]):
+                req = self.requests.get(due["chat"], now) if self.requests else None
+                if req and req.get("draft_code") == row["code"] and req["slots"].get("intake", {}).get("simple"):
+                    # The same final-state reply owns text, picture, current code and
+                    # policy disposition. Never append an unconditional yes on retry.
+                    self._proposal_reply(row, draft, shot=shot, retry=True)
+                    continue
                 what = q(row["summary"])
+                allowed = not (self._live_reasons(draft) if self.settings.get("liveSite") else [])
+                confirm = f" To go ahead, reply {q('yes ' + row['code'])}." if allowed else ""
                 if shot.get("png") and shot.get("ok"):
-                    self._reply(PREVIEW_LATER.format(what=what) + f" To go ahead, reply {q('yes ' + row['code'])}.", [shot["png"]])
+                    self._reply(PREVIEW_LATER.format(what=what) + confirm, [shot["png"]])
                 else:
                     self._problem("error", "preview-failed", excerpt=preview_mod.failure_kind(shot.get("error")))
-                    self._reply(PREVIEW_STILL_FAILED.format(what=what) + f" To go ahead, reply {q('yes ' + row['code'])}.")
+                    self._reply(PREVIEW_STILL_FAILED.format(what=what) + confirm)
         return taken
 
     def _record(self, msg, disposition, owner=True):
@@ -1951,6 +2017,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             web = Path(media.web_copy(self.settings["mediaRoot"], sha)["path"]).read_bytes()  # metadata-free copy only
             products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
             found = self.labels.read(web, sorted({p["category"] for p in products if isinstance(p.get("category"), str)}))
+            if found:
+                from hass import product_claims
+                product_claims.remember(self.settings["mediaRoot"], sha, found)
         except Exception: found, products = {}, []  # noqa: BLE001 - one honest missing-detail preview, not a silent reading state
         if code is None:
             msg, request_id, now, question_id = reply_id

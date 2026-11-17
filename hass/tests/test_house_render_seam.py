@@ -428,7 +428,7 @@ class EditorTests(unittest.TestCase):
         self.assertEqual(self.committed_image(sha), photos.house_check({"mediaRoot": str(self.repo.media)}, sha)["jpeg"])
         self.assertTrue(hs.check_image(self.committed_image(sha))["pass"])
 
-    def test_a_defective_photo_stops_the_change_and_writes_nothing(self):
+    def test_defective_photo_replacement_stops_but_new_listing_uses_owner_photo(self):
         from hass.tests.test_set_photo import PID, _photo
         from hass.tests.test_catalog_ops import _req
         from hass.tests.test_product_add_photo import _add
@@ -438,6 +438,12 @@ class EditorTests(unittest.TestCase):
             with self.subTest(op=op[0]):
                 head, drafts = self.repo.head(), self.repo.drafts()
                 result = self.repo.prepare(_req(op))
+                if op[0] == "product.add":
+                    self.assertEqual(result["result"], "ok", result)
+
+                    self.assertEqual(result["draft"]["assets"], {f"assets/products/photo-{sha[:16]}.jpg": "sha256:" + sha})
+                    self.assertEqual(self.repo.head(), head)
+                    continue
                 self.assertEqual(result["result"], "refused", result)
                 self.assertEqual(result["reason"], photos.RETAKE["busy"])
                 self.assertEqual((self.repo.head(), self.repo.drafts(), self.repo.status()), (head, drafts, ""))

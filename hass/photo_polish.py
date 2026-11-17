@@ -91,6 +91,15 @@ def enabled(settings) -> bool:
     return settings.get(SETTING) is True and settings.get("houseRender") is True
 
 
+def plain_reason(code):
+    """Fixed short owner wording; never expose provider errors, paths or credentials."""
+    return {"auth": "sign-in unavailable", "api": "image service unavailable", "timeout": "timed out",
+            "size": "wrong image size", "type": "unreadable image", "text": "label changed",
+            "ocr": "label could not be checked", "colour": "colour changed", "match": "product did not match",
+            "style": "style check failed", "late": "not ready in time", "not-run": "not ready in time",
+            "no-hermes": "image tool unavailable"}.get(code, "image tool unavailable")
+
+
 # ---------------------------------------------------------------- the Hermes transport
 class HermesTransport:
     """``transport(src, out, timeout) -> {"ok": bool, "code": str}``: one Hermes image EDIT of ``src`` written to

@@ -7,6 +7,10 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## HASS-PUBLISH-GATE-1 — label attribution and real-card preview (November 17, 2026)
+
+Bound printed-label allowances to a private, write-once photo-read receipt (`source=label`), quote food label claims, and remove only rejected clauses from the reviewed listing. New-product styling failures use the owner's metadata-free web photo; existing photo replacements retain their retake checks. Private screenshots now reuse the installed pinned Playwright tool, crop the real generated card, include expandable maker text, and re-render on edits; failed captures attach the owner photo without contradictory approval text. The demo's recorded error was `playwright-missing`; styling was disabled, with no image-generation receipt, so no auth/quota failure is claimed. Public selling-price schema/rendering is handled separately by HASS-SITE-PRICE-1. Offline fixture/browser checks only; no live publish, credentials, model-route or service changes.
+
 ## AV2007-13 — stock-choice merge and question-fixture setup (November 16, 2026)
 
 Merged current main `73769b17c33fbb2427463ceadf69fc4ca2d6ad38` into PR #878 without rebasing. Retained both ledger histories and the 31 unique owner-battery rows; independently verified the original row-byte union against both parents, removing only an identical duplicated phone row. Main's stock-choice reconciliation now turns the old raspberry setup into a shelf check, so the unchanged cancellation oracle initially failed with `shelf-no` instead of `cancelled`. Added explicit synthetic scratch-catalogue setup to all three non-hike rows (regular/organic raspberry names) so they again exercise a genuinely ambiguous non-shelf question. Original owner texts, canned replies and exact expectations remain unchanged; main's exact-name stock-choice behavior remains intact.
