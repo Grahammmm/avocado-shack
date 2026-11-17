@@ -126,9 +126,31 @@ def _read(path, uid):
         return "unreadable", None
     if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != uid or folder.st_mode & 0o022:
         return "folder", None
+    # Anchor the folder: the leaf is opened relative to this descriptor, never by resolving the full pathname again.
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    try:
+        dfd = os.open(os.path.dirname(os.path.abspath(path)), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | cloexec)
+    except FileNotFoundError:
+        return "missing", None
+    except (OSError, ValueError):
+        return "folder", None
+    try:
+        return _read_in(dfd, folder, os.path.basename(os.path.abspath(path)), uid, cloexec)
+    finally:
+        os.close(dfd)
+
+
+def _read_in(dfd, folder, name, uid, cloexec):
+    try:
+        anchored = os.fstat(dfd)
+    except OSError:
+        return "folder", None
+    if (not stat.S_ISDIR(anchored.st_mode) or anchored.st_uid != uid or anchored.st_mode & 0o022
+            or (anchored.st_dev, anchored.st_ino) != (folder.st_dev, folder.st_ino)):
+        return "folder", None
     try:
         # O_NONBLOCK: a FIFO with no writer must not hang the open; the descriptor check below then refuses it as not-regular
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | cloexec, dir_fd=dfd)
     except FileNotFoundError:
         return "missing", None
     except (OSError, ValueError):
