@@ -349,7 +349,11 @@ class StockCase(unittest.TestCase):
         self.products_path = self.repo.wt / 'hass/content/products.json'
         self.store_path = self.repo.wt / 'hass/content/store.json'
         self.products_path.write_bytes(products); self.store_path.write_bytes(store)
+        # MAIN-RED-AVOCADO-SHACK: from 23:30 Pacific the two pull() steps (+15 min each) crossed the shop
+        # midnight, so the shelf check was stale ('not-checked-today'). The release fixture needs the real
+        # clock, so start an hour earlier in that late window instead of leaving the day.
         self.now = datetime.now(timezone.utc).replace(microsecond=0)
+        if self.now.astimezone(ZoneInfo('America/Los_Angeles')).hour >= 23: self.now -= timedelta(hours=1)
         self.check_today()
         git(self.repo.wt, 'add', '-A'); git(self.repo.wt, 'commit', '-qm', 'fixture site stock')
         fixture.now = self.now
