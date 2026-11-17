@@ -269,10 +269,12 @@ class TillDesk:
         draft = json.loads(row[0]) if row else {}
         return tuple(draft.get("site_ops") or ()), (draft.get("before") or {}).get("site")
 
-    def site_moved(self, base, worktree):
-        """True unless the website product still shows exactly the word the draft (or undo) was made against: a newer change wins."""
+    def site_moved(self, base, worktree, draft=None):
+        """True unless the website product still shows exactly the word the draft (or undo) was made against: a newer change wins.
+        FIX-2: with a prepared site ``draft``, the product as that draft found it (its own base), so nothing can land in between."""
         try:
-            record = next((r for r in reports.read_inputs(self.state, worktree())[0]["products"] if r.get("id") == base["id"]), None)
+            record = next((r["before"] for r in draft["records"] if (r["collection"], r["key"]) == ("products", base["id"])), None) if draft \
+                else next((r for r in reports.read_inputs(self.state, worktree())[0]["products"] if r.get("id") == base["id"]), None)
             product = parse_site_product(record)
             return product.status != "active" or product.availability != base["available"]
         except Exception:  # noqa: BLE001 - no base, or the website cannot be read: never write over what we cannot see

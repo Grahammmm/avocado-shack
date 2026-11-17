@@ -163,6 +163,42 @@ class TillWriteChat(NoNetwork, ConversationTestCase):
         self.site(limited)
         self.assertEqual((self.yes(undo), eggs()), ([chat.SITE_MOVED], (0, "limited")))
 
+    def race(self, when, undo=False):
+        """FIX-2: a newer website word (Limited) landing just before or just after the yes's own site prepare is kept; the till part
+        stands, the reply never says saved, and nothing is proposed again (no re-prepare)."""
+        pid = self.link_eggs()
+        limited, real = ("product.set_availability", {"id": pid, "available": "limited"}), self.conv.editor.prepare
+        _, code = self.draft("Eggs, dozen is sold out")
+        if undo:
+            self.yes(code)
+            self.assertEqual(self.say(f"undo {code}"), "till-undo")
+            code = re.search(r"Reply yes ([0-9a-f]{8})", self.replies()[0])[1]
+        seen, after = len(self.drafts()), 2 if undo else 0
+
+        def prepare(ops):   # only the yes's own site prepare, which comes after the till part (not the shelf pre-check)
+            hit = self.item("FAKEITEM00003")["itemStock"]["quantity"] == after
+            if hit and when == "before": self.site(limited)   # noqa: E701 - after the second check, before prepare
+            out = real(ops)
+            if hit and when == "after": self.site(limited)    # noqa: E701 - after prepare, before apply
+            return out
+        with mock.patch.object(self.conv.editor, "prepare", prepare):
+            out = self.yes(code)
+        self.assertEqual((out[-1], self.item("FAKEITEM00003")["itemStock"]["quantity"], self.site_word(pid)), (chat.SITE_NOT_YET, after, "limited"))
+        self.assertFalse([r for r in out if "saved" in r.lower()], out)
+        self.assertEqual([r["state"] for r in self.drafts()][seen:], [] if when == "before" else ["failed"])   # stale: no fresh proposal
+
+    def test_a_newer_word_before_the_yes_own_prepare_is_kept(self):
+        self.race("before")
+
+    def test_a_newer_word_between_prepare_and_apply_makes_apply_stale_and_is_kept(self):
+        self.race("after")
+
+    def test_a_newer_word_before_the_undo_own_prepare_is_kept(self):
+        self.race("before", undo=True)
+
+    def test_a_newer_word_between_the_undo_prepare_and_apply_is_kept(self):
+        self.race("after", undo=True)
+
     def test_a_wrong_sender_or_a_group_chat_gets_no_draft(self):
         self.assertEqual(self.say("set Hass avocado to 7", sender=STRANGER, chat="chat-stranger"), "ignored")
         self.assertEqual(self.say("set Hass avocado to 7", chat="chat-fixture;+;group"), "ignored")

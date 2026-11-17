@@ -976,7 +976,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         try:
             if self.till.site_moved(base, site): raise ValueError("site")  # changed while the till was written: keep the newer word
             out, now = self.editor.prepare([*([{"op": "store.confirm_selection", "args": {}}] if shelf else []), *ops]), self._now()
-            if out.get("result") != "ok": raise ValueError("site")
+            if out.get("result") != "ok" or self.till.site_moved(base, site, out["draft"]): raise ValueError("site")  # FIX-2: the draft's own base
             with self._tx():
                 row = self._propose(out["draft"], msg.sender, now)
                 self.db.execute("INSERT INTO approvals(sender, chat, provider_id, change_id, draft_hash, base, expires_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -984,7 +984,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 self._move(row, "approved")
                 self._audit("approved", row, approval="A1", approved_by=self._audit_role(msg.chat))
             res = self.editor.apply(row["change_id"], row["draft_hash"], **({"chat": msg.chat} if getattr(self.editor, "routes_chat", False) else {}))
-            with self._tx(): self._outcome(self._row(row["row_id"]), res, now)
+            done = res.get("result") in ("applied", "already-applied")
+            with self._tx():  # FIX-2: stale or any other result: the site is left as it is, never re-prepared
+                if done: self._outcome(self._row(row["row_id"]), res, now)
+                else: self._audit("failed", row, "stale" if res.get("result") == "stale" else "failed"); self._move(row, "failed", reason=_reason(res))  # noqa: E701,E702
+            if not done: raise ValueError("site")
         except Exception:  # noqa: BLE001 - the till part stands; the owner is told the website is not done
             with self._tx(): self._reply(self.till.SITE_NOT_YET)
         self._verify_pending()
