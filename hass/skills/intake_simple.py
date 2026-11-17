@@ -5,7 +5,7 @@ model and the ordinary editor/approval/live-policy gates, not a second publicati
 """
 import re
 
-from hass import newitem, voice
+from hass import newitem, voice, product_claims
 from hass.content_model import CATEGORIES, FORBIDDEN_TEXT, INVISIBLE_RE, TEXT_LIMITS
 from hass.skills import item_intake as ii
 
@@ -54,6 +54,16 @@ def fill(slots, texts):
         parts += [details[k] for k in ("size", "count", "colour", "finish", "materials") if details.get(k)]
         label_features = details.get("features", []) + details.get("printed_claims", []) + details.get("warnings", [])
         if label_features: parts.append(", ".join(p.rstrip(".") for p in dict.fromkeys(label_features)))
+        # A caption's explicit origin/organic words are owner statements, not label
+        # inference. Add them only on the first photo fill so later removals stay removed.
+        if details and not got.get("photo_applied"):
+            for text in texts:
+                for shown, sentence in product_claims.live_policy._pieces(text):
+                    phrase = re.sub(r"^\s*add\s*:?\s*", "", shown, flags=re.I).strip()
+                    if (product_claims.live_policy._protected(phrase)[1] == {"origin/organic"}
+                            and product_claims.live_policy._owner_said(sentence, product_claims.live_policy.claims.fold("\n".join(texts)))
+                            and phrase.casefold() not in " ".join(parts).casefold()):
+                        parts.append(phrase)
         kept, overflow = [], []
         for part in dict.fromkeys(p.rstrip(".") + "." for p in parts if p):
             if len(" ".join([*kept, part])) <= TEXT_LIMITS["product"]["description"]:
@@ -128,8 +138,15 @@ def plan(slots, content):
             raise ValueError("Prices stay in your private notes, not the website wording. The listing is unchanged.")
     if args["category"] not in CATEGORIES:
         raise ValueError("That shelf isn't on the website. The listing is unchanged.")
+    labels = product_claims.sanitize(slots, photo_details(slots.get("intake") or {}))
+    args.update(name=slots.get("name") or name, brand=slots.get("maker") or brand,
+                description=slots.get("description") or name)
     if slots.get("photo"):
         args.update(photo=slots["photo"], imageAlt=slots.get("image_alt") or name)
+        if labels:
+            args["labelText"] = labels
+        if owner := [t for t in slots.get("_owner_texts", []) if product_claims.live_policy._protected(t)[1] & {"origin/organic"}]:
+            args["ownerText"] = owner
     # Reuse an identified catalog maker only; a new printed brand needs no invented town/story.
     matches = [key for key, maker in content.makers.items() if maker.get("name", "").casefold() == brand.casefold()]
     if len(matches) == 1:
@@ -151,8 +168,10 @@ def preview(slots, code=None):
                                     *details.get("features", []), *details.get("printed_claims", []), *details.get("warnings", [])] if p),
                        key=len, reverse=True):
         if part and part.casefold() in description.casefold():
-            features.append(part.rstrip("."))
-            description = re.sub(re.escape(part) + r"[.!]?(?:,\s*)?", "", description, flags=re.I)
+            quoted = 'Label says: “' + part + '”'
+            shown = quoted if quoted.casefold() in description.casefold() else part
+            features.append(shown.rstrip("."))
+            description = re.sub(re.escape(shown) + r"[.!]?(?:,\s*)?", "", description, flags=re.I)
     description = " ".join(description.split()).strip(" ,;.")
     if description: description += "."
     lines = ["Here's the listing:", "Name: " + voice.quote(slots.get("name") or "Not read yet"),

@@ -36,7 +36,7 @@ SHELF_LABELS = {"fruit": "Fruit", "vegetables": "Vegetables", "dairy": "Dairy & 
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
 PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn")  # public when present; never required (any status)
 PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available", "available_on",  # owner-set word + its check day (SHOP-1)
-                           "restock_on")  # AV1109-03: private day more is expected; never published
+                           "restock_on", "labelSource", "ownerSource")  # private provenance, never emitted to the site
 PRODUCT_STATUSES = ("active", "hidden", "held")
 AVAILABILITY = ("yes", "limited", "no")
 SHOP_TZ = ZoneInfo("America/Los_Angeles")
@@ -268,6 +268,14 @@ def validate_products(problems, products, makers, site_dir: Path | None, checked
         for field in ("name", "brand"):
             _text(problems, f"{where}.{field}", rec.get(field), limit=limits[field])
         category = rec.get("category")
+        if "labelSource" in rec:
+            from hass.product_claims import valid_source
+            if not valid_source(rec["labelSource"]):
+                problems.append(f"{where}.labelSource: invalid label provenance")
+        if "ownerSource" in rec:
+            from hass.product_claims import valid_source
+            if not valid_source(rec["ownerSource"], 'owner'):
+                problems.append(f"{where}.ownerSource: invalid owner provenance")
         if isinstance(category, str) and len(category) > limits["category"]:
             problems.append(f"{where}.category: longer than {limits['category']} characters")
         elif category not in CATEGORIES:

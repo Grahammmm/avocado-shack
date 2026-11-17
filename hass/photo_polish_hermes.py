@@ -33,6 +33,7 @@ def main(argv):
         return 2
     root, model = argv[1], argv[2]
     src, out, prompt_file = (os.path.abspath(p) for p in argv[3:])
+    generation = argv[3] == "-"
     plugin, _, tier = model.partition(":")
     if plugin != "openai-codex" or not tier:  # the only Hermes route with credentials today (G 2026-11-16)
         _say(ok=False, code="route")
@@ -46,7 +47,7 @@ def main(argv):
         provider = importlib.import_module("plugins.image_gen.openai-codex").OpenAICodexImageGenProvider()
         with open(prompt_file, encoding="utf-8") as fh:
             prompt = fh.read()
-        res = provider.generate(prompt, "square", image_url=src)
+        res = provider.generate(prompt, "square", image_url=None if generation else src)
     except Exception:  # noqa: BLE001  (no traceback: it could carry paths)
         _say(ok=False, code="hermes")
         return 1
@@ -54,7 +55,7 @@ def main(argv):
         kind = res.get("error_type") if isinstance(res, dict) else None
         _say(ok=False, code=CODES.get(kind, "failed") if isinstance(kind, str) else "failed")
         return 1
-    if res.get("modality") != "image":  # an edit must have used the input photo
+    if res.get("modality") != ("text" if generation else "image"):
         _say(ok=False, code="not-edit")
         return 1
     extra = res.get("extra")  # validated before any copy or delete
