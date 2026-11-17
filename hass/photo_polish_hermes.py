@@ -52,10 +52,15 @@ def main(argv):
         return 1
     if not isinstance(res, dict) or not res.get("success"):
         kind = res.get("error_type") if isinstance(res, dict) else None
-        _say(ok=False, code=CODES.get(kind, "failed"))
+        _say(ok=False, code=CODES.get(kind, "failed") if isinstance(kind, str) else "failed")
         return 1
     if res.get("modality") != "image":  # an edit must have used the input photo
         _say(ok=False, code="not-edit")
+        return 1
+    extra = res.get("extra")  # validated before any copy or delete
+    extra = {} if extra is None else extra
+    if not isinstance(extra, dict):
+        _say(ok=False, code="failed")
         return 1
     try:
         shutil.copyfile(res["image"], out)
@@ -63,7 +68,6 @@ def main(argv):
     except (OSError, KeyError, TypeError):
         _say(ok=False, code="io")
         return 1
-    extra = res.get("extra") or {}
     _say(ok=True, model=res.get("model"), provider=res.get("provider"), pixel_size=extra.get("pixel_size"),
          request=extra.get("imagegen_request_id"))
     return 0
