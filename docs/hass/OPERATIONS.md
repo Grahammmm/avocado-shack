@@ -30,6 +30,19 @@ detached runtime worktree, `runtimeCommit` updated, services restarted (HASS-SYN
 - **G, full stop:** `systemctl --user stop hass-worker hass-receiver`, then on the Mac `launchctl bootout` of the forwarder
   (runbook step 23).
 
+## Photo transfer retries (HASS-PHOTO-RETRY-1)
+
+The private Mac spool keeps up to 50 active photo messages, four parts each, independently of the text acknowledgement.
+Prepared parts are stored before posting; retries reuse those bytes with a fresh authenticated envelope. The eight-post
+minute budget survives a restart. Busy workers leave jobs queued; failures back off 30 seconds up to five minutes.
+Conversion timeouts retry three times before a fixed refusal. Jobs expire after 30 minutes, recording `expired` and
+erasing prepared bytes; completed metadata is pruned after a day on subsequent photo intake. A full queue retains the
+inbound message for retry rather than accepting text and losing its photos. The relay-photo inbox waits up to one hour
+(in order; other messages can wait too), not only two retries. Its existing durable conversation/outbox reports one
+terminal failure if parts never arrive; the Mac does not send a competing failure notice. Exact part retries succeed
+without reinserting consumed bytes; conflicting digests/counts are refused. Host digest-only receipts last at least one
+day (longer while the inbox is pending). No photo/text/ID/URL/secret is added to logs. Deployment remains attended.
+
 ## Cloud reads through Codex (HASS-CLOUD-CODEX-1)
 
 The interpreter, the intake answer reader and the photo label reader can use OpenAI through G's ChatGPT/Codex sign-in in
