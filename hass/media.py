@@ -397,7 +397,9 @@ def verify_store(root) -> dict:
         for ext, path in images.items():
             if (data := read(path, sha)) is not None and hashlib.sha256(data).hexdigest() != sha:
                 problems.add(f"content mismatch: {sha[:12]}")
-            elif data is not None and sniff(data) == ("jpeg" if ext == "jpg" else "png"): good[sha, ext] = data
+            elif data is not None:  # hash-valid: the bytes must also sniff as the kind the name says
+                if sniff(data) == ("jpeg" if ext == "jpg" else "png"): good[sha, ext] = data
+                else: problems.add(f"original kind: {sha[:12]}")
             if "json" not in files: problems.add(f"sidecar missing: {sha[:12]}")
             elif data is not None and (raw := read(files["json"], sha)) is not None:
                 try: meta = json.loads(raw) if len(raw) <= SIDECAR_MAX else None  # RF1920-6: oversize or too deep is
