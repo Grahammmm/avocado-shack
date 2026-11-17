@@ -17,6 +17,7 @@ from hass.clover.mapper import format_quantity
 
 LABEL = "includes stock edits"
 NOTE = "(count drops between till reads, not exact sales)"
+GONE_NAME = "an item no longer on the till list"
 DATED = re.compile(r"(\d{4}-\d{2}-\d{2})-pos\.md")
 low = reads.low_stock
 
@@ -48,6 +49,9 @@ def drop_rows(snapshot, snaps, now, days, unsure=None):
             continue
         counts = [c[item.id] for c in series]
         rows.append((item, sum((a - b for a, b in zip(counts, counts[1:]) if a > b), Decimal(0))))
+    here = {i.id for i in snapshot.items}
+    gone = {k for c in series[:-1] for k in c} - here   # counted in an earlier read, absent from the latest item list: never 0 sold
+    vague += [GONE_NAME] * len(gone)
     if unsure is not None:
         unsure += sorted(vague)
     return sorted(((i, n) for i, n in rows if n > 0), key=lambda r: (-r[1], r[0].name))
