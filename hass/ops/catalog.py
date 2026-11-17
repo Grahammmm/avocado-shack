@@ -248,6 +248,25 @@ def _product_set_availability(content, args, ctx):
     return _touch("products", product["id"], before, product)
 
 
+def _product_set_availability_all(content, args, ctx):
+    """AV1052-04: set one availability word on every active product of a shelf and/or maker that does not have it yet.
+    Words only: available_on and the store's shelf-check day stay exactly as they are (store.confirm_selection owns the check)."""
+    shelf, maker = args.get("shelf"), args.get("maker")
+    if shelf is None and maker is None:
+        return NeedsDetails(["shelf", "maker"], "Which shelf or maker should change?")
+    changing = sorted((p for p in content.active_products()
+                       if (shelf is None or p.get("category") == shelf) and (maker is None or p.get("producerKey") == maker)
+                       and p.get("available") != args["available"]), key=lambda p: p["id"])
+    if not changing:
+        return Refused("No active products would change availability; nothing to change")
+    touched = []
+    for product in changing:
+        before = copy.deepcopy(product)
+        product["available"] = args["available"]
+        touched += _touch("products", product["id"], before, product)
+    return touched
+
+
 def _product_clear_availability(content, args, ctx):
     """AV1622-05: take one product's availability word and its own check day off its card (never sets 'no')."""
     product = _product(content, args["id"])
@@ -408,6 +427,8 @@ OPS = (
     Op("product.hide", _ID, _product_hide),
     Op("product.restore", _ID, _product_restore),
     Op("product.set_availability", {**_ID, "available": Arg("enum", choices=AVAILABILITY)}, _product_set_availability),
+    Op("product.set_availability_all", {"available": Arg("enum", choices=AVAILABILITY), "shelf": Arg("enum", required=False, choices=CATEGORIES),
+                                         "maker": Arg("maker_key", required=False)}, _product_set_availability_all),
     Op("product.clear_availability", _ID, _product_clear_availability),
     Op("maker.add", {"key": Arg("text"), **{k: Arg("url", required=False) if k == "url" else Arg("text", required=k != "story")
                                            for k in MAKER_EDITABLE}},

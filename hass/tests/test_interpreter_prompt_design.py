@@ -48,8 +48,8 @@ class PromptRuleTests(unittest.TestCase):
         without = prompt.replace("- " + RULES[-4] + "\n", "", 1)
         self.assertNotEqual(without, prompt)
         self.assertNotIn(DESIGN_UNSUPPORTED, without)
-        self.assertEqual(len(RULES), 36)  # AV0222-10 added the never-invent-a-maker-story rule (after the unprovided-claims rule); HASS-HIKE-FLOW-1 added three hike.create rules (before the photo rule, so the last six keep their places); HASS-NL-1 added nine rules (before the photo rule, so the last six keep their places); AV1937-05 added the hike.repeat rule; AV2152-06 the product.edit description rule;
-        # AV0222-03 the no-prices rule; AV0007-03 the pending-question "missing" ids rule; AV0007-06 the aliases rule; AV1937-06 the maker/route whole-text rule; AV2152-05 the shelf/maker group rule; AV2152-08 the notice first-day rule; AV2152-09 the club intro rule
+        self.assertEqual(len(RULES), 37)  # AV0222-10 added the never-invent-a-maker-story rule (after the unprovided-claims rule); HASS-HIKE-FLOW-1 added three hike.create rules (before the photo rule, so the last six keep their places); HASS-NL-1 added nine rules (before the photo rule, so the last six keep their places); AV1937-05 added the hike.repeat rule; AV2152-06 the product.edit description rule;
+        # AV0222-03 the no-prices rule; AV0007-03 the pending-question "missing" ids rule; AV0007-06 the aliases rule; AV1937-06 the maker/route whole-text rule; AV2152-05 the shelf/maker group rule; AV2152-08 the notice first-day rule; AV2152-09 the club intro rule; AV1052-04 the whole-shelf/maker availability rule (after the op-limit rule)
         self.assertLess(len(RULES[-4].encode("utf-8")), 300)
         self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
 
