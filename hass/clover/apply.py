@@ -100,6 +100,22 @@ class ApplyEngine:
     def _result(entry, raw):
         return {**entry, "result_item_id": raw["id"], "result_base": d._base(parse_item(raw))}
 
+    def reconcile(self, code, *, sender, chat):
+        """Durable approval hook: inspect under the journal lock, never resend an intent.
+
+        Settled results need only an outbox outcome. An interrupted intent stays
+        explicitly uncertain for attended reconciliation, even if no call ran.
+        """
+        with self.journal.locked() as db:
+            row = db.execute("SELECT * FROM changes WHERE code=? AND sender=? AND chat=?", (code, sender, chat)).fetchone()
+            if row is None or (sender, chat) not in self.owners:
+                return "held", False
+            status = row["status"]
+            if status == "intent":
+                self.journal.settle(db, code, "uncertain")
+                status = "uncertain"
+            return status, bool(json.loads(row["draft"]).get("site_ops"))
+
     def recover(self):
         with self.journal.locked() as db:
             client = self._client()

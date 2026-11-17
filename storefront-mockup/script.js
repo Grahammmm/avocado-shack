@@ -10,8 +10,15 @@ function show(html){
 }
 $('.close').onclick=()=>dialog.close();
 // A click whose target is the dialog itself is either its backdrop or its own padding/border; only a pointer outside the dialog's box (measured now) is the backdrop.
-dialog.addEventListener('click',e=>{if(e.target!==dialog)return;const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()});
+// (RF0511-12: that backdrop test also needs the press to have started outside; the handler sits just below the privacy line.)
 $('[data-policy]').onclick=()=>show('<h2>Your privacy matters.</h2><p>This site doesn’t use cookies, analytics or advertising trackers. Catalog search and filters work inside this page. Nothing is sold on this website, so no payment information is collected.</p><p>Online signup for Michael’s newsletter and hiking updates isn’t open yet. Until it is, those forms don’t send or save what you type, and the sample hike RSVP never leaves your browser. To hear about news or the next hike, ask us at the Shack.</p><p>Links to producers, trail information and maps go to other websites, which have their own privacy policies.</p>');
+// RF0511-12: a drag that starts on dialog text or a field and ends on the backdrop is a selection, not a dismissal; only a press that began outside the dialog box, released outside it too, closes it.
+let downOutside=false;
+const outsideBox=e=>{const r=dialog.getBoundingClientRect();return e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom};
+dialog.addEventListener('pointerdown',e=>{downOutside=e.isPrimary&&e.button===0&&e.target===dialog&&outsideBox(e)});
+dialog.addEventListener('pointercancel',()=>{downOutside=false});
+dialog.addEventListener('close',()=>{downOutside=false});
+dialog.addEventListener('click',e=>{const ok=downOutside;downOutside=false;if(e.target===dialog&&ok&&outsideBox(e))dialog.close()});
 
 // Keep old shared hiking anchors useful after moving the club onto its own page.
 if(document.querySelector('#market')&&['#hikes','#upcoming-hikes','#past-heading','#hike-updates','#route-ideas-heading'].includes(location.hash)){

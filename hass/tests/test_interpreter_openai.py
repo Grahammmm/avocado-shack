@@ -380,14 +380,15 @@ class LabelReaderOpenAITests(unittest.TestCase):
         self.assertEqual(url, f"{ROUTER}/v1/chat/completions")
         self.assertEqual((sent["chat_template_kwargs"], sent["response_format"], sent["temperature"]),
                          ({"enable_thinking": False}, {"type": "json_object"}, 0))
-        [message] = sent["messages"]
+        [system, message] = sent["messages"]
+        self.assertEqual(system, {"role": "system", "content": label_reader.PROMPT + json.dumps(self.CATS)})
         text, image = message["content"]
-        self.assertEqual(text, {"type": "text", "text": label_reader.PROMPT})
+        self.assertEqual(text, {"type": "text", "text": "Inspect this photo."})
         self.assertTrue(image["image_url"]["url"].startswith("data:image/jpeg;base64,"))
         self.assertNotIn("images", message)
         png = b"\x89PNG\r\n\x1a\n" + b"0" * 8
         labels.read(png, self.CATS)
-        self.assertTrue(fake.calls[1][1]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,"))
+        self.assertTrue(fake.calls[1][1]["messages"][1]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,"))
 
     def test_thinking_is_stripped_and_unparseable_output_is_a_failed_read(self):
         labels, _ = self.reader(oa(f"<think>{THINK}</think>{js(self.LION)}"))
@@ -396,9 +397,9 @@ class LabelReaderOpenAITests(unittest.TestCase):
             labels, _ = self.reader(oa(content))
             self.assertEqual((labels.read(JPG, self.CATS), labels.last_error), ({}, "shape"))
 
-    def test_claims_are_still_dropped_on_the_openai_backend(self):
+    def test_claims_are_quarantined_on_the_openai_backend(self):
         labels, _ = self.reader(oa(js({**self.LION, "origin": "Moss Landing", "organic": True, "name": "Organic Lion's Mane"})))
-        self.assertEqual(labels.read(JPG, self.CATS), {"brand": "Far West Fungi", "category": "mushrooms"})
+        self.assertEqual(labels.read(JPG, self.CATS), {"brand": "Far West Fungi", "category": "mushrooms", "printed_claims": ["Organic Lion's Mane"]})
 
     def test_a_failed_read_retries_once_on_the_ollama_reader(self):
         second_fake = Fake(ol(js(self.LION)))

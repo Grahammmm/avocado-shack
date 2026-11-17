@@ -91,8 +91,14 @@ class ReportsPack:
         row = next((r for r in self.memory.list() if r["key"] == f"cost.{ident}"), None) if has_table else None
         if row is None: return f"I don't have a cost saved for {q(typed)}. Tell me first, like " + q(f"cost {typed}: 24 for 12") + "."
         pack, _, units = row["value"].partition(" for ")
-        since = datetime.fromisoformat(row["created_at"]).astimezone(LOCAL_TZ)
-        return f"Using the cost you gave me {voice.natural(since, self._now())}.\n" + margins.say(margins.compute(pack, units, shrink or "0", margin))
+        calc = margins.say(margins.compute(pack, units, shrink or "0", margin))
+        try:  # RF1221-12: the saved date is only a label; an unreadable one never drops the calculation
+            saved = datetime.fromisoformat(row["created_at"])
+            if saved.utcoffset() is None: raise ValueError("naive")
+            when = f"Using the cost you gave me {voice.natural(saved.astimezone(LOCAL_TZ), self._now())}."
+        except (TypeError, ValueError, OverflowError, OSError):
+            when = "Using your saved cost; I can't read when you gave it to me."
+        return when + "\n" + calc
 
     def _post_names_something(self, text) -> bool:
         """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product

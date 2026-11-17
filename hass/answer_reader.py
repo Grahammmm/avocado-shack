@@ -37,6 +37,12 @@ class AnswerReader(LocalInterpreter):
         self.calls, self.fallback = 0, fallback  # how many times the model was asked; HASS-CLOUD-CODEX-1: asked once when this one failed
 
     def _answer_request(self, key, words, today) -> bytes:
+        try:
+            return self._build_answer_request(key, words, today)
+        except (TypeError, ValueError, UnicodeError, RecursionError):  # e.g. an unpaired surrogate: no transport, no content kept
+            raise _Failed("request") from None
+
+    def _build_answer_request(self, key, words, today) -> bytes:
         user = json.dumps({"question": key, "form": FORMS[key], "today": today.isoformat(), "answer": words}, ensure_ascii=False)
         messages = [{"role": "system", "content": PROMPT}, {"role": "user", "content": user}]
         if self.api != "ollama":
@@ -61,8 +67,9 @@ class AnswerReader(LocalInterpreter):
         try:
             if key not in FORMS or not isinstance(words, str) or not words.strip() or len(words) > 400:
                 raise _Failed("shape")
+            body = self._answer_request(key, words, today)
             self.calls += 1
-            result = self._call(self._answer_request(key, words, today))
+            result = self._call(body)
             return {"value": result["value"]} if "value" in result else {}
         except _Failed as failure:
             self.last_error = failure.args[0]

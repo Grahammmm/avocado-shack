@@ -150,7 +150,8 @@ class HassSideTests(unittest.TestCase):
         labels = cloud_codex.reader(label_reader.LabelReader, BLOCK_OK, cloud_codex.CodexTransport("low", runner))
         self.assertEqual(labels.read(b"\x89PNG\r\n\x1a\nxx", []), {"name": "Wood Glue", "brand": "Gorilla"})
         req = runner.requests[0]
-        self.assertEqual((req["instructions"], req["text"], req["images"][0][:22]), (label_reader.PROMPT, "", "data:image/png;base64,"))
+        self.assertEqual((req["instructions"], req["text"], req["images"][0][:22]),
+                         (label_reader.PROMPT + "[]", "Inspect this photo.", "data:image/png;base64,"))
         answers = cloud_codex.reader(answer_reader.AnswerReader, BLOCK_OK, cloud_codex.CodexTransport("low", runner), think=None)
         answers.fallback.transport = lambda *a: chat_reply('{"value": true}')
         with self.assertLogs("hass.cloud", "ERROR"):
@@ -322,7 +323,7 @@ class CloverAndTranscriptTests(ConversationTestCase):
             self.assertEqual([json.loads(r["text"])["message"] for r in runner.requests], ORDINARY)
         photo = FakeRunner({"ok": True, "text": '{"name": "Wood Glue"}', "model": "gpt-6.1-sol", "ms": 9})  # a captionless photo turn
         cloud_codex.reader(label_reader.LabelReader, BLOCK_OK, cloud_codex.CodexTransport("low", photo)).read(b"\x89PNG\r\n\x1a\nxx", [])
-        self.assertEqual((len(photo.requests), photo.requests[0]["text"], len(photo.requests[0]["images"])), (1, "", 1))
+        self.assertEqual((len(photo.requests), photo.requests[0]["text"], len(photo.requests[0]["images"])), (1, "Inspect this photo.", 1))
 
 
 if __name__ == "__main__":

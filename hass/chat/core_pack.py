@@ -364,6 +364,7 @@ class CorePack:
             lines.append("I'm close to the number of new requests I can read today.")
         waiting = self._waiting_lines(now)
         lines += waiting or [NOTHING]
+        lines += [f"Waiting for your answer: {ask}"] if (ask := self._legacy_question(now)) else []  # AV2007-14
         with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
             lines.append(shelf.check_line(f))  # AV1102-05

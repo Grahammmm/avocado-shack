@@ -24,7 +24,7 @@ demo = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(demo)
 
 # What 02-DEMO-PLAN promises and main does not do yet (each is a named gap, never a silent pass).
-KNOWN_GAPS = {"s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-12"}
+KNOWN_GAPS = {"s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-02"}
 
 
 class Run:
@@ -129,7 +129,7 @@ class OfflineRehearsal(unittest.TestCase):
     def test_the_table_names_every_row_and_the_qa_id_of_a_gap(self):
         text = demo.table(Run.get(), Run.preview, live=False)
         self.assertIn("s16-stranger", text)
-        self.assertIn("GAP (QA1-12)", text)
+        self.assertIn("GAP (QA1-02)", text)
         self.assertIn("0 FAIL", text)
 
 
@@ -178,7 +178,7 @@ class RowsReallyAssert(unittest.TestCase):
 
     def test_a_known_gap_that_fails_is_a_gap_not_a_fail(self):
         res = self.mutated("s14-pause-please", lambda r: r)
-        self.assertEqual((res.status, res.row["known_gap"]), ("GAP", "QA1-12"))
+        self.assertEqual((res.status, res.row["known_gap"]), ("GAP", "QA1-02"))
         res = self.mutated("s14-pause-please", lambda r: {k: v for k, v in r.items() if k != "known_gap"})
         self.assertEqual(res.status, "FAIL")
 

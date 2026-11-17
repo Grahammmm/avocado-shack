@@ -14,6 +14,7 @@ async function mount(host){
  host.dataset.mounted='true';
  if(host.dataset.ready==='error')host.innerHTML='<p class="trail-map-unavailable">Loading the trail map…</p>';
  delete host.dataset.ready;
+ let observer=null;const release=()=>{if(observer){observer.disconnect();observer=null;}};
  try{
   let d;
   try{const response=await fetch('/assets/trails/point-buchon.json');if(!response.ok)throw Error('Trail data unavailable');d=await response.json();}
@@ -42,7 +43,7 @@ async function mount(host){
   photo.addEventListener('error',()=>{
    const enlarged=!!(dialog&&dialog.contains(wrapper));
    if(failed||!/point-buchon-(aerial|topo)\.webp$/.test(photo.getAttribute('href'))||!host.isConnected||!(enlarged||host.contains(wrapper)))return;
-   failed=true;
+   failed=true;release();
    if(enlarged){const d=dialog;dialog=null;document.body.style.overflow=previousOverflow;d.close();d.remove();}
    delete host.dataset.mounted;host.innerHTML=UNAVAILABLE+'<p><button type="button" data-trail-retry>Try loading the map again</button></p>';host.dataset.ready='error';host.querySelector('[data-trail-retry]').addEventListener('click',e=>{if(host.isConnected&&host.contains(e.currentTarget))mount(host);});
   });
@@ -131,11 +132,11 @@ async function mount(host){
   stage.addEventListener('pointerdown',e=>{if(e.target.closest('button')||e.button!==0||(e.pointerType==='touch'&&zoom===1))return;drag={id:e.pointerId,x:e.clientX,y:e.clientY,cx:view.cx,cy:view.cy};stage.setPointerCapture(e.pointerId);stage.classList.add('is-dragging');});
   stage.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;view.cx=drag.cx-(e.clientX-drag.x)*view.width/size.width;view.cy=drag.cy-(e.clientY-drag.y)*view.height/size.height;setView();});
   const endDrag=()=>{drag=null;stage.classList.remove('is-dragging');};stage.addEventListener('pointerup',endDrag);stage.addEventListener('pointercancel',endDrag);stage.addEventListener('lostpointercapture',endDrag);
-  new ResizeObserver(()=>{if(stage.clientWidth!==size.width||stage.clientHeight!==size.height){fit();drawProfile();}}).observe(stage);
+  observer=new ResizeObserver(()=>{if(!failed&&stage.clientWidth!==size.width||stage.clientHeight!==size.height){fit();drawProfile();}});observer.observe(stage);
   fit();drawProfile();updatePosition(0);
   const stats=host.closest('.trail-invitation')?.querySelectorAll('.trail-stats dd');if(stats?.length===4){stats[0].textContent=`${miles} miles`;stats[2].textContent=`~${gain} ft`;stats[2].previousElementSibling.textContent='Est. elevation gain';}
   host.dataset.ready='true';
- }catch(error){host.innerHTML=UNAVAILABLE;host.dataset.ready='error';}
+ }catch(error){release();host.innerHTML=UNAVAILABLE;host.dataset.ready='error';}
 }
 window.AvoshackTrailExplorer={mount};
 })();

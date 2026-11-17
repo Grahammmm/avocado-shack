@@ -45,6 +45,7 @@ class ReplyTests(unittest.TestCase):
         fake.settings = {}  # live mode is absent in this existing offline reply fixture
         fake._row_live_site.return_value = None  # a private-mode row has no live site (Conversation._row_live_site is mocked here)
         fake.previewer = object()
+        fake._with_question.side_effect = lambda text: text  # AV2007-14: no open question in this fixture, so the text is unchanged
         fake._drafts.return_value = [{"code": "C1", "summary": "renamed the route"}]
         fake.verify.return_value = ("/tmp/shot.png", None, unshown)
         fake._reply.side_effect = lambda text, files=None: said.append(text)

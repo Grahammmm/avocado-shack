@@ -90,9 +90,10 @@ def _daily_limit(db, tables: set, now: datetime, cap: int, problems: list, info:
     today, refused = now.astimezone(conversation.LOCAL_TZ).date(), 0
     if "messages" in tables:
         for (raw,) in db.execute("SELECT received_at FROM messages WHERE disposition = 'daily-limit'"):
-            try: when = datetime.fromisoformat(raw)
-            except (TypeError, ValueError): continue  # no known day: not today
-            refused += when.utcoffset() is not None and when.astimezone(conversation.LOCAL_TZ).date() == today
+            try:
+                when = datetime.fromisoformat(raw)
+                refused += when.utcoffset() is not None and when.astimezone(conversation.LOCAL_TZ).date() == today
+            except (TypeError, ValueError, OverflowError): continue  # no known day (RF0520-12: or a Pacific date out of range): not today
     if refused: problems.append(_problem("daily-limit", f"{refused} message(s) not read today, cap {cap}"))
     row = db.execute("SELECT calls FROM usage WHERE day = ?", (today.isoformat(),)).fetchone() if "usage" in tables else None
     info.append(_problem("interpreter", f"{row[0] if row and type(row[0]) is int else 0} of {cap} today"))

@@ -195,6 +195,24 @@ class HealthTest(unittest.TestCase):
         got = self.run_health(now=datetime(2027, 3, 14, 20, 0, tzinfo=timezone.utc))[1]["problems"][0]["detail"]
         self.assertEqual(got, "2 message(s) not read today, cap 2")  # the 23-hour Mar 14 ends at 07:00 UTC
 
+    def test_daily_limit_calendar_conversion_overflow_is_skipped(self):  # RF0520-12
+        good = ("daily-limit", "2026-11-02T10:00:00+00:00")
+        for bad in ("0001-01-01T00:00:00+00:00", "9999-12-31T23:59:59-23:59"):
+            self.limit_db(("2026-11-02", 1), good, ("daily-limit", bad), ("daily-limit", good[1]), ("daily-limit", b"x"))
+            code, doc = self.run_health()
+            self.assertEqual((code, doc["notify"]), (1, True), bad)
+            self.assertEqual(doc["problems"], [{"check": "daily-limit", "detail": "2 message(s) not read today, cap 2"}])
+            self.assertEqual(doc["info"], [{"check": "interpreter", "detail": "1 of 2 today"}])
+            self.assertNotIn(bad, json.dumps(doc))
+            os.unlink(self.state / "conversation.sqlite3")
+
+    def test_daily_limit_unrepresentable_only_has_no_refusal(self):  # RF0520-12
+        self.limit_db(("2026-11-02", 1), ("daily-limit", "0001-01-01T00:00:00+00:00"),
+                      ("daily-limit", "9999-12-31T23:59:59-23:59"), ("daily-limit", "0001-01-02T00:00:00+00:00"))
+        code, doc = self.run_health()
+        self.assertEqual((code, doc["ok"], doc["problems"]), (0, True, []))
+        self.assertEqual(doc["info"], [{"check": "interpreter", "detail": "1 of 2 today"}])
+
     def test_daily_limit_missing_tables_and_no_cap(self):
         self.limit_db(None, ("daily-limit", "2026-11-02T10:00:00+00:00"))  # no usage table: 0 calls, refusal still seen
         code, doc = self.run_health()

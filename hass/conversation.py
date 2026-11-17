@@ -21,6 +21,7 @@ from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_polic
 from hass import capabilities, photo_polish, transcript  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
+from hass.clover import approvals as till_approvals  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
 # imported back here, so hass.conversation.<name> still works for every caller and test.
 from hass.chat.shared import (  # noqa: E402,F401
@@ -78,6 +79,17 @@ UNREADABLE = {"unsupported": "Sorry, I didn't understand that. Could you say it 
 HOSTILE_RE = re.compile(r"\b(?:ignore|disregard|forget|override|bypass)\b[^.!?]{0,40}\b(?:rules|instructions|guidelines|approval|safeguards?|previous|above)\b"
                         r"|\b(?:publish|approve|apply|post)\s+(?:everything|all\s+(?:of\s+)?(?:it|changes|drafts))\b|\bskip\s+(?:the\s+)?approvals?\b"
                         r"|\b(?:system|developer)\s+prompt\b|\bjailbreak\b|\bact\s+as\b[^.!?]{0,30}\b(?:admin|root|developer)\b", re.I)
+NEAR_STOP_REPLY = "To stop changes, send exactly: " + q("stop changes")  # AV2007-05 (QA1-12): the real words, never model-invented ones
+NEAR_RESUME_REPLY = "To resume changes, send exactly: " + q("resume changes")
+NEAR_CONTROL_RE = re.compile(r"(?:(?:please|now|thanks) )*(?:(pause|stop)|(resume))(?: changes)?(?: (?:please|now|thanks))*")
+
+
+def near_control(text):
+    """AV2007-05: whole-message pause/stop/resume [changes] with only please/now/thanks around it -> "stop" or "resume"; else None."""
+    m = NEAR_CONTROL_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower())) if isinstance(text, str) and len(text) < 100 else None
+    return None if m is None else "stop" if m.group(1) else "resume"
+
+
 HOSTILE_REPLY = "I can only publish changes you approve one at a time. Nothing was changed."  # HASS-VOICE-1: no model call, no draft
 CORRECTION_RE = re.compile(r"(?:no[,.!]|nope|that'?s (?:wrong|not right|not what)|not what i (?:meant|said|asked)|wrong\b|i didn'?t (?:mean|ask|say)|you got (?:it|that) wrong)", re.I)
 RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question stays open for a short answer; longest kept
@@ -850,7 +862,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     # -- message handling ----------------------------------------------------------------------------------------
     _answering = None  # AV0022-10 (H16): received_at of the message handle() is running; replies are tagged with it
-    till = None  # HASS-CLOVER-2: a hass.clover.chat.TillDesk when host.json has a `clover` block (make_worker); None = no till replies
+    _till = None
+
+    @property
+    def till(self):
+        return self._till
+
+    @till.setter
+    def till(self, desk):
+        self._till = desk  # engine attachment is still separately gated; read-only desks never gain one here
+        till_approvals.recover(self)
     _forwarded = None  # HASS-SEC-2 (L5): when the message reached the inbox (inbox.Inbox.forwarded_at); None when not known
 
     def handle(self, msg: Inbound, last_try=False, apply=True, forwarded_at=None) -> str:
@@ -934,15 +955,18 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self._polish_jobs = []  # HASS-IMAGE-1: stored photos to clean up in the background, after the commit
         self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
         self._intake_receipt(msg)  # HASS-INTAKE-2: a bare photo's first question goes out before the photo is fetched
+        self._till_job = None  # HASS-CLOVER-4: the till code an owner's yes approved; the till is called only after this message is saved
         try:
             with self._tx():
                 disposition, approved = self._handle(msg, last_try)
                 if approved is not None and not apply: raise _Held(approved["code"])
+                till_approvals.save(self, msg, self._till_job, apply)
         except _Held as held:
             with self._tx():
                 self._reply(HELD_REPLY.format(code=held.code))
                 self._record(msg, "approval-held")
             return "approval-held"
+        till_approvals.recover(self)  # also reconciles a redelivered provider id
         for job in self._label_jobs:  # AV1537-15: after the commit, never holding the lock; AV2152-04: a failed one never stops the next
             try: self._read_label(*job)
             except Exception: continue  # noqa: BLE001 - no label is today's reply exactly
@@ -955,6 +979,45 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._outcome(self._row(approved["row_id"]), out, self._now())
         self._verify_pending()
         return disposition
+
+    def _till_apply(self, msg, job, apply) -> None:
+        """HASS-CLOVER-4: an owner's till yes, after its message is saved (never inside the write transaction). The till part first; only
+        when it is read back does a website word riding on it go through the normal draft, approval, editor.apply and outcome.
+        FIX-1: the website must still show the word the draft (or undo) was made against, or nothing at all changes (a newer word
+        wins); ``job`` = (code, True) after the owner's yes to the shelf question, whose check then goes in the same site change."""
+        code, shelf = job if isinstance(job, tuple) else (job, False)
+        ops, base = self.till.bundle(code, self._asker, msg.chat) if apply else ((), None)
+        site = lambda: editor_mod._load(str(self.sdir))[2]  # noqa: E731
+        if ops and self.till.site_moved(base, site):
+            self.till.drop(code, self._asker, msg.chat)
+            with self._tx():
+                self._reply(self.till.SITE_MOVED)
+                till_approvals.finish(self, msg)
+            return
+        text, ops = (HELD_REPLY, ()) if not apply else self.till.approve(code, sender=self._asker, chat=msg.chat)
+        with self._tx():
+            self._reply(text, long_ok=True)
+            till_approvals.finish(self, msg)
+        if not ops: return
+        try:
+            if self.till.site_moved(base, site): raise ValueError("site")  # changed while the till was written: keep the newer word
+            out, now = self.editor.prepare([*([{"op": "store.confirm_selection", "args": {}}] if shelf else []), *ops]), self._now()
+            if out.get("result") != "ok" or self.till.site_moved(base, site, out["draft"]): raise ValueError("site")  # FIX-2: the draft's own base
+            with self._tx():
+                row = self._propose(out["draft"], msg.sender, now)
+                self.db.execute("INSERT INTO approvals(sender, chat, provider_id, change_id, draft_hash, base, expires_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                (msg.sender, msg.chat, msg.provider_id, row["change_id"], row["draft_hash"], row["base"], row["expires_at"], _iso(now)))
+                self._move(row, "approved")
+                self._audit("approved", row, approval="A1", approved_by=self._audit_role(msg.chat))
+            res = self.editor.apply(row["change_id"], row["draft_hash"], **({"chat": msg.chat} if getattr(self.editor, "routes_chat", False) else {}))
+            done = res.get("result") in ("applied", "already-applied")
+            with self._tx():  # FIX-2: stale or any other result: the site is left as it is, never re-prepared
+                if done: self._outcome(self._row(row["row_id"]), res, now)
+                else: self._audit("failed", row, "stale" if res.get("result") == "stale" else "failed"); self._move(row, "failed", reason=_reason(res))  # noqa: E701,E702
+            if not done: raise ValueError("site")
+        except Exception:  # noqa: BLE001 - the till part stands; the owner is told the website is not done
+            with self._tx(): self._reply(self.till.SITE_NOT_YET)
+        self._verify_pending()
 
     def _is_owner(self, msg) -> bool:
         """The owner chat with an owner sender, or (gIsOwner) G's own one-to-one chat with a G sender. Nobody else."""
@@ -984,6 +1047,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             command = None  # A sentence is not a listing request unless it names something in the catalog.
         if command and command[0] == "post" and len(command[1].split()) >= 2 and not self._post_names_something(command[1]):
             command = None  # HASS-VOICE-1: "post a sale on social media" is a sentence for the interpreter, not a product or hike name
+        if command is None and msg.attachments <= 0 and (near := near_control(msg.text)) is not None:  # AV2007-05: guidance only, no model, nothing paused or resumed
+            self._reply(NEAR_STOP_REPLY if near == "stop" else NEAR_RESUME_REPLY)
+            self._record(msg, "near-control")
+            return "near-control", None
         self._close_asks(now)  # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten (FW-3: and a closed one older than 24 h)
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
@@ -995,7 +1062,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         memory = None if command or msg.attachments > 0 else read_memory(msg.text)
-        till = None if command or memory or msg.attachments > 0 or self.till is None else self.till.parse(msg.text)  # HASS-CLOVER-2
+        first = None if msg.attachments > 0 or self.till is None else self.till.first(msg.text, self._asker, msg.chat)  # HASS-CLOVER-4: till code words, before commands
+        if first: command = memory = None
+        till = first or (None if command or memory or msg.attachments > 0 or self.till is None else self.till.parse(msg.text))  # HASS-CLOVER-2
         if memory and memory[0] == "memory" or till: expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
         for row in expired:
             self._move(row, "expired", expires_at=_iso(self._expiry(row)))
@@ -1008,9 +1077,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             disposition = self._memory(msg, *memory)
             self._record(msg, disposition)
             return disposition, None
-        if till:  # HASS-CLOVER-2: a till question (or a till change, which is refused): read-only, from the private cache, no model
-            self._reply(self.till.answer(till, now), long_ok=True)
-            disposition = "till-write-refused" if till[0] == "write" else "till-read"
+        if till:  # HASS-CLOVER-2/4: a till read, or a till change by fixed words: never the interpreter or a model; a yes runs after the commit
+            if till[0] == "yes" and not (paused := self._paused()):
+                if (ops := self.till.bundle(till[1], self._asker, msg.chat)[0]) and (out := self.editor.prepare(list(ops))).get("result") == "refused" \
+                        and out.get("reason") == catalog.NOT_CHECKED_TODAY:  # FIX-1 (CLOVER.md 5): the editor's own shelf-check rule, as for site changes
+                    disposition = self._ask_shelf(msg, now, {"ops": [], "till": till[1]}, [])  # the shelf question first; nothing waits half-done
+                    self._record(msg, disposition)
+                    return disposition, None
+                self._till_job = till[1]
+            else: self._reply(self.till.answer(till, now, sender=self._asker, chat=msg.chat, worktree=lambda: editor_mod._load(str(self.sdir))[2]), long_ok=True)
+            disposition = "paused" if till[0] == "yes" and paused else {"write": "till-write-refused", "till": "till-draft", "yes": "till-approved", "no": "till-cancelled", "undo": "till-undo"}.get(till[0], "till-read")
             self._record(msg, disposition)
             return disposition, None
         if msg.attachments <= 0 and (unknown := parse_unknown_code(msg.text)) is not None and not any(
@@ -1288,9 +1364,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             if last is None: return None
             earlier = self._ask_texts(last["provider_id"], now)
             if last["disposition"] != "question" and not (last["disposition"] == "needs-details" and earlier):  # AV2007-13: a refused code or a lookup in between keeps it
+                if (kept := self._asked_before_yes(now)) is not None: return kept  # AV2007-14: a yes that saved a draft leaves the question open
                 held = self.db.execute("SELECT value, provider_id FROM control WHERE name = ?", (self._hold_name(),)).fetchone()
                 last = self.db.execute("SELECT provider_id, disposition, received_at FROM messages WHERE provider_id = ?",
-                                       (held["value"],)).fetchone() if held and held["provider_id"] == last["provider_id"] else None
+                                       (held["value"],)).fetchone() if held and held["provider_id"] == last["provider_id"] \
+                    else None
                 if last is None: return None
                 earlier = self._ask_texts(last["provider_id"], now)
             if last["disposition"] != "question" and not (last["disposition"] == "needs-details" and earlier): return None
@@ -1300,6 +1378,41 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             if now - datetime.fromisoformat(row["created_at"]) > timedelta(minutes=RECENT_MINUTES): return None
             return {"question": row["text"], **({"earlier": earlier} if earlier else {})}
         except (sqlite3.Error, ValueError, TypeError, KeyError): return None
+
+    def _asked_before_yes(self, now):
+        """AV2007-14: the open legacy question as `recent` when every owner message since it is an approval (a yes that saved a
+        waiting draft), else None."""
+        req = self.requests.get(self._chat(), now)
+        if req is None or req["state"] != "open" or req["skill"] or req["pending"]: return None
+        rows = self.db.execute("SELECT provider_id, disposition, received_at FROM messages WHERE received_at IS NOT NULL"
+                               " AND COALESCE((SELECT chat FROM message_chats c WHERE c.provider_id = messages.provider_id), ?) = ?"
+                               " AND rowid >= (SELECT rowid FROM messages WHERE provider_id = ?) ORDER BY rowid",
+                               (self.settings["ownerChat"], self._chat(), req["provider_id"])).fetchall()
+        if len(rows) < 2 or rows[0]["provider_id"] != req["provider_id"] or rows[0]["disposition"] != "question": return None
+        if not req["question"] or not req["texts"] or not all(r["disposition"] == "approved" for r in rows[1:]): return None
+        return {"question": req["question"], "earlier": req["texts"]}
+
+    def _legacy_question(self, now):
+        """AV2007-14: the plain open question of ours (no skill, shelf-check, hike or photo ask) as one line, else None."""
+        try:
+            req = self.requests.get(self._chat(), now)
+            if req is not None and req["state"] == "open" and not req["skill"] and not req["pending"] and not req["attachments"] \
+                    and isinstance(req["question"], str) and req["question"].strip() and "hike" not in req["question"].lower():
+                return " ".join(req["question"].split())
+        except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): pass
+        return None
+
+    def _still_asking(self, now):
+        """AV2007-14: the question of ours the owner has not answered yet (one line), repeated after a saved reply; else None."""
+        if (q := self._legacy_question(now)) is not None: return q
+        try:
+            rows = [r for r in self._drafts("state = 'needs-details'") if self._expiry(r) > now and self._visible(r)]
+            return " ".join(rows[-1]["summary"].split()) if rows else None
+        except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
+
+    def _with_question(self, text):
+        q = self._still_asking(self._now())
+        return text if q is None else text + "\nI still need your answer to this: " + q
 
     def _hold_name(self): return "held-question:" + self._chat()
 
@@ -1329,11 +1442,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return req["texts"] if req and all(isinstance(t, str) and t for t in req["texts"]) else []
         except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return []
 
-    def _open_ask(self, msg, now, earlier, pending=None):
+    def _open_ask(self, msg, now, earlier, pending=None, question=None):
         """HASS-HIKE-FLOW-1: keep this owner text with the earlier ones of the same open request, newest last, bounded.
         HASS-SHELFCHECK-FLOW-1: ``pending`` = {"ops": [...], "revises": code|None}, the change that waits for today's shelf check.
         SKILLS-FW-3: written to the one open-request store (a request with no skill)."""
-        self.requests.put(self._chat(), msg.provider_id, now, texts=[*earlier, msg.text], pending=pending, legacy=True,
+        self.requests.put(self._chat(), msg.provider_id, now, texts=[*earlier, msg.text], pending=pending, legacy=True, question=question,
                           turns=ASK_TURNS, per=ASK_TEXT_CUT, total=ASK_CHARS)
 
     def _shelf_ask(self, now):
@@ -1353,7 +1466,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return {"ops": ops, "revises": pending.get("revises"), "texts": texts if isinstance(texts, list) else [],
                     "skills": pending.get("skills", []),
                     "calls": calls if isinstance(calls, list) else [], "ask": pending.get("ask"),  # HASS-CHAT-1: "meet" or None (shelf check)
-                    "suggest": pending.get("suggest"), "index": pending.get("index"), "notes": [n for n in pending.get("notes") or () if isinstance(n, str)]}
+                    "suggest": pending.get("suggest"), "index": pending.get("index"), "notes": [n for n in pending.get("notes") or () if isinstance(n, str)],
+                    "till": pending.get("till")}  # HASS-CLOVER-4 FIX-1: the till code (with its website word) waiting for this answer
         except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
 
     def _check_day(self):
@@ -1393,7 +1507,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(SHELF_CLOCK)
             return "not-drafted"
         self._open_ask(msg, now, earlier, {"ops": result["ops"], "revises": result.get("revises"),
-                                         "skills": [getattr(s, 'name', s) for s in skill_names]})
+                                         "skills": [getattr(s, 'name', s) for s in skill_names], **({"till": result["till"]} if result.get("till") else {})})
         self._reply(SHELF_QUESTION)
         return "question"
 
@@ -1430,6 +1544,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         yes: one draft that marks today's shelf check and then makes the waiting change (none, for the morning report's
         question), with the normal approval; no: nothing is changed and the question is closed."""
         self._close_asks()
+        if isinstance(ask.get("till"), str) and self.till is not None and self.till.engine is not None:  # HASS-CLOVER-4 FIX-1
+            if verb == "reject": self.till.drop(ask["till"], self._asker, msg.chat)  # noqa: E701
+            if verb == "reject" or self._paused():
+                self._reply(SHELF_NO if verb == "reject" else self.till.answer(("yes", ask["till"]), now))
+                return "shelf-no" if verb == "reject" else "paused"
+            self._till_job = (ask["till"], True)  # the whole bundle (till, shelf check, website word) now, after this message is saved
+            return "till-approved"
         if verb == "reject":
             self._reply(SHELF_NO)
             return "shelf-no"
@@ -1590,7 +1711,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 self.requests.put(self._chat(), msg.provider_id, now, texts=[*req["texts"], msg.text], request_id=req["request_id"],
                                   skill=req["skill"], slots=req["slots"], calls=req["calls"], attachments=req["attachments"],
                                   question=result["question"], draft_code=req["draft_code"], asks=req["asks"])
-            else: self._open_ask(msg, now, earlier)  # keep the request with our question, for the answer
+            else: self._open_ask(msg, now, earlier, question=result["question"])  # keep the request with our question, for the answer
         elif legacy and "ops" in result: self._close_asks()  # a draft (or its own question) takes over; nothing stays open
         for key in ("question", "unsupported"):
             if key in result:
@@ -1729,9 +1850,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(said)
             return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
         if self.skills_mode != dispatch_mod.DEFAULT_MODE and self.dispatch.photo_skills():  # SKILLS-FW-3 (spec 2.7): the photo joins the open request
+            intake_answers = None
+            if self.settings.get("itemIntake") is True:
+                caption, intake_answers = item_intake.caption_answers(caption)
             as_text = Inbound(**{**vars(msg), "text": caption})
-            done = self.dispatch.photo(as_text, now, sha, caption)
-            return done if done is not None else self._request(as_text, now)  # no skill yet: the caption is the next text of that request
+            done = self.dispatch.photo(as_text, now, sha, caption, intake_answers=intake_answers)
+            done = done if done is not None else self._request(as_text, now)
+            req = self.requests.get(msg.chat, now)
+            if (self.labels is not None and self.settings.get("itemIntake") is True and req
+                    and req["skill"] == "item.add" and req["state"] == "open" and req["attachments"] == [sha]
+                    and not req["slots"].get("intake", {}).get("photo_details")):
+                question = self.db.execute("SELECT id FROM outbox WHERE chat = ? AND sent_at IS NULL ORDER BY id DESC LIMIT 1",
+                                           (msg.chat,)).fetchone()
+                self._label_jobs.append((None, sha, (as_text, req["request_id"], now, question["id"] if question else None)))
+            return done
         code = self._photo_row(sha, msg, now)
         if not caption:
             self._photo_question(code, sha)
@@ -1796,6 +1928,18 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
             found = self.labels.read(web, sorted({p["category"] for p in products if isinstance(p.get("category"), str)}))
         except Exception: return  # noqa: BLE001 - no label is today's reply exactly
+        if code is None:
+            msg, request_id, now, question_id = reply_id
+            with self._answer_to(msg.chat), self._tx():
+                req = self.requests.get(msg.chat, now)
+                if (not found or req is None or req["request_id"] != request_id or req["state"] != "open"
+                        or req["skill"] != "item.add" or req["attachments"] != [sha]): return
+                slots = {**req["slots"], "intake": {**req["slots"].get("intake", {}), "photo_details": found}}
+                # Replace only this message's unsent question; an early receipt already sent stays sent.
+                self.db.execute("DELETE FROM outbox WHERE id = ? AND sent_at IS NULL", (question_id,))
+                self.dispatch._advance(Inbound(**{**vars(msg), "text": ""}), now, req,
+                                       self.dispatch.registry.get("item.add"), slots, None, resolved=True)
+            return
         line = label_reader.question(found, self._makers(), products) if found else None  # AVB-10: matching records
         with self._tx():
             if line and self.db.execute("UPDATE drafts SET summary = summary || ? WHERE code = ? AND state = "
@@ -1831,7 +1975,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
                         if self.dispatch is not None: self.dispatch.intake_undone(orig["code"], now)  # HASS-INTAKE-2
             if self.previewer is None or self._row_live_site(row):
-                self._reply(answers.applied_text(row["code"], row["summary"], live_site=self._row_live_site(row)))
+                self._reply(self._with_question(answers.applied_text(row["code"], row["summary"], live_site=self._row_live_site(row))))
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
         elif result == "env-changed":
             again = self._reprepare(row)
@@ -1933,12 +2077,12 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
                     self._audit("verified", row)  # AVB-10
                     text = answers.applied_text(row["code"], row["summary"], checked=not (unshown and all(unshown)), live_site=self._row_live_site(row))
-                    if not self._row_live_site(row): self._reply(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else ""), [png])
+                    if not self._row_live_site(row): self._reply(self._with_question(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else "")), [png])
                 else:  # the raw diagnostic stays on the row; the owner gets plain words (SHOP-4)
                     self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
                     self._audit("verified", row, "not-verified")  # AVB-10: the diagnostic stays on the row, never here
-                    if not self._row_live_site(row): self._reply(answers.applied_text(row["code"], row["summary"], error=error, live_site=self._row_live_site(row)))
+                    if not self._row_live_site(row): self._reply(self._with_question(answers.applied_text(row["code"], row["summary"], error=error, live_site=self._row_live_site(row))))
 
     def screenshot(self, change_id) -> str | None:
         row = self.db.execute("SELECT screenshot FROM drafts WHERE change_id = ? AND state IN ('applied', 'verified') "
@@ -1957,7 +2101,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
     def _command(self, msg, now, verb, code) -> str:
         if verb == "help":
             registry = self.dispatch.registry if self.dispatch else None
-            self._reply(HELP_TEXT + "\n\n" + capabilities.help_section(registry), long_ok=True)
+            self._reply(HELP_TEXT + "\n\n" + capabilities.help_section(registry) + ("\n\n" + self.till.HELP if self.till is not None and self.till.engine is not None else ""), long_ok=True)  # HASS-CLOVER-4: till words when it can change the till
             return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
