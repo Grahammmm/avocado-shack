@@ -10,8 +10,8 @@ TESTS_PKG = "hass.tests"
 _TESTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests")
 
 MAP = {  # frozen: H id -> covering modules, or a "not covered" reason
-    "H01": ("test_content", "test_content_read_errors"),
-    "H02": ("test_editor",), "H03": ("test_catalog_ops",),
+    "H01": ("test_content", "test_content_read_errors", "test_browser_freshness", "test_publish"),
+    "H02": ("test_editor",), "H03": ("test_catalog_ops", "test_clear_availability", "test_product_new"),
     "H04": ("test_hike_ops", "test_route_add", "test_route_edit", "test_route_hide", "test_hike_samples"),
     "H05": ("test_conversation", "test_near_approval"),
     "H06": ("test_preview", "test_undo"), "H07": "needs Michael's devices",
@@ -25,7 +25,7 @@ MAP = {  # frozen: H id -> covering modules, or a "not covered" reason
     "H14": ("test_hike_capacity_ceiling", "test_hike_capacity_rsvp_off"),
     "H15": ("test_memory", "test_memory_source"),
     "H16": ("test_outbox_delayed", "test_late_yes", "test_writer_lock_entry"),
-    "H17": ("test_status_pause", "test_help", "test_status_photos"), "H18": "needs Michael's devices",
+    "H17": ("test_status_pause", "test_help", "test_status_photos", "test_listing_command"), "H18": "needs Michael's devices",
     "H19": ("test_health", "test_health_host"), "H20": ("test_statebackup_drill", "test_statebackup", "test_statebackup_bundle"),
     "H21": ("test_retention",), "H22": ("test_interpreter_cap",),
     "H23": ("test_auto_policy",), "H24": ("test_design_check", "test_design_check_modes",
