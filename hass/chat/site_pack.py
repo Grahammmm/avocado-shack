@@ -105,14 +105,18 @@ class SitePack:
             wt = editor_mod._load(str(self.sdir))[2]
             content = load_content(wt / "hass" / "content")
             validate(content, wt / "storefront-mockup")
-            typed, ident = ident, self._pick("product", ident, content)
-            if not any(p.get("id") == ident for p in content.products): ident = self._pick("maker", typed, content)
-            if ident == typed: ident = self._pick_hike(content, typed)
-            if ident == typed: ident = self._pick_hike(content, typed, "routeIdeas")
-            found = [("product", p) for p in content.products if p.get("id") == ident]
-            found += [("maker", m) for k, m in content.makers.items() if k == ident]
-            found += [(kind, r) for kind, key in (("hike", "events"), ("route idea", "routeIdeas"))
-                      for r in content.community[key] if r.get("id") == ident]
+            def collect(i):
+                f = [("product", p) for p in content.products if p.get("id") == i]
+                f += [("maker", m) for k, m in content.makers.items() if k == i]
+                return f + [(kind, r) for kind, key in (("hike", "events"), ("route idea", "routeIdeas"))
+                            for r in content.community[key] if r.get("id") == i]
+            found = collect(ident)  # an exact id/key of any kind beats every name/title fallback
+            if not found:
+                typed, ident = ident, self._pick("product", ident, content)
+                if not any(p.get("id") == ident for p in content.products): ident = self._pick("maker", typed, content)
+                if ident == typed: ident = self._pick_hike(content, typed)
+                if ident == typed: ident = self._pick_hike(content, typed, "routeIdeas")
+                found = collect(ident)
             if len(found) != 1: text = LISTING_NONE if not found else LISTING_MANY
             else:
                 kind, rec = found[0]
