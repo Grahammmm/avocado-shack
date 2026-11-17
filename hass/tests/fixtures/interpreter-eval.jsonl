@@ -73,3 +73,8 @@
 {"id": "e73", "text": "Cancel hike hike-2026-11-22-cass-hill with the note: Rained out - we will pick a new date soon.", "pending": [], "expect": {"ops": [{"op": "hike.cancel", "args": {"id": "hike-2026-11-22-cass-hill", "note": "Rained out - we will pick a new date soon."}}], "revises": null}}
 {"id": "e74", "text": "Set the home notice to \"Closed Thanksgiving Day\" from 2026-11-26 through 2026-11-26.", "pending": [], "expect": {"ops": [{"op": "store.set_notice", "args": {"text": "Closed Thanksgiving Day", "from": "2026-11-26", "until": "2026-11-26"}}], "revises": null}}
 {"id": "e75", "text": "Set the hiking club opening paragraph to: Walk with us along the coast, share the trail, and leave room for discovery.", "pending": [], "expect": {"ops": [{"op": "club.set_intro", "args": {"text": "Walk with us along the coast, share the trail, and leave room for discovery."}}], "revises": null}}
+{"id": "e76", "text": "Hide the sample hikes.", "pending": [], "expect": {"ops": [{"op": "hike.samples", "args": {"show": false}}], "revises": null}}
+{"id": "e77", "text": "Show the sample hikes.", "pending": [], "expect": {"ops": [{"op": "hike.samples", "args": {"show": true}}], "revises": null}}
+{"id": "e78", "text": "Put the old photo back.", "pending": [], "expect": {"ops": [{"op": "store.clear_home_image", "args": {}}], "revises": null}}
+{"id": "e79", "text": "Stop showing the eggs as sold out.", "pending": [], "expect": {"ops": [{"op": "product.clear_availability", "args": {"id": "photo-product-024"}}], "revises": null}}
+{"id": "e80", "text": "The eggs are sold out.", "pending": [], "expect": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-024", "available": "no"}}], "revises": null}}
