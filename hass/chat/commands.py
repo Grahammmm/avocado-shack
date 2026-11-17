@@ -42,7 +42,7 @@ HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: 
     q("remember parking: back lot") + " - I'll keep a note; " + q("forget parking") + " removes it; " + q("notes") + " lists them",
     q("alias jam: Linn's blueberry preserves") + " - a nickname for a product or maker",
     q("cost Hass avocado: 24 for 12") + " - the price you pay, kept private",
-    q("margin Hass avocado at 35%") + " - a price idea from the cost you saved",
+    q("margin Hass avocado at 35%") + " - a price idea or a price check",
     q("post Hass avocado") + " or " + q("post maker fixture-farm") + " - a caption to copy",  # AV1937-10: one post line; nothing is posted, no placeholders
     q("listing Etto") + " - what's shown for one thing; " + q("hidden") + " lists what's hidden",
     q("show") + " and a word from the change - repeat a waiting change",
