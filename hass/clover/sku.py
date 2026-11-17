@@ -67,7 +67,8 @@ def used_values(items):
 def generate_sku(name, category, items):
     """The SKU for a new item `name` in `category`, given every till item. Raises DuplicateItem when the till already has the name."""
     key = norm_name(name)
-    twin = next((i for i in sorted(items, key=lambda i: i.id) if norm_name(i.name) == key and not i.hidden), None)
+    items = sorted(items, key=lambda i: i.id)  # one pass: an iterator must still reserve every SKU and barcode below
+    twin = next((i for i in items if norm_name(i.name) == key and not i.hidden), None)
     if twin is not None:
         raise DuplicateItem(twin)
     stem, taken = base(name, category), used_values(items)
