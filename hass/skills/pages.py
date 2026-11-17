@@ -293,7 +293,7 @@ def photo_destination_open(texts) -> bool:
     open_, asked = False, False
     for text in texts:
         home = _chose_home(text)
-        if _MAIN_PICTURE.search(text):
+        if _MAIN_PICTURE.search(text) or (_HOME_PAGE.search(text) and _PRODUCT.search(text)):  # a request naming both destinations asks too
             open_, asked = not home, True
         elif home:
             open_ = False
@@ -402,6 +402,6 @@ PAGE_PHOTO = Skill(
     undo=Undo("revert", "The photo file stays in the site folder with nothing pointing at it; the page shows the shop's own photo again."),
     refuse=(("the description is a file or camera name", ALT_REPLY), ("there is no photo of his to put back", NO_OWN_PHOTO),
             ("the photo is sideways (a rotation tag)", media.REPLIES["needs-rotation"])),
-    cases=_CASES.format("page.photo"), version=2)
+    cases=_CASES.format("page.photo"), version=3)
 
 SKILLS = (PAGE_HOME, PAGE_ABOUT, PAGE_PHOTO)

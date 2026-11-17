@@ -82,10 +82,11 @@ def _hike_text(h: dict, cut: int) -> str:
     seats = ("I can't see how many guests have signed up" if n is None else f"{n} {'guest has' if n == 1 else 'guests have'} signed up"
              + (f", room for {cap}" if cap is not None else ""))
     when = f"{(hh - 1) % 12 + 1}{':%02d' % mm if mm else ''} {'am' if hh < 12 else 'pm'}"
-    return f"{date.fromisoformat(h['day']):%A} at {when}, {voice.quote(title)} ({seats})"
+    return f"{FULL_WEEKDAYS[date.fromisoformat(h['day']).weekday()]} at {when}, {voice.quote(title)} ({seats})"
 
 
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")  # fixed English tables: never the host's locale
+FULL_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")  # not strftime %A: that follows LC_TIME
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
