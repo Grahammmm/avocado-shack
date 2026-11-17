@@ -242,7 +242,7 @@ def _config_worktree(path: Path):  # the worktree a hashed config.json names, el
     try: cfg = json.loads(_read_small(path, editor.MAX_CONFIG).decode("utf-8"))  # restore merges it as a dict, rewrites worktree
     except (OSError, ValueError, RecursionError): return None
     wt = cfg.get("worktree") if isinstance(cfg, dict) else None
-    return wt if isinstance(wt, str) and wt != "" else None
+    return wt if isinstance(wt, str) and wt != "" and "\x00" not in wt else None  # a NUL path can't be resolved (restore would crash)
 
 def _config_ok(path: Path) -> bool: return _config_worktree(path) is not None
 
