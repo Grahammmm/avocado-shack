@@ -79,12 +79,12 @@ class DesignConversationTests(ConversationTestCase):
         for number, text in enumerate(REQUESTS, 1):
             with self.subTest(text=text):
                 self.assertEqual(self.say(text), "unsupported")
-                self.assertEqual(self.replies(), [DESIGN_UNSUPPORTED])
+                self.assertEqual(self.replies(), [f"{DESIGN_UNSUPPORTED}. I kept it for the developer as design.{number}."])  # AV1052-11
                 self.assertEqual((len(self.drafts()), self.commits(), self.calls()), (0, 0, number))
 
     def test_a_design_reply_does_not_block_a_later_content_edit(self):
         self.assertEqual(self.say("make the header green"), "unsupported")
-        self.assertEqual(self.replies(), [DESIGN_UNSUPPORTED])
+        self.assertEqual(self.replies(), [f"{DESIGN_UNSUPPORTED}. I kept it for the developer as design.1."])
         self.assertEqual(self.say("change the intro to 'Fresh every Saturday'"), "proposed")
         [reply] = self.replies()
         self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
@@ -105,7 +105,7 @@ class DesignConversationTests(ConversationTestCase):
         self.assertEqual(self.say("change the intro to 'Fresh every Saturday'"), "proposed")
         self.replies()
         self.assertEqual(self.say("use a bigger font"), "unsupported")
-        self.assertEqual(self.replies(), [DESIGN_UNSUPPORTED])
+        self.assertEqual(self.replies(), [f"{DESIGN_UNSUPPORTED}. I kept it for the developer as design.1."])
         [draft] = self.drafts()
         self.assertEqual(draft["state"], "proposed")  # the pending draft is neither cancelled nor replaced
 

@@ -16,6 +16,7 @@ from hass import editor as editor_mod, memory as memory_mod, migration_check, pr
 from hass import claims, interpret_check, label_reader, margins, media, morning_report, morning_report as shelf, owner_answers as answers, social_draft  # noqa: E402
 from hass.content_model import HOME_IMAGE_RE, MAX_NOTICE, SHELF_LABELS, ContentError, _read_json, _text as checked_text, checked_on, load_and_validate, load_content, notice_days, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
+from hass.interpreter_prompt import DESIGN_UNSUPPORTED  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
 from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, nl_prep, voice  # noqa: E402
 from hass import capabilities, photo_polish, transcript  # noqa: E402
@@ -44,7 +45,7 @@ from hass.chat.reports_pack import (  # noqa: E402,F401
     POST_USAGE, HIKE_USAGE, HIKE_REFUSALS, POST_REFUSALS, POST_CANT, _NUM, MARGIN_RE, MARGIN_ID_RE, COST_RE,
     MARGIN_USAGE, ReportsPack)
 
-PRIVATE_PREFIXES = ("alias.", "cost.")  # AV1222-10: memory keys the interpreter never sees
+PRIVATE_PREFIXES = ("alias.", "cost.", "design.")  # AV1222-10: memory keys the interpreter never sees
 PAUSED_LINE = "Changes are paused, so nothing will be saved yet. Say " + q("resume changes") + " first, then yes."
 ATTACHMENT_REPLY = ("I can't read photos, voice notes or files yet, so nothing changed. "
                     "Could you type the change instead?")
@@ -1806,6 +1807,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             result = self._stock_choice(msg.text) or result  # AV2007-12: one product named whole is taken before asking which
         return self._draft(msg, now, result, earlier, failed=failed, req=req)
 
+    def _keep_design(self, msg, said):
+        """AV1052-11 (H24/H15): the fixed design refusal also keeps the owner's words (first 500 characters) as a dated owner note
+        design.<n> for the developer: local memory only, nothing sent, nothing on the site changes. Any other reply is unchanged."""
+        if said != DESIGN_UNSUPPORTED: return said
+        if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
+        try: key = self.memory.remember_design(msg.text, f"owner-stated:{msg.provider_id}")
+        except ValueError:
+            return f"{said}. I couldn't keep the note. To keep one yourself, say it like remember parking: Rear lot (1 to 500 plain characters)."
+        return f"{said}. I kept it for the developer as {key}." + (" Only the first 500 characters were kept." if len(msg.text) > memory_mod.MAX_VALUE else "")
+
     def _stock_choice(self, text):
         """AV2007-12: nl_prep.resolve_stock_choice over the current validated content and the owner's aliases; None when the content
         cannot be read or the text is not one product out/back."""
@@ -1859,7 +1870,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         elif legacy and "ops" in result: self._close_asks()  # a draft (or its own question) takes over; nothing stays open
         for key in ("question", "unsupported"):
             if key in result:
-                self._reply(result[key])
+                self._reply(self._keep_design(msg, result[key]) if key == "unsupported" and not failed else result[key])
                 cant = "can't do that" in result[key].lower()
                 if key == "unsupported" or cant:
                     self._problem("error" if failed else "could-not-do" if cant else "did-not-understand",
