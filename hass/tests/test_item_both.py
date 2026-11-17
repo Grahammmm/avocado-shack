@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from hass import editor
+
 from hass.clover import bundle as b, drafts as d
 from hass.clover.apply import ApplyEngine
 from hass.clover.chat import SITE_NOT_YET
@@ -16,11 +16,10 @@ from hass.clover.config import from_settings
 from hass.clover.credential import Token
 from hass.clover.mapper import parse_item
 from hass.conversation import sender_key
-from hass.ops import load_registry
-from hass.tests import test_clover_apply as till_fixture, test_publish_live as release_fixture
+from hass.tests import test_clover_apply as till_fixture
 from hass.tests.test_clover_client import NoNetwork, FAKE_TOKEN
 from hass.tests.test_conversation import OWNER, CHAT, SETTINGS
-from hass.tests.test_editor import git
+
 
 
 class Crash(BaseException): pass
@@ -79,10 +78,8 @@ class BothTests(NoNetwork):
 
     def create(self):
         draft = d.build_create_item('Synthetic honey', 1250, 'pantry', [], self.cfg, categories=[('CAT', 'Pantry')])
-        stock = d.build_set_stock(parse_item({'id': 'NEWITEM', 'name': 'Synthetic honey', 'price': 1250,
-            'priceType': 'FIXED', 'itemStock': {'quantity': 0, 'modifiedTime': 1}, 'modifiedTime': 1}), 12, self.cfg)
-        return replace(draft, after={**draft.after, 'stock': '12'}, lines=tuple(x for x in draft.lines if not x.startswith('  Count:')) +
-                       ('  Count: 12',), requests=(*draft.requests, {**stock.requests[0], 'path': '/item_stocks/{newItemId}'}))
+        return replace(draft, after={**draft.after, 'stock': '12'},
+                       lines=tuple(x for x in draft.lines if not x.startswith('  Count:')) + ('  Count: 12',))
 
     def propose(self, draft=None, **kw):
         return b.propose(**dict(site_ops=self.ops, till_draft=draft or self.draft(), link=None, sender=OWNER, chat=CHAT,
@@ -122,6 +119,63 @@ class BothTests(NoNetwork):
         self.assertEqual(self.journal.path.parent.stat().st_mode & 0o777, 0o700)
         with self.journal.db() as db: self.assertEqual(db.execute('PRAGMA journal_mode').fetchone()[0], 'delete')
 
+    def test_create_count_failure_partial_undo_and_create_failure_no_site(self):
+        code, _ = self.propose(self.create())
+        self.till.mismatch = True  # A creates normally; B's real engine read-back fails.
+        self.assertEqual(self.yes(code)[0], 'partial')
+        self.till.mismatch = False
+        self.assertFalse(self.site.calls)
+        self.assertFalse(self.links)
+        count = len(self.writes())
+        self.restart(); self.yes(code)
+        self.assertEqual(self.journal.get(code)['state'], 'partial')
+        self.assertEqual(len(self.writes()), count)
+        undo, _ = b.undo(code, sender=OWNER, chat=CHAT, journal=self.journal, engine=self.engine, site=self.site)
+        self.assertEqual(self.yes(undo)[0], 'done')
+        self.assertTrue(self.till.items['NEWITEM']['hidden'])
+        self.assertEqual(self.journal.get(code)['state'], 'undone')
+        self.assertFalse(self.site.calls)
+        code, _ = self.propose(self.create())
+        count = len(self.writes())
+        self.assertEqual(self.yes(code)[0], 'failed')  # SKU collision refuses A before its first write.
+        self.assertEqual(len(self.writes()), count)
+        self.assertFalse(self.site.calls)
+
+    def test_create_count_crash_reconciles_each_engine_step_without_replay(self):
+        for point in ('after-create', 'during-count', 'after-count'):
+            with self.subTest(point=point):
+                fixture = BothTests('runTest'); fixture.setUp(); self.addCleanup(fixture.doCleanups)
+                code, _ = fixture.propose(fixture.create())
+                original = fixture.engine.handle
+                def crash(text, **kw):
+                    if text != 'yes ' + code and point == 'during-count': fixture.till.crash = True
+                    result = original(text, **kw)
+                    if (text == 'yes ' + code) == (point == 'after-create'): raise Crash()
+                    return result
+                with mock.patch.object(fixture.engine, 'handle', side_effect=crash), self.assertRaises((Crash, KeyboardInterrupt)):
+                    fixture.yes(code)
+                count = len(fixture.writes())
+                expected = 'split' if point == 'after-count' else 'partial'
+                fixture.restart(); fixture.restart()
+                self.assertEqual(fixture.journal.get(code)['state'], expected)
+                fixture.yes(code)
+                # A confirmed B may continue the website only on the explicit second yes.
+                self.assertEqual(fixture.journal.get(code)['state'], 'done' if point == 'after-count' else expected)
+                self.assertEqual(len(fixture.writes()), count)
+                self.assertEqual(set(fixture.journal.get(code)['notifications']), {'owner', 'operator'})
+
+    def test_undo_keeps_newer_till_but_still_reverts_site(self):
+        code, _ = self.propose()
+        self.assertEqual(self.yes(code)[0], 'done')
+        self.till.items['FAKEITEM00001']['modifiedTime'] += 1
+        undo, _ = b.undo(code, sender=OWNER, chat=CHAT, journal=self.journal, engine=self.engine, site=self.site)
+        count = len(self.writes())
+        state, text = self.yes(undo)
+        self.assertEqual(state, 'done')
+        self.assertIn('the till was not changed', text)
+        self.assertEqual(len(self.writes()), count)
+        self.assertEqual(len(self.site.calls), 2)
+
     def test_failure_uncertainty_and_retry_never_repeat_till(self):
         code, _ = self.propose()
         self.till.mismatch = True
@@ -149,11 +203,12 @@ class BothTests(NoNetwork):
 
     def test_read_only_gates_identity_expiry_hash_and_no_runner(self):
         with mock.patch('subprocess.run') as runner, mock.patch('hass.clover.apply.load_write_token', side_effect=AssertionError('token read')):
-            self.engine.config = replace(self.cfg, writes=False)
-            code, text = self.propose()
-            self.assertIn("I can't add it to the till yet", text)
-            self.assertIsNone(self.journal.get(code)['bundle']['till'])
-            self.assertEqual(self.yes(code)[0], 'done')
+            for disabled in ({'writes': False}, {'write_token_file': ''}):
+                self.engine.config = replace(self.cfg, **disabled)
+                code, text = self.propose()
+                self.assertIn("I can't add it to the till yet", text)
+                self.assertIsNone(self.journal.get(code)['bundle']['till'])
+                self.assertEqual(self.yes(code)[0], 'done')
             runner.assert_not_called()
         self.engine.config = self.cfg
         for kwargs in ({'sender': 'stranger'}, {'chat': 'iMessage;+;group'}):
@@ -222,37 +277,32 @@ class BothTests(NoNetwork):
 
 class RealReleaseTests(NoNetwork):
     def test_real_live_apply_and_undo_without_baseline_divergence(self):
-        release = release_fixture.ReleaseCase('runTest')
-        def build(commit, today, cid, label, checks=False):
-            return {'index.html': b'\n'.join(git(release.repo.wt, 'show', commit + ':hass/content/' + f + '.json').encode()
-                                           for f in ('products', 'makers', 'store')), 'style.css': b'fixture css'}
-        release.fixture_build = build
+        from hass.tests import test_live_add as add_fixture
+        release = add_fixture.LiveAddEndToEnd('runTest')
         release.setUp()
         self.addCleanup(release.doCleanups)
-        release.live.registry = load_registry()
         till = BothTests('runTest'); till.setUp(); self.addCleanup(till.doCleanups)
         till.site = release.live
         pid = 'photo-product-' + str(max(int(p['id'].rsplit('-', 1)[1]) for p in json.loads(
             (release.repo.wt / 'hass/content/products.json').read_text())['products']) + 1)
-        till.ops = [{'op': 'maker.add', 'args': {'key': 'Synthetic', 'name': 'Synthetic', 'place': 'Test town'}},
-                    {'op': 'product.add', 'args': {'name': 'Synthetic honey', 'brand': 'Synthetic', 'category': 'pantry',
-                     'producerKey': 'Synthetic', 'image': 'assets/products/photo-product-001.webp', 'description': 'Fixture honey.'}}]
+        till.ops = [add_fixture.maker_op(), add_fixture.product_op(release.sha)]
         draft = till.create()
         code, _ = till.propose(draft, link={'product_id': pid, 'sku': draft.after['sku']})
         self.assertEqual(till.yes(code)[0], 'done')
         self.assertEqual(release.push_calls, 1)
         self.assertTrue(release.live.went_live(till.journal.get(code)['change_id']))
-        self.assertIn(b'Synthetic honey', release.fetch(release.cfg['liveUrl'] + '/', release.cfg['liveUrl']))
+        self.assertIn(b'Quince jam', release.site_file('catalog-products.js'))
         release.settle()
         undo, _ = b.undo(code, sender=OWNER, chat=CHAT, journal=till.journal, engine=till.engine, site=till.site)
         self.assertFalse(till.till.items['NEWITEM']['hidden'])
         self.assertEqual(till.yes(undo)[0], 'done')
         self.assertTrue(till.till.items['NEWITEM']['hidden'])
+        self.assertEqual(till.till.items['NEWITEM']['itemStock']['quantity'], 12)  # Hide, never erase the count.
         self.assertEqual(till.journal.get(code)['state'], 'undone')
         products = json.loads((release.repo.wt / 'hass/content/products.json').read_text())['products']
         self.assertEqual(next(p for p in products if p['id'] == pid)['status'], 'hidden')
         makers = json.loads((release.repo.wt / 'hass/content/makers.json').read_text())['makers']
-        self.assertTrue(makers['Synthetic']['hidden'])
+        self.assertTrue(makers[add_fixture.KEY]['hidden'])
 
 
 if __name__ == '__main__': unittest.main()
