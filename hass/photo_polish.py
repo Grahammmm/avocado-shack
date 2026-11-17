@@ -511,7 +511,8 @@ def words(framed, scale=2):
             if len(cols) != 12:
                 return None
             conf, box = float(cols[10]), tuple(int(v) // scale for v in cols[6:10])
-            int(cols[0]), int(cols[1])
+            for value in cols[:6]:
+                int(value)
         except ValueError:
             return None  # a malformed row is unreadable output, never partial label evidence
         if not math.isfinite(conf):

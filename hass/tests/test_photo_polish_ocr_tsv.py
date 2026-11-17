@@ -36,6 +36,16 @@ class OcrTsvTests(unittest.TestCase):
                 self.assertIsNone(read(HEAD + row))
                 self.assertIsNone(read(HEAD + WORD + row))  # no partial evidence from the valid word
 
+    def test_invalid_hierarchy_fields_reject_blank_and_partial_output(self):
+        for index in range(6):
+            for text in ("", "Honey"):
+                cols = ["5", "1", "1", "1", "1", "1", "10", "20", "80", "24", "91", text]
+                cols[index] = "bad"
+                row = "\t".join(cols) + "\n"
+                with self.subTest(field=photo_polish.TSV_HEADER[index], text=text):
+                    self.assertIsNone(read(HEAD + row))
+                    self.assertIsNone(read(HEAD + WORD + row))
+
     def test_tsv_header_and_empty_controls(self):
         self.assertIsNone(read("level\tpage_num\tblock_num\n" + WORD))
         self.assertIsNone(read(HEAD.replace("text", "txt") + WORD))
