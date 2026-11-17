@@ -271,7 +271,7 @@ class Server(HTTPServer):
         self.peers, self.secret, self.receiver, self.store, self.clock = cfg["peers"], secret, rx, store, clock
         self.paused = paused  # HASS-FAST-1: () -> bool, True when changes are paused or unknown (no 👀)
         self.pic_times, self.photo_times = collections.deque(), collections.deque()
-        self.photos = relay_photos.RelayPhotos(cfg["hostDir"], clock) if cfg.get("photos") else None
+        self.photos = relay_photos.RelayPhotos(cfg["hostDir"], clock, Path(cfg["state"]) / "inbox.sqlite3") if cfg.get("photos") else None
         super().__init__(cfg["addr"], Handler)
 
     def server_bind(self):  # no reverse DNS lookup of the Tailscale address
@@ -437,7 +437,7 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
         editor = SiteEditor(cfg['state'], site_gate(cfg), live_factory, clock=clock)
     photos, labels = None, None
     if cfg.get("photos"):
-        photos = relay_photos.RelayPhotos(cfg["hostDir"], clock)
+        photos = relay_photos.RelayPhotos(cfg["hostDir"], clock, Path(cfg["state"]) / "inbox.sqlite3")
         itp = cfg["interpreter"]
         fallback = itp.get("fallback")
         labels = label_reader.LabelReader(itp["url"], itp["model"], timeout=itp.get("timeout", 30), api=itp.get("api", "ollama"),

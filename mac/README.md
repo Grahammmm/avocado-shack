@@ -69,3 +69,29 @@ Deploy the host first (it learns the `state` op), then the Mac; a new Mac with a
 Timing: the forwarder writes `stages.jsonl` in the spool dir (stage name, time, a one-way hash of the message id; no text or
 sender) and the host writes one in its host dir; `python3 hass/stagelog.py MAC_LOG HOST_LOG` prints the table. Reply pull is every
 1 s for 3 minutes after an owner message (5 s otherwise); the catch-up poll is every 15 s (was 60 s).
+
+## Owner photos (HASS-PHOTO-MAC-1)
+
+An owner's new message with 1–4 attachments pushes sealed photo bytes to `/v1/photo`
+before its inbound envelope. G's text-only chat, groups, echoes, edits and non-owner
+senders never push photos. JPEG/PNG pass through up to 8 MiB; other formats or
+larger downloads (bounded by BlueBubblesPhotos' 20 MiB cap) use macOS `/usr/bin/sips`
+in a private temporary directory, deleted afterwards. No image package is needed.
+Conversion uses JPEG quality 85 and a 4096-pixel maximum; it does not request pixel
+rotation. Orientation preservation still needs the attended phone/Mac check.
+There are at most eight photo posts per minute and at most 30 seconds of waiting
+per message; failures, an old host's 404 and timeouts never stop text delivery or
+the independent tapback thread. A stuck download cannot create unlimited workers.
+No photo bytes are kept in the spool or logs. Host intake/retry handles missing
+photos; these fixture tests do not establish real-Mac compatibility.
+
+After the reviewed host and forwarder changes have merged, G can update from the
+avocado-shack checkout in Terminal and restart the existing logged-in LaunchAgent:
+
+```sh
+git pull --ff-only
+launchctl kickstart -k "gui/$(id -u)/com.avocadoshack.hass-forwarder"
+```
+
+No new app, setting, password or permission. These commands are instructions for
+G, not actions performed by this build.
