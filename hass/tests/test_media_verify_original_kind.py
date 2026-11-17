@@ -81,7 +81,9 @@ class OriginalKindTest(unittest.TestCase):
         self.clean()
         sha = self.plant(JPEG, "png")
         w = self.root / "web" / sha[:2]
-        w.mkdir(parents=True, mode=0o700)
+        w.parent.mkdir(mode=0o700)  # parents=True would leave `web` at the umask mode (0o755 on CI) and add "mode: web"
+        w.mkdir(mode=0o700)
+        os.chmod(w.parent, 0o700), os.chmod(w, 0o700)  # mkdir's mode is also masked by the umask
         (w / f"{sha}.png").write_bytes(b"whatever")
         os.chmod(w / f"{sha}.png", 0o600)
         self.assertEqual(media.verify_store(self.root)["problems"], [f"original kind: {sha[:12]}"])
