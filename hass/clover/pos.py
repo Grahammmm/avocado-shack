@@ -73,11 +73,16 @@ def _units(rows):
     return format_quantity(sum((n for _, n in rows), Decimal(0)))
 
 
+def _incomplete(left):
+    return f"incomplete: {len(left)} item{'' if len(left) == 1 else 's'} left out" if left else ""
+
+
 def summary(snapshot, snaps, now, content, links, reachable=True, threshold=5):
     sold, few, none = (len(r) for r in reports.low_stock(snapshot, threshold)["sections"].values())
     sec = reports.till_vs_site(snapshot, content, links)["sections"]
-    rows = drop_rows(snapshot, snaps, now, 1)
-    tail = "not enough history yet" if rows is None else f"{len(rows)} items, {_units(rows)} units"
+    left = []
+    rows = drop_rows(snapshot, snaps, now, 1, left)
+    tail = "not enough history yet" if rows is None else f"{len(rows)} items, {_units(rows)} units" + (f", {_incomplete(left)}" if left else "")
     return _say(snapshot, now, reachable, f"Till at {reads.when(snapshot.fetched_at, now)}: {len(snapshot.items)} items, {sold} sold out, "
                 f"{few} running low, {none} with no count. Website: {len(links) - len(sec['Broken links'])} linked, "
                 f"stock words waiting: not available yet. Sold today ({LABEL}): {tail}.")
@@ -103,12 +108,14 @@ def website_vs_till(snapshot, content, links, now, reachable=True, show=reads._a
 
 def build(snapshot, snaps, now, content, links, reachable=True, threshold=5):
     """(markdown, totals): the private daily report, and the totals-only dict (counts, flags and a date: no name, price or SKU)."""
-    today = drop_rows(snapshot, snaps, now, 1)
+    left = []
+    today = drop_rows(snapshot, snaps, now, 1, left)
     sold, few, none = (len(r) for r in reports.low_stock(snapshot, threshold)["sections"].values())
     totals = {"asOf": snapshot.fetched_at.isoformat(), "items": len(snapshot.items), "soldOut": sold, "low": few, "noCount": none,
               "stockWordsWaiting": None,   # unavailable until the STOCK-SITE totals integration: a till/site mismatch is not a pending count
               "countDropItems": None if today is None else len(today),
-              "countDropUnits": None if today is None else _units(today), "countDropNote": LABEL, "tillReachable": bool(reachable),
+              "countDropUnits": None if today is None else _units(today), "countDropNote": LABEL, "countDropLeftOut": len(left),
+              "countDropIncomplete": _incomplete(left) or None, "tillReachable": bool(reachable),
               "snapshot": reads.freshness(snapshot, now, reachable)[0]}
     a, safe = (snapshot, snaps, now, reachable), reports._safe
     lines = ["# Till summary", "", summary(snapshot, snaps, now, content, links, reachable, threshold), "",

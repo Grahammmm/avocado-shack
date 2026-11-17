@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY, name TEXT NOT NULL, sku TE
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS snapshots(taken TEXT NOT NULL, id TEXT NOT NULL, stock TEXT NOT NULL, PRIMARY KEY(taken, id));
 """
+READ_MARK = ""   # one row per read with this id keeps the time of a read in which no item had a count (never an item id)
 SNAPSHOT_DAYS = 14   # HASS-POS-1: counts per read, kept this long (count drops for "what sold"); written and pruned with the sync
 COLUMNS = ("id", "name", "sku", "code", "price_cents", "price_type", "unit_name", "category_ids", "categories", "hidden", "available", "stock",
            "stock_modified", "modified_time")
@@ -170,7 +171,7 @@ def write_items(state, rows, now, identity):
                            [tuple(r[c] for c in COLUMNS) for r in rows])
             db.execute("DELETE FROM snapshots WHERE taken < ?", (_iso(now - timedelta(days=SNAPSHOT_DAYS)),))
             db.executemany("INSERT OR REPLACE INTO snapshots(taken, id, stock) VALUES (?, ?, ?)",
-                           [(_iso(now), r["id"], r["stock"]) for r in rows if r["stock"] is not None])
+                           [(_iso(now), READ_MARK, "0"), *((_iso(now), r["id"], r["stock"]) for r in rows if r["stock"] is not None)])
             _set_meta(db, {"asOf": _iso(now), "lastAttempt": _iso(now), "lastResult": "ok", "failures": 0, "nextAttempt": "",
                            "itemCount": len(rows), **_identity_meta(identity)})
             db.execute("COMMIT")
@@ -286,7 +287,9 @@ def history(state, identity):
             return []
         try:
             for taken, iid, stock in db.execute("SELECT taken, id, stock FROM snapshots ORDER BY taken"):
-                out.setdefault(taken, {})[iid] = Decimal(stock)
+                counts = out.setdefault(taken, {})
+                if iid != READ_MARK:
+                    counts[iid] = Decimal(stock)
         except (sqlite3.Error, ArithmeticError):
             return []
     return [(_parse_iso(t), out[t]) for t in out if _parse_iso(t)]

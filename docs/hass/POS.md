@@ -28,7 +28,8 @@ the till does not count have no row). The rule is deliberately simple:
 - **it includes stock edits.** Hass does not add anything back: a count Hass itself changed (`set_stock`), a recount or a hand edit at the register between two reads
   also shows as a drop. That is why every sold number is labelled "includes stock edits" (chat reply, summary line, report headings and `countDropNote` in `pos-totals.json`);
 - an item that has a count now but is missing from one of the reads in the period gets **no number**: the reply says "Left out: <names> (a count was missing in one of the reads)"
-  rather than guess. An item first seen in the latest read has nothing to compare and is simply not listed;
+  rather than guess, and the summary line and `pos-totals.json` (`countDropLeftOut`, `countDropIncomplete`) say "incomplete: N items left out". A read in which no item had a count still counts as a read (it is kept as a marker row), so 10 -> nothing counted -> 5 leaves the item out. An item first seen in the latest read has nothing to compare and is simply not listed;
+- `report --all` writes the stock and mismatch reports and the POS summary plus `pos-totals.json`;
 - exact sales need the Orders permission, which this card does not use.
 
 No earlier read yet: "I don't have an earlier till count to compare with yet, so I can't say what sold today (includes stock edits) ...".

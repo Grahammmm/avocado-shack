@@ -86,6 +86,29 @@ class ViewTests(PosCase):
         self.assertIn(" Left out: Heirloom tomatoes (a count was missing in one of the reads).", pos.drops(snapshot, snaps, T0))
         self.assertIn("Sunshine olive oil 14", pos.drops(snapshot, snaps, T0))
 
+    def test_a_read_with_no_counts_at_all_still_counts_as_a_read_so_the_item_is_left_out(self):
+        # oil 10 -> a good read where nothing has a count -> 5: the empty read is kept, so the oil is left out (never "5 sold" or "10 -> 5").
+        none = [None] * 6
+        snapshot, snaps = self.with_series((3, ["10", "50", "14", "0", "7.5", None]), (2, none), (0.0, ["5", "50", "14", "0", "7.5", None]))
+        self.assertIn(T0 - timedelta(hours=2), [t for t, _ in snaps])
+        left = []
+        names = [i.name for i, _ in pos.drop_rows(snapshot, snaps, T0, 1, left)]
+        self.assertEqual(("Sunshine olive oil" in names, "Sunshine olive oil" in left), (False, True))
+        self.assertNotIn("Sunshine olive oil 5", pos.drops(snapshot, snaps, T0))
+        self.assertIn("Sunshine olive oil", pos.drops(snapshot, snaps, T0).split("Left out:")[1])
+
+    def test_summary_and_totals_say_incomplete_when_items_are_left_out(self):
+        mid = ["25", "50", "14", "0", None, None]
+        snapshot, snaps = self.with_series((3, ["25", "50", "14", "0", "9", None]), (2, mid), (0.0, ["11", "40", "0", "0", "7.5", None]))
+        text = pos.summary(snapshot, snaps, T0, CONTENT, LINKS)
+        self.assertIn(f"Sold today ({LABEL}): 3 items, 38 units, incomplete: 1 item left out.", text)
+        totals = pos.build(snapshot, snaps, T0, CONTENT, LINKS)[1]
+        self.assertEqual((totals["countDropLeftOut"], totals["countDropIncomplete"]), (1, "incomplete: 1 item left out"))
+        self.assertIn("incomplete: 1 item left out", pos.build(snapshot, snaps, T0, CONTENT, LINKS)[0])
+        whole = pos.build(self.snapshot, self.snaps, T0, CONTENT, LINKS)
+        self.assertEqual((whole[1]["countDropLeftOut"], whole[1]["countDropIncomplete"]), (0, None))
+        self.assertNotIn("incomplete", pos.summary(self.snapshot, self.snaps, T0, CONTENT, LINKS))
+
     def test_label_in_every_reply_shape(self):
         for snaps, text in (([], GONE), (self.snaps[-1:], GONE), ([(T0 - timedelta(hours=2), {i: Decimal(c or 0) for i, c in zip(IDS, NOW_COUNTS)})],
                                                                    f"Sold today ({LABEL}): nothing, no count dropped")):
@@ -157,7 +180,7 @@ class ReportTests(PosCase):
         text = (self.folder / "pos-totals.json").read_text()
         self.assertEqual(json.loads(text), {
             "asOf": "2026-11-10T20:00:00+00:00", "items": 6, "soldOut": 2, "low": 0, "noCount": 1, "stockWordsWaiting": None,
-            "countDropItems": 3, "countDropUnits": "38", "countDropNote": LABEL, "tillReachable": True, "snapshot": "fresh"})
+            "countDropItems": 3, "countDropUnits": "38", "countDropNote": LABEL, "countDropLeftOut": 0, "countDropIncomplete": None, "tillReachable": True, "snapshot": "fresh"})
         rows, _ = sync.rows(fixture("items.json")["elements"], fixture("item_stocks.json")["elements"])
         for row in rows:
             cents = () if row["price_cents"] is None else (str(row["price_cents"]), f"{row['price_cents'] / 100:.2f}")

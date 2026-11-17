@@ -195,22 +195,25 @@ def report(args, clock=_now):
     kinds = reports.KINDS if args.all else (args.kind,)
     if not args.all and args.kind is None or args.all and args.kind is not None:
         raise Stop({"result": "report", "problem": "choose-kind-or-all"})
-    if args.kind == "pos":   # HASS-POS-1: the private till summary plus pos-totals.json (totals only); cache only, no token
-        from hass.clover import pos
-        ident, content_links = cache.identity_of(clover), reports.read_inputs(state, worktree)
-        pos.write_files(state, pos.build(snapshot, cache.history(state, ident), now, *content_links, reachable,
-                                         clover.low_stock_threshold), now, args.out)
-        return {"result": "ok", "reports": 1, "asOf": cache._iso(snapshot.fetched_at)}, 0
     prepared = []
     for kind in kinds:
+        if kind == "pos":
+            continue
         if kind == "stock":
             prepared.append(reports.low_stock(snapshot, clover.low_stock_threshold))
         else:
             content, links = reports.read_inputs(state, worktree)
             prepared.append(reports.till_vs_site(snapshot, content, links))
+    pos_built = None
+    from hass.clover import pos
+    if args.all or args.kind == "pos":   # HASS-POS-1: the private till summary plus pos-totals.json (totals only); cache only, no token
+        pos_built = pos.build(snapshot, cache.history(state, cache.identity_of(clover)), now, *reports.read_inputs(state, worktree), reachable,
+                              clover.low_stock_threshold)
     for doc in prepared:
         reports.write_report(state, doc, now, reachable, args.out)
-    return {"result": "ok", "reports": len(prepared), "asOf": cache._iso(snapshot.fetched_at)}, 0
+    if pos_built:
+        pos.write_files(state, pos_built, now, args.out)
+    return {"result": "ok", "reports": len(prepared) + bool(pos_built), "asOf": cache._iso(snapshot.fetched_at)}, 0
 
 
 def main(argv=None, *, transport=None, sleep=time.sleep, monotonic=time.monotonic, clock=_now):
