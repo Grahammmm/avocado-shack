@@ -324,11 +324,21 @@ def _design_undo_problems(wt: Path, journal: dict, draft: dict) -> list[str]:
     blob = lambda ref, p: _out(wt, "rev-parse", "-q", "--verify", f"{ref}:{p}") if ref else ""  # noqa: E731
     dirty = [e[3:] for e in _out(wt, "status", "--porcelain", "-z", "--no-renames", "-uall").split("\0") if e]
     if not paths or not target or set(dirty) - set(paths): return ["interrupted design apply: other worktree changes; needs reconciliation"]
+    def tree(ref, p):  # (mode, blob) at ref, None when absent
+        r = _out(wt, "ls-tree", ref, "--", p).split()
+        return (r[0], r[2]) if r else None
+    def work(p):  # (mode, blob) of the worktree entry: type, exec bit and bytes/link target
+        try: st = os.lstat(wt / p)
+        except OSError: return None
+        if stat.S_ISLNK(st.st_mode):
+            d = os.fsencode(os.readlink(wt / p))
+            return ("120000", hashlib.sha1(b"blob %d\0" % len(d) + d).hexdigest())
+        if not stat.S_ISREG(st.st_mode): return ("?", "")
+        return ("100755" if st.st_mode & 0o100 else "100644", _out(wt, "hash-object", "--", p))
     for p in dirty:
-        ours = {blob("HEAD", p), blob(target, p)}
-        staged = _out(wt, "ls-files", "-s", "--", p).split()[1:2]
-        work = _out(wt, "hash-object", "--", p) if (wt / p).is_file() else ""
-        if work not in ours or (staged[0] if staged else "") not in ours:
+        ours = {tree("HEAD", p), tree(target, p)}
+        s = _out(wt, "ls-files", "-s", "--", p).split()
+        if work(p) not in ours or ((s[0], s[1]) if s else None) not in ours:
             return [f"interrupted design apply: {p} changed since the crash; needs reconciliation"]
     for p in dirty:
         if blob("HEAD", p): _git(wt, "checkout", "HEAD", "--", p)

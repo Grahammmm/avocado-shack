@@ -159,6 +159,28 @@ class LookEngine(unittest.TestCase):
         self.crash()
         self.refused_and_kept(CSS, "body { color: blue; }\n")
 
+    def kept_after(self, change):
+        self.crash()
+        css = self.repo.wt / CSS
+        change(css)
+        out = editor.recover(state=str(self.repo.state))
+        self.assertEqual((out["result"], self.repo.head()), ("refused", self.before))
+        self.assertTrue((self.repo.state / "journal" / (self.cut["change_id"] + ".json")).is_file())
+        return css
+
+    def test_recovery_keeps_a_post_crash_mode_change(self):
+        css = self.kept_after(lambda p: p.chmod(0o755))
+        self.assertEqual(css.stat().st_mode & 0o777, 0o755)
+
+    def test_recovery_keeps_a_post_crash_symlink_with_the_same_bytes(self):
+        def link(p):
+            twin = self.repo.state / "twin.css"  # outside the worktree, so it is not itself a stray path
+            twin.write_bytes(p.read_bytes())
+            p.unlink()
+            p.symlink_to(twin)
+        css = self.kept_after(link)
+        self.assertTrue(css.is_symlink())
+
     def test_crash_alone_recovers_and_a_later_apply_lands(self):
         self.crash()
         out = editor.recover(state=str(self.repo.state))
