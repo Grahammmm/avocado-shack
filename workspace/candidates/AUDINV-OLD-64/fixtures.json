@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "cases": [
+    {
+      "name": "synthetic observed matching receipt, not owner acceptance",
+      "input": {
+        "class": "relay-pictures",
+        "period": "clear-at-ack",
+        "receipt_class": "relay-pictures",
+        "receipt_period": "clear-at-ack",
+        "layer": "observed",
+        "at": "2026-11-15T00:00:00Z",
+        "status": "valid",
+        "count": 0
+      },
+      "expected": "TECHNICAL-RECEIPT-ONLY"
+    },
+    {
+      "name": "different class",
+      "input": {
+        "class": "relay-pictures",
+        "period": "clear-at-ack",
+        "receipt_class": "relay-rows",
+        "receipt_period": "clear-at-ack",
+        "layer": "observed",
+        "at": "2026-11-15T00:00:00Z",
+        "status": "valid",
+        "count": 0
+      },
+      "expected": "UNVERIFIED/HOLD"
+    },
+    {
+      "name": "conflicting period",
+      "input": {
+        "class": "relay-pictures",
+        "period": "clear-at-ack",
+        "receipt_class": "relay-pictures",
+        "receipt_period": "30-days",
+        "layer": "observed",
+        "at": "2026-11-15T00:00:00Z",
+        "status": "valid",
+        "count": 0
+      },
+      "expected": "UNVERIFIED/HOLD"
+    },
+    {
+      "name": "count only",
+      "input": {
+        "class": "relay-pictures",
+        "period": "clear-at-ack",
+        "receipt_class": "relay-pictures",
+        "receipt_period": "clear-at-ack",
+        "layer": "counts",
+        "at": "2026-11-15T00:00:00Z",
+        "status": "valid",
+        "count": 0
+      },
+      "expected": "UNVERIFIED/HOLD"
+    },
+    {
+      "name": "missing count",
+      "input": {
+        "class": "relay-pictures",
+        "period": "clear-at-ack",
+        "receipt_class": "relay-pictures",
+        "receipt_period": "clear-at-ack",
+        "layer": "counts",
+        "at": "2026-11-15T00:00:00Z",
+        "status": "valid",
+        "count": null
+      },
+      "expected": "UNVERIFIED/HOLD"
+    },
+    {
+      "name": "cancelled",
+      "input": {
+        "class": "relay-pictures",
+        "period": "clear-at-ack",
+        "receipt_class": "relay-pictures",
+        "receipt_period": "clear-at-ack",
+        "layer": "observed",
+        "at": "2026-11-15T00:00:00Z",
+        "status": "cancelled",
+        "count": 0
+      },
+      "expected": "UNVERIFIED/HOLD"
+    },
+    {
+      "name": "expired",
+      "input": {
+        "class": "relay-pictures",
+        "period": "clear-at-ack",
+        "receipt_class": "relay-pictures",
+        "receipt_period": "clear-at-ack",
+        "layer": "observed",
+        "at": "2026-11-15T00:00:00Z",
+        "status": "expired",
+        "count": 0
+      },
+      "expected": "UNVERIFIED/HOLD"
+    },
+    {
+      "name": "duplicate",
+      "input": {
+        "class": "relay-pictures",
+        "period": "clear-at-ack",
+        "receipt_class": "relay-pictures",
+        "receipt_period": "clear-at-ack",
+        "layer": "observed",
+        "at": "2026-11-15T00:00:00Z",
+        "status": "duplicate",
+        "count": 0
+      },
+      "expected": "UNVERIFIED/HOLD"
+    },
+    {
+      "name": "stale",
+      "input": {
+        "class": "relay-pictures",
+        "period": "clear-at-ack",
+        "receipt_class": "relay-pictures",
+        "receipt_period": "clear-at-ack",
+        "layer": "observed",
+        "at": "2026-11-15T00:00:00Z",
+        "status": "stale",
+        "count": 0
+      },
+      "expected": "UNVERIFIED/HOLD"
+    }
+  ]
+}

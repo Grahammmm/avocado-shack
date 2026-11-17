@@ -62,6 +62,18 @@ def parse_keyword(text: str):
     return ("approve" if match[1] in APPROVE else "reject"), match[2]
 
 
+UNKNOWN_CODE_RE = re.compile(r"(yes|approved|approve|no|cancel|reject) ([0-9a-z]{4,12})")
+
+
+def parse_unknown_code(text: str):
+    """AV2007-13: the code when the whole message is an approve/cancel word and one 4-12 character token that is not a
+    valid (hex) code, such as `yes 9z9z`; otherwise None. Refusal only: never an approval or a cancel. The token needs a
+    digit, so `yes please` or `no thanks` stay plain words. A ? or a trailing clause never qualifies."""
+    match = UNKNOWN_CODE_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
+    if not match or KEYWORD_RE.fullmatch(match[0]) or not any(c.isdigit() for c in match[2]): return None
+    return match[2]
+
+
 COURTESY = {"please", "thanks", "ok", "okay"}
 
 
