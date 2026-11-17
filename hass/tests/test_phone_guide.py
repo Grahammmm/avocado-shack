@@ -8,6 +8,8 @@ from hass.tests.test_commands_doc import verb
 DOCS = Path(__file__).resolve().parents[2] / "docs" / "hass"
 SECTIONS = ["Add a product", "Add a photo", "Post a hike", "Change opening hours", "Change the home page", "Route ideas", "Undo a change", "Pause and resume"]
 SEND_RE = re.compile(r"Send( \(plain words\))?: `([^`]+)`")
+NEW_EXAMPLES = {"hide the sample hikes", "bring the sample hikes back", "put the old photo back", "stop showing the eggs as sold out"}  # AV1622-11
+LISTING = "listing photo-product-001"
 PRIVATE_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w+|\+\d|http://", re.I)
 
 
@@ -50,6 +52,20 @@ class PhoneGuideTest(unittest.TestCase):
         commands = {text for plain, text, _ in sends(self.doc) if not plain}
         self.assertLessEqual({"yes a1b2", "undo a1b2", "history", "pause changes", "resume changes", "status"}, commands)
         self.assertTrue(any(plain for plain, _, _ in sends(self.doc)), "no plain-words example")
+
+    def test_new_examples_required_and_classified(self):  # AV1622-11
+        found = sends(self.doc)
+        plain = {text for p, text, _ in found if p}
+        commands = {text for p, text, _ in found if not p}
+        self.assertLessEqual(NEW_EXAMPLES, plain)
+        self.assertIn(LISTING, commands)
+        self.assertEqual(verb(LISTING), "listing")
+        for text in NEW_EXAMPLES:
+            self.assertIsNone(verb(text), text)
+        for text in sorted(NEW_EXAMPLES):  # dropping any one is caught
+            self.assertNotIn(text, {t for _p, t, _l in sends(self.doc.replace(f"`{text}`", "`gone`"))})
+        self.assertEqual(problems(self.doc.replace("Send: `listing photo-product-001`", "Send (plain words): `listing photo-product-001`"))[0][:36],
+                         "plain-words line parses as a command")
 
     def test_non_command_send_line_fails(self):
         self.assertEqual(problems(self.doc + "Send: `yes please`\n"), ["Send line is not a command: Send: `yes please`"])
