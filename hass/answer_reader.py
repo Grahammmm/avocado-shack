@@ -31,14 +31,15 @@ PROMPT = ("You read one short answer from a shop owner to one question about a p
 class AnswerReader(LocalInterpreter):
     """read(key, words, today) -> {"value": ...} or {}. Transport, url and model are the interpreter's own."""
 
-    def __init__(self, base_url, model, timeout=30, transport=None, api="ollama", think=None):
+    def __init__(self, base_url, model, timeout=30, transport=None, api="ollama", think=None, fallback=None):
         super().__init__(base_url, model, PROMPT, timeout=timeout, transport=transport, api=api, think=think)
-        self.calls = 0  # how many times the model was asked (the interview's count)
+        if fallback is not None and (not isinstance(fallback, AnswerReader) or fallback.fallback is not None): raise ValueError("bad fallback")
+        self.calls, self.fallback = 0, fallback  # how many times the model was asked; HASS-CLOUD-CODEX-1: asked once when this one failed
 
     def _answer_request(self, key, words, today) -> bytes:
         user = json.dumps({"question": key, "form": FORMS[key], "today": today.isoformat(), "answer": words}, ensure_ascii=False)
         messages = [{"role": "system", "content": PROMPT}, {"role": "user", "content": user}]
-        if self.api == "openai":
+        if self.api != "ollama":
             return self._openai_body(messages)
         body = {"model": self.model, "messages": messages, "stream": False, "format": "json", "options": {"temperature": 0}}
         if self.think is False:
@@ -46,7 +47,16 @@ class AnswerReader(LocalInterpreter):
         return json.dumps(body, ensure_ascii=False).encode("utf-8")
 
     def read(self, key, words, today) -> dict:
-        self.last_error, self.last_seconds = None, None
+        found = self._read_once(key, words, today)
+        if self.last_error and self.fallback is not None:  # the one retry on the local reader; its answer is final
+            first, before, found = self.last_error, self.fallback.calls, self.fallback._read_once(key, words, today)
+            self.calls += self.fallback.calls - before
+            self.last_error, self.last_backend, self.last_fallback, self.last_primary_error = (
+                self.fallback.last_error, self.fallback.last_backend, True, first)
+        return found
+
+    def _read_once(self, key, words, today) -> dict:
+        self.last_error, self.last_seconds, self.last_backend, self.last_fallback, self.last_primary_error = None, None, self.api, False, None
         started = time.monotonic()
         try:
             if key not in FORMS or not isinstance(words, str) or not words.strip() or len(words) > 400:

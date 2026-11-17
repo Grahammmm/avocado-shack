@@ -211,6 +211,25 @@ class PhotoTests(harness.HostCase):
         self.assertEqual([r["state"] for r in self.drafts()], ["needs-details"])
         self.assertEqual(self.relay_rows(), [conversation.PHOTO_QUESTION])
 
+    def test_codex_photo_worker_builds_label_reader_with_local_fallback(self):
+        import tempfile
+        from hass import cloud_codex
+        media_dir = tempfile.TemporaryDirectory(prefix="relay-media-")
+        self.addCleanup(media_dir.cleanup)
+        from hass.tests.test_receiver import SETTINGS, OWNER_CHAT
+        self.set_settings({**SETTINGS, "ownerChat": OWNER_CHAT, "mediaRoot": media_dir.name})
+        itp = {"api": "codex", "model": "gpt-6.1-sol", "fallback":
+               {"url": "http://127.0.0.1:8010", "model": "qwen", "api": "openai"}}
+        cfg = host.load_host(self.host_json(photos=True, interpreter=itp))
+        work = host.make_worker(cfg, self.store, editor=self.editor, build=lambda: self.interp, clock=self.clock)
+        self.addCleanup(work.conv.db.close)
+        labels = work.conv.labels
+        self.assertIsInstance(work.conv.photos, relay_photos.RelayPhotos)
+        self.assertIsInstance(labels, host.label_reader.LabelReader)
+        self.assertEqual((labels.api, labels.fallback.api), ("codex", "openai"))
+        self.assertIsInstance(labels.transport, cloud_codex.CodexTransport)
+        self.assertIsInstance(labels.fallback.transport, cloud_codex.Remaining)
+
     def test_photo_post_to_real_worker_interview_and_one_coded_proposal(self):
         import tempfile
         media_dir = tempfile.TemporaryDirectory(prefix="relay-media-")

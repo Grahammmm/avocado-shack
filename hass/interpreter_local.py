@@ -23,7 +23,7 @@ WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 CHAT_PATH, MAX_BODY, MAX_MODEL = "/api/chat", 256 * 1024, 100
 MAX_EARLIER = 4  # HASS-HIKE-FLOW-1: owner texts of the open request that go out with an answer (Conversation keeps the same)
-APIS, OPENAI_PATH, MAX_TOKENS = ("ollama", "openai"), "/v1/chat/completions", 2000  # HASS-INTERP-OPENAI-1
+APIS, OPENAI_PATH, MAX_TOKENS = ("ollama", "openai", "codex"), "/v1/chat/completions", 2000  # HASS-INTERP-OPENAI-1; HASS-CLOUD-CODEX-1: codex = the openai body/parser over an injected hass.cloud_codex transport
 HEADERS = {"Content-Type": "application/json", "Accept": "application/json"}
 FAILED = "I couldn't work that out just now, so nothing was changed. Please try again in a few minutes."
 URL_ERROR = "interpreter URL must be loopback http"
@@ -119,8 +119,9 @@ class LocalInterpreter:
 
     def __init__(self, base_url, model, system_prompt, timeout=30, transport=None, clock=None, think=None,
                  hinter=None, api="ollama"):
-        if api not in APIS: raise ValueError("api must be ollama or openai")  # HASS-INTERP-OPENAI-1
-        self.url = check_url(base_url) + (OPENAI_PATH if api == "openai" else CHAT_PATH)
+        if api not in APIS: raise ValueError("api must be ollama, openai or codex")  # HASS-INTERP-OPENAI-1
+        if api == "codex" and not callable(transport): raise ValueError("codex needs its transport")  # never a URL
+        self.url = "codex:" if api == "codex" else check_url(base_url) + (OPENAI_PATH if api == "openai" else CHAT_PATH)
         if not (isinstance(model, str) and 0 < len(model) <= MAX_MODEL and not any(c.isspace() for c in model)):
             raise ValueError(f"model must be a name of 1-{MAX_MODEL} characters without spaces")
         if not (isinstance(system_prompt, str) and system_prompt.strip()):
@@ -135,7 +136,7 @@ class LocalInterpreter:
         self.clock = clock if clock is not None else (lambda: datetime.now(timezone.utc))
         self.hinter = hinter  # HASS-NL-1: hinter(text, date, aliases) -> dict of facts worked out from the owner's words
         self.last_error = None
-        self.last_backend, self.last_fallback, self.last_primary_error, self.last_seconds = None, False, None, None
+        self.last_backend, self.last_fallback, self.last_primary_error, self.last_seconds, self.last_model = None, False, None, None, None
 
     def _today(self, sent_at=None):
         """(YYYY-MM-DD, weekday) in Pacific time; a raising, naive or non-datetime clock (or an explicit sent_at that is
@@ -171,7 +172,7 @@ class LocalInterpreter:
                 fields["recent"] = {"question": recent["question"], **({"earlier": earlier} if earlier else {})}  # HASS-NL-1: Hass's last question, which this text answers; HASS-HIKE-FLOW-1: + the owner's texts of that request, oldest first
             user = json.dumps(fields, ensure_ascii=False)
             messages = [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": user}]
-            if self.api == "openai": return self._openai_body(messages)
+            if self.api != "ollama": return self._openai_body(messages)
             body = {"model": self.model, "messages": messages, "stream": False, "format": "json", "options": {"temperature": 0}}
             if self.think is False: body["think"] = False  # HASS-INTERP-TIMEOUT-1: sent only when the operator set it false
             return json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -187,6 +188,7 @@ class LocalInterpreter:
     def _call(self, body) -> dict:
         try:
             status, raw = self.transport(self.url, body, dict(HEADERS), self.timeout)
+        except _Failed: raise  # HASS-CLOUD-CODEX-1: the codex transport's own short code
         except urllib.error.URLError as exc:
             raise _Failed("timeout" if isinstance(exc.reason, TimeoutError) else "connect") from None
         except TimeoutError:
@@ -200,7 +202,7 @@ class LocalInterpreter:
             reply = _strict(raw)
         except (ValueError, RecursionError):
             raise _Failed("not-json") from None
-        if self.api == "openai":
+        if self.api != "ollama":
             content = self._openai_content(reply)
         else:
             if not isinstance(reply, dict) or reply.get("done") is not True: raise _Failed("shape")
@@ -228,7 +230,7 @@ class LocalInterpreter:
     def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None) -> dict:
         """AV1352-06: sent_at (aware, from Conversation) is the day 'today' means; None reads the clock. The model's decoded JSON object as-is (Conversation's checks decide if it is usable), else the fixed
         unsupported reply with the reason code in last_error."""
-        self.last_error, self.last_backend, self.last_fallback, self.last_primary_error = None, self.api, False, None
+        self.last_error, self.last_backend, self.last_fallback, self.last_primary_error, self.last_model = None, self.api, False, None, self.model
         started = time.monotonic()
         try:
             return self._call(self._request(text, pending, notes, aliases, sent_at, recent))
@@ -277,5 +279,6 @@ class FallbackInterpreter:
             except Exception:  # noqa: BLE001 - RF2340-12: a raising second one is the fixed failure, its text never kept
                 result, self.last_error = {"unsupported": FAILED}, "error"
             self.last_backend, self.last_fallback, self.last_primary_error = getattr(self.fallback, "last_backend", None), True, problem
+        self.last_model = getattr(self.fallback if self.last_fallback else self.primary, "last_model", None)
         self.last_seconds = round(time.monotonic() - started, 3)
         return result
