@@ -44,7 +44,7 @@ class ScoreTests(EvalTestCase):
         code, out, err = scored(CASES, REPLIES)
         summary = json.loads(out)
         self.assertEqual((code, err, {k: summary[k] for k in ("cases", "passed", "missing", "extra")}),
-                         (0, "", {"cases": 84, "passed": 81, "missing": [], "extra": []}))
+                         (0, "", {"cases": 90, "passed": 87, "missing": [], "extra": []}))
         self.assertEqual(summary["failed"], [
             {"id": "e06", "why": "ops product.restore but expected product.hide"},  # wrong op
             {"id": "e13", "why": "op 1 hike.create: missing arg capacity"},  # missing arg
@@ -83,7 +83,7 @@ class ScoreTests(EvalTestCase):
                 if "trailId" in args: self.assertIn(args["trailId"], trails)
                 if op == "route.edit": self.assertIn(args["id"], trails, case["id"])
                 if "photo" in args: self.assertRegex(args["photo"], r"\A[0-9a-f]{64}\Z", case["id"])
-        self.assertEqual(kinds, {"product": 20, "maker": 4, "club": 1, "hike": 14, "store": 16, "route": 8, "revises": 6,
+        self.assertEqual(kinds, {"product": 20, "maker": 8, "club": 1, "hike": 15, "store": 16, "route": 8, "revises": 7,
                                  "question": 10, "unsupported": 5})
 
     def test_missing_and_extra_ids(self):
@@ -91,19 +91,19 @@ class ScoreTests(EvalTestCase):
         path = self.write("r.jsonl", [{"id": k, "reply": v} for k, v in replies.items()])
         code, out, _ = scored(CASES, path)
         summary = json.loads(out)
-        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 80))
+        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 86))
 
     def test_duplicate_id_in_either_file_exits_2(self):
-        dup_cases = self.write("c.jsonl", self.rows[:83] + [self.rows[0]])
+        dup_cases = self.write("c.jsonl", self.rows[:89] + [self.rows[0]])
         dup_replies = self.write("r.jsonl", [{"_note": "x"}, {"id": "e01", "reply": {}}, {"id": "e01", "reply": {}}])
-        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 84: duplicate id"))
+        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 90: duplicate id"))
         self.assertEqual(scored(CASES, dup_replies), (2, "", "replies line 3: duplicate id"))
 
     def test_malformed_line_or_62_cases_exits_2_naming_only_the_line(self):
         broken = self.write("c.jsonl", self.rows[:3] + ['{"id": "e04", "text": "owner words"'] + self.rows[4:])
         self.assertEqual(scored(broken, REPLIES), (2, "", "cases line 4: not valid JSON"))
-        self.assertEqual(scored(self.write("c62.jsonl", self.rows[:83]), REPLIES),
-                         (2, "", "cases: 83 cases, expected 84"))
+        self.assertEqual(scored(self.write("c62.jsonl", self.rows[:89]), REPLIES),
+                         (2, "", "cases: 89 cases, expected 90"))
         self.assertEqual(scored(CASES, self.tmp / "absent.jsonl"), (2, "", "replies: unreadable"))
 
     def test_unknown_op_scores_as_question(self):
@@ -183,7 +183,7 @@ class LiveTests(EvalTestCase):
     def test_live_records_one_reply_per_case_that_score_reads(self):
         calls, out = [], self.tmp / "fresh.jsonl"
         code, stdout, _ = run("--live", "--url", URL, "--model", "m", "--out", out, transport=self.fake(calls))
-        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 84}, 84))
+        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 90}, 90))
         replies = ev.load_replies(out)
         self.assertEqual(list(replies), [c["id"] for c in self.cases])
         self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 10)  # only the 10 must-ask cases pass
