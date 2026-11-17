@@ -21,6 +21,7 @@ PROTECTED = re.compile(r"<\s*/?\s*(?:meta|link|head)(?![\w-])|content-security-p
 URL_ATTR = re.compile(r"""(?<![\w:-])(srcset|src|href|action|poster|xlink:href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.I)
 URL_VALUES = re.compile(r"""@import\s+(?:url\(\s*)?["']?\s*([^"')\s;]*)|url\(\s*["']?\s*([^"')\s]*)""", re.I)
 OFF_SITE = re.compile(r"^(?:[a-z][a-z0-9+.\-]*:|[/\\]{2})|\{\{", re.I)  # a scheme, //host, or a slot (value unknown)
+ORPHAN_URL = re.compile(r"(?<![\w.+-])(?:[a-z][a-z0-9+.\-]*:|[/\\]{2}|\{\{)", re.I)
 CSS_ESCAPE = re.compile(r"\\([0-9a-fA-F]{1,6})\s?|\\(.)")
 VISIBLE_ATTR = re.compile(r"""(?<![\w:-])(?:alt|title|aria-label|placeholder)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.I)
 CSS_CONTENT = re.compile(r"""content\s*:\s*(["'])(.*?)\1""", re.I)
@@ -86,7 +87,25 @@ def check(diff: str, owner_text: str) -> str | None:
         if TAG.search(line): return "tag"
         if HANDLER.search(line): return "handler"
         if SCRIPTY.search(re.sub(r"[\s\x00-\x1f]+", "", line)): return "javascript"
-    for _, lines, _, hunks in files:
+    for path, lines, _, hunks in files:
+        if path.endswith(".html"):
+            for hunk in hunks:
+                # Before the first '<', a hunk may start inside a tag whose opening
+                # and URL attribute are outside diff context. Refuse ambiguous URL
+                # tokens in changed prefix lines rather than trusting that fragment.
+                prefix = []
+                for added_line, line in hunk:
+                    fragment, sep, _ = _decode(line).partition("<")
+                    if added_line and (fragment or not sep): prefix.append(fragment)
+                    if sep: break
+                if prefix:
+                    # Without the opening tag the fragment's role is unknown. Only
+                    # a complete, quoted relative value is provably safe here.
+                    for fragment in prefix:
+                        value = fragment.strip()
+                        if not (len(value) >= 2 and value[0] in "\"'" and value[-1] == value[0]
+                                and value[0] not in value[1:-1] and not ORPHAN_URL.search(value[1:-1])):
+                            return "url"
         text = _decode("\n".join(lines)) + "\n" + "\n".join(changed_tags(hunks))
         for m in URL_ATTR.finditer(text):
             value = next((v for v in m.groups()[1:] if v is not None), "")

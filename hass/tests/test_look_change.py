@@ -161,6 +161,21 @@ class LookChangeTest(unittest.TestCase):
                 self.assertEqual(look_guard.check(diff("hass/templates/index.html", PAGE + old + "\n", PAGE + new + "\n"),
                                                   "add a picture"), "url")
 
+    def test_guard_checks_url_when_tag_opens_outside_diff_context(self):
+        for old in ('<img\n a=1\n b=2\n c=3\n d=4\n src=\n"/safe.png"\n>\n',
+                    '<img\n src=\n \n \n \n \n"/safe.png"\n>\n'):
+            for replacement, expected in (("https://evil.example/x.png", "url"), ("/other.png", None)):
+                patch = diff("hass/templates/index.html", old, old.replace("/safe.png", replacement))
+                self.assertNotIn("<img", patch)
+                self.assertEqual(look_guard.check(patch, "change the picture"), expected)
+
+    def test_guard_refuses_ambiguous_incomplete_tag(self):
+        old = '<img\n a=1\n b=2\n c=3\n d=4\n data-src=\n \n \n \n \n"https://evil.example/x.png"\n>\n'
+        patch = diff("hass/templates/index.html", old, old.replace("data-src=", "src="))
+        self.assertNotIn("<img", patch)
+        self.assertNotIn("https:", patch)
+        self.assertEqual(look_guard.check(patch, "change the picture"), "url")
+
     def test_guard_rejects_unquoted_unstated_visible_claim(self):
         self.assertEqual(look_guard.check(page_add('<img src="/x" alt=organic>'), "add a picture"), "claims")
 
