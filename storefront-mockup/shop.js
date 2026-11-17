@@ -18,7 +18,8 @@ function makerStory(p){const m=maker(p);if(!m)return'';const story=typeof m.stor
 // The maker's key and name are always on the card (screen-reader only), so a preview finds the card with or without the panel.
 function card(p){
  const m=maker(p);
- return `<article data-product-id="${esc(p.id)}" data-category="${esc(p.category)}"${m?` data-maker-key="${esc(p.producerKey)}"`:''}><div class="food-card-top"><div class="product-image">${photo(p)}</div><div class="food-identity"><p class="product-meta">${esc(brand(p))}</p><h3>${esc(p.name)}</h3><p class="origin-label">${esc(origin(p))}</p>${m?`<span class="sr-only maker-name">${esc(m.name)}</span>`:''}${badges(p)}</div></div><p class="food-description">${esc(p.description)}</p>${makerStory(p)}<a class="text-link card-link" href="?item=${esc(encodeURIComponent(p.id))}#market">Link to this</a></article>`;
+ const amount=p.sellingPrice?`<p class="product-meta product-price">$${esc(p.sellingPrice)}</p>`:'';
+ return `<article data-product-id="${esc(p.id)}" data-category="${esc(p.category)}"${m?` data-maker-key="${esc(p.producerKey)}"`:''}><div class="food-card-top"><div class="product-image">${photo(p)}</div><div class="food-identity"><p class="product-meta">${esc(brand(p))}</p><h3>${esc(p.name)}</h3>${amount}<p class="origin-label">${esc(origin(p))}</p>${m?`<span class="sr-only maker-name">${esc(m.name)}</span>`:''}${badges(p)}</div></div><p class="food-description">${esc(p.description)}</p>${makerStory(p)}<a class="text-link card-link" href="?item=${esc(encodeURIComponent(p.id))}#market">Link to this</a></article>`;
 }
 [...new Set(catalog.map(p=>p.brand))].sort().forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=b==='Producer not identified'?'Other market selections':b;$('#brand-filter').append(o)});
 // AV1622-04: shelf-check words and the selection line are worked out here, in the visitor's browser, from the recorded dates

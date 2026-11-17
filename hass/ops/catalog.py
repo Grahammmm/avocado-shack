@@ -17,7 +17,7 @@ import unicodedata
 from hass import voice
 from hass.content_model import AVAILABILITY, CATEGORIES, TEXT_LIMITS, checked_on, shop_today
 from hass.field_words import field_list
-from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
+from hass.ops import INTAKE_PRICE, Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
 
 PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
 # storefront-mockup/shop.js organic(): name matches /\borganic\b/i or the maker is one of these.
@@ -149,6 +149,8 @@ def _product_add(content, args, ctx):
         "From the market" if args["brand"] == "Producer not identified" else args["brand"])  # absence alone defaults
     record.update(producerKey=key, displayBrand=shown, status="active")
     record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
+    if "sellingPrice" in args:
+        record["sellingPrice"] = args["sellingPrice"]
     if "labelText" in args:
         from hass import product_claims
         evidence = product_claims.source(ctx.settings.get("mediaRoot"), args.get("photo"), args["labelText"])
@@ -434,7 +436,8 @@ _ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
 OPS = (
     Op("product.add", {**_PRODUCT_FIELDS, "displayBrand": Arg("text", required=False), "image": Arg("image", required=False), "photo": Arg("id", required=False),
                        "showNew": Arg("bool", required=False), "labelText": Arg("text_list", required=False),
-                       "ownerText": Arg("text_list", required=False), **_OPTIONAL}, _product_add),
+                       "ownerText": Arg("text_list", required=False), "sellingPrice": Arg(INTAKE_PRICE, required=False),
+                       **_OPTIONAL}, _product_add),
     Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
                         **_OPTIONAL, "clearProducer": Arg("bool", required=False),
                         "clearImageAlt": Arg("bool", required=False)}, _product_edit),

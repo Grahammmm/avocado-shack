@@ -7,6 +7,10 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## HASS-SITE-PRICE-1 — owner selling price on product cards (November 17, 2026)
+
+The real card and its private draft preview can show the optional owner-entered USD selling price, including per-lb or each when supplied. The same card serves item links. Cost and quantity remain private, and existing unpriced catalog files are unchanged. No live publication or runtime changes.
+
 ## HASS-PUBLISH-GATE-1 — label attribution and real-card preview (November 17, 2026)
 
 Review repair: unsupported origin/organic and health/award wording remains screened in every category; non-food label exemptions match the exact sourced string. Failed card capture now attaches only hash-verified frozen product pixels (including a successful styled image), or withholds confirmation; a picture-bearing reply must be delivered for the current draft hash before approval. Scope new-card cropping and owner-photo styling fallback to the enabled new-intake path, preserving legacy edit viewport and held-photo checks. Refresh only the private-provenance house-style projection and exact product.add argument expectation. Final focused publish/intake/picture/policy compatibility selection: 143 tests passed with real Chromium available. Full CI/review remain separate; no live publication or service change.
