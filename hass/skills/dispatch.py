@@ -531,7 +531,13 @@ class Dispatcher:
         # Model fields still need owner-word provenance. Only checked label-reader data
         # supplies additional source words, never the raw image or model instructions.
         trusted = [*texts, *simple.public_sources(slots)]
-        filled = validate(skill, {}, new_slots, trusted, ctx, req["attachments"] if req else [])
+        # Simple intake drafts ordinary product prose for owner review. Identity,
+        # maker and origin still need their own provenance; the plan sanitizes
+        # unsupported claim clauses before either image generation or preview.
+        copy_skill = dataclasses.replace(skill, slots=tuple(
+            dataclasses.replace(slot, owner_words=False) if slot.name == "description" else slot
+            for slot in skill.slots))
+        filled = validate(copy_skill, {}, new_slots, trusted, ctx, req["attachments"] if req else [])
         slots.update(filled.slots)
         attachments = req["attachments"] if req else []
         if attachments: slots["photo"] = attachments[-1]
@@ -541,6 +547,7 @@ class Dispatcher:
                               skill="item.add", slots=slots, texts=texts, attachments=attachments)
             return "question"
         slots = simple.fill(slots, texts)
+        slots['_owner_texts'] = texts
         if filled.problem:
             conv._reply(filled.problem)
             return "not-drafted"
@@ -558,6 +565,21 @@ class Dispatcher:
             except ValueError as exc:
                 conv._reply(str(exc))
                 return "not-drafted"
+        if slots.get('name') and slots['intake'].get('price') and not slots.get('photo'):
+            from hass import photo_polish
+            if not slots['intake'].get('generation_error'):
+                sha, error = photo_polish.generate_product(conv.settings['mediaRoot'], slots, conv.polish_transport)
+                if sha:
+                    slots['photo'] = sha
+                    slots['image_alt'] = slots['name'] + ' (illustration)'
+                    slots['intake']['generated_picture'] = True
+                    attachments = [sha]
+                else:
+                    slots['intake']['generation_error'] = error
+        if slots.get('photo') and slots.get('name'):
+            from hass import product_claims
+            product_claims.remember_owner(conv.settings['mediaRoot'], slots['photo'], texts)
+            ops = simple.plan(slots, ctx.content)
         needed = next((k for k in ("name", "photo") if not slots.get(k)), None)
         needed = needed or ("price" if not slots["intake"].get("price") else None)
         if needed:
@@ -565,6 +587,10 @@ class Dispatcher:
             slots["intake"]["asked_required"] = needed
             question = {"name": "Send the product photo or its name.", "photo": "Send a product photo for this listing.",
                         "price": "What price should it sell for?"}[needed]
+            if needed == 'photo' and slots['intake'].get('generation_error'):
+                from hass import photo_polish
+                question = "I couldn't make the product picture (" + photo_polish.plain_reason(slots['intake']['generation_error']) + "). Please send a photo."
+
             if already: question = "Tell me what to change, or send the missing " + needed + "."
             conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"] if req else None,
                               skill="item.add", slots=slots, texts=texts, attachments=attachments,

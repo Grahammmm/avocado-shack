@@ -66,7 +66,7 @@ class DemoTranscriptTests(unittest.TestCase):
         edit, undo = db.execute("SELECT * FROM drafts ORDER BY row_id").fetchall()  # duplicate: no second draft
         self.assertIn("Hass avocado, the description:", texts[0])
         self.assertTrue(texts[1].startswith("Saved: the description for Hass avocado"))
-        self.assertIn("the description for Hass avocado: saved", texts[2])
+        self.assertIn("the description for Hass avocado, approved Mon Nov 2 9:01 am: saved", texts[2])
         self.assertTrue(texts[3].startswith("To undo that, I'd change it back:\nHere's the change I'd make:"))
         self.assertTrue(texts[4].startswith("Saved: the description for Hass avocado"))
         self.assertEqual(texts[5], conversation.NOTHING)  # final bare yes: exactly one reply

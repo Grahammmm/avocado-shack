@@ -218,11 +218,75 @@ class RunnerTest(unittest.TestCase):
                          {"needs Michael's devices", "release step"})
         self.assertEqual((acceptance.MAP["H23"], acceptance.MAP["H24"][0]),
                          (("test_auto_policy",), "test_design_check"))
+        self.assertEqual(acceptance.MAP["H01"], ("test_content", "test_content_read_errors",
+                         "test_browser_freshness", "test_publish"))
+        self.assertEqual(acceptance.MAP["H02"], ("test_editor", "test_maker_product_batch"))
+        self.assertEqual(acceptance.MAP["H03"], ("test_catalog_ops", "test_clear_availability",
+                         "test_product_new", "test_maker_hide_products", "test_maker_optional_url"))
+        self.assertEqual(acceptance.MAP["H12"], ("test_attachment_reply", "test_photo_draft",
+                         "test_photo_on_product", "test_photo_new_product", "test_photo_home_image"))
+        self.assertEqual(acceptance.MAP["H22"], ("test_interpreter_cap", "test_interpreter_prompt"))
+        self.assertEqual(acceptance.MAP["H17"], ("test_status_pause", "test_help",
+                         "test_status_photos", "test_listing_command", "test_status_notice",
+                         "test_social_draft_maker", "test_post_maker_command"))
+        self.assertEqual(acceptance.MAP["H25"], "release step")
         self.assertEqual(acceptance.MAP["H04"], ("test_hike_ops", "test_route_add",
-                         "test_route_edit", "test_route_hide", "test_hike_samples"))
+                         "test_route_edit", "test_route_hide", "test_hike_samples",
+                         "test_hike_repeat", "test_hike_ics"))
         self.assertEqual(acceptance.MAP["H13"], ("test_store_ops", "test_store_intro",
                          "test_store_headline", "test_store_story",
                          "test_store_home_image", "test_store_clear_home_image"))
+
+    def test_av1622_modules_selected_once(self):
+        class Recorder(unittest.TestLoader):
+            def __init__(self):
+                super().__init__()
+                self.names = []
+
+            def loadTestsFromName(self, name, module=None):
+                self.names.append(name)
+                return unittest.TestSuite([unittest.FunctionTestCase(lambda: None)])
+
+        want = {"H01": ("test_browser_freshness", "test_publish"),
+                "H03": ("test_clear_availability", "test_product_new"),
+                "H17": ("test_listing_command",)}
+        for id_, mods in want.items():
+            rec = Recorder()
+            rows, code, probs = acceptance.run({id_: acceptance.MAP[id_]}, rec, expected_ids=(id_,))
+            self.assertEqual((code, probs), (0, []))
+            self.assertEqual(len(rec.names), len(set(rec.names)))
+            for m in mods:
+                self.assertEqual(rec.names.count("hass.tests." + m), 1)
+        rows, code, _ = acceptance.run({"H25": acceptance.MAP["H25"]}, Recorder(), expected_ids=("H25",))
+        self.assertEqual((code, rows[0]["result"], rows[0]["note"]),
+                         (0, "not covered", "release step"))
+
+    def test_av1937_modules_selected_once_in_order(self):
+        class Recorder(unittest.TestLoader):
+            def __init__(self):
+                super().__init__()
+                self.names = []
+
+            def loadTestsFromName(self, name, module=None):
+                self.names.append(name)
+                return unittest.TestSuite([unittest.FunctionTestCase(lambda: None)])
+
+        want = {"H02": ("test_maker_product_batch",),
+                "H03": ("test_maker_hide_products", "test_maker_optional_url"),
+                "H04": ("test_hike_repeat", "test_hike_ics"),
+                "H12": ("test_photo_home_image",), "H22": ("test_interpreter_prompt",),
+                "H17": ("test_status_notice", "test_social_draft_maker", "test_post_maker_command")}
+        for id_, mods in want.items():
+            rec = Recorder()
+            rows, code, probs = acceptance.run({id_: acceptance.MAP[id_]}, rec, expected_ids=(id_,))
+            self.assertEqual((code, probs), (0, []))
+            self.assertEqual(rec.names, ["hass.tests." + m for m in acceptance.MAP[id_]])
+            self.assertEqual(len(rec.names), len(set(rec.names)))
+            self.assertEqual([n for n in rec.names if n[len("hass.tests."):] in mods],
+                             ["hass.tests." + m for m in mods])
+        rows, code, _ = acceptance.run({"H25": acceptance.MAP["H25"]}, Recorder(), expected_ids=("H25",))
+        self.assertEqual((code, rows[0]["result"], rows[0]["tests"], rows[0]["note"]),
+                         (0, "not covered", 0, "release step"))
 
 
 UNEXP = textwrap.dedent("""
