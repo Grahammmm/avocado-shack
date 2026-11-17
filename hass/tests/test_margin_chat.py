@@ -10,8 +10,17 @@ from hass.tests.test_commands_doc import verb
 from hass.tests.test_conversation import ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
-USAGE = "Tell me what you pay for a pack, how many are in it and the margin you want, like margin 24 for 12 at 35%."
+USAGE = ("Tell me what you pay for a pack (or a product with a saved cost), how many are in it and the margin you want, like margin 24 for 12 at 35%, "
+         "or the shelf price to check, like margin 24 for 12 price 3.49. Add shrink 5% if some is lost.")  # AV1352-08
 NOTE = "This is only an idea. Prices are not shown on the website, and nothing changes unless you ask."
+
+
+def steps(pack, units, shrink, price):  # AV1352-08: margins.check's own numbers, in the plain words chat allows
+    out = margins.render(margins.check(pack, units, shrink, price))
+    for name, words in (("unit_cost", "Each one costs you"), ("sellable_cost", "Each one you can sell costs you"), ("price", "Shelf price"),
+                        ("margin_actual", "Your margin")):
+        out = out.replace(f"{name} = ", f"{words}: ", 1)
+    return out.replace("below_cost = yes: this price does not cover the cost per sellable unit", "Below cost: this price does not cover the cost per sellable unit.")
 
 
 class CountingInterpreter(conversation.FixtureInterpreter):
@@ -97,6 +106,44 @@ class MarginChatTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.stored(), before)
         self.assertEqual(CountingInterpreter.calls, 0)
 
+    def test_shelf_price_replies_every_step_and_the_below_cost_line(self):  # AV1352-08
+        before = self.stored()
+        got = self.margin("margin 24 for 12 price 1.00")
+        self.assertEqual(got, steps("24", "12", "0", "1.00"))
+        for line in ("Each one costs you: 24.00 / 12 = 2.00", "Shelf price: given = 1.00", "Your margin: (1.00 - 2.00) / 1.00 = -100.0%",
+                     "Below cost: this price does not cover the cost per sellable unit."):
+            self.assertIn(line, got)
+        ok = self.margin("MARGIN $24 for 12   PRICE $3.49 shrink 5 %.")
+        self.assertEqual(ok, steps("24", "12", "5", "3.49"))
+        self.assertNotIn("Below cost", ok)
+        self.assertEqual(self.stored(), before)
+        self.assertEqual(CountingInterpreter.calls, 0)
+
+    def test_shelf_price_bad_or_mixed_input(self):  # AV1352-08
+        before = self.stored()
+        for text, want in (("margin 24 for 12 price 0", "Please check the price:"), ("margin 24 for 12 price 3.499", "Please check the price:"),
+                           ("margin 24 for 12 price 3.49 shrink 95%", "Please check the shrink:")):
+            with self.subTest(text=text):
+                self.assertIn(want, self.margin(text))
+        for text in ("margin 24 for 12 price", "margin 24 for 12 price abc", "margin 24 for 12 price 3.49 at 35%", "margin 24 for 12 at 35% price 3.49",
+                     "margin 24 for 12 price 3.49 extra", "margin 24 for 12 price 3.49 shrink 5% shrink 5%", "margin a1b2 price"):
+            with self.subTest(text=text):
+                self.assertEqual(self.margin(text), USAGE)
+        self.assertEqual(self.stored(), before)
+        self.assertEqual(CountingInterpreter.calls, 0)
+
+    def test_saved_cost_shelf_price_and_no_saved_cost(self):  # AV1352-08
+        self.assertTrue(self.margin("margin Hass avocado price 3.49").startswith("I don't have a cost saved for"))
+        self.assertEqual(self.say("cost Hass avocado: 24 for 12"), "memory-saved")
+        self.replies()
+        before = self.stored()
+        reply = self.margin("margin Hass avocado price 1.00 shrink 5%")
+        self.assertTrue(reply.startswith("Using the cost you gave me "), reply)
+        self.assertTrue(reply.endswith(steps("24", "12", "5", "1.00")), reply)
+        self.assertIn("Below cost: this price", reply)
+        self.assertEqual(self.stored(), before)
+        self.assertEqual(CountingInterpreter.calls, 0)
+
     def test_works_while_paused_and_writes_nothing(self):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
@@ -114,7 +161,7 @@ class MarginChatTests(StoreMixin, ConversationTestCase):
     def test_help_has_the_margin_line_and_its_example_runs(self):
         [line] = [ln for ln in voice.plain(conversation.HELP_TEXT).splitlines() if ln.startswith("margin ")]
         self.assertLessEqual(len(line), 70)
-        self.assertEqual(line, "margin Hass avocado at 35% - a price idea from the cost you saved")  # AV1222-10: the product form
+        self.assertEqual(line, "margin Hass avocado at 35% - a price idea or a price check")  # AV1222-10: the product form
         self.assertTrue(self.margin("margin 24 for 12 at 35%").endswith(NOTE))
 
 
