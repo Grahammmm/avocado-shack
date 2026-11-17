@@ -105,6 +105,75 @@ class PhotoTests(harness.HostCase):
         self.assertEqual(ctx.exception.position, 2)
         with self.assertRaises(ValueError): src.fetch("batch", 2)
 
+    def test_storage_failure_then_restart_retries_the_same_arrival(self):
+        import tempfile
+        directory = tempfile.TemporaryDirectory(prefix="relay-retry-")
+        self.addCleanup(directory.cleanup)
+        self.conv.settings["mediaRoot"] = directory.name
+        self.conv.photos = self.source()
+        data = (REPO_ROOT / item.JAR).read_bytes()
+        self.conv.photos.put(self.body(data=data), int(self.now.timestamp()))
+        raw = self.seal(self.event_from("new-message", guid="photo-1", text="", attachments=[{}]))
+        self.assertEqual(self.rx.accept(raw, secret=SECRET, now=self.now)["result"], "queued")
+        with mock.patch.object(media, "store_original", side_effect=OSError("temporary")):
+            with self.assertRaises(OSError): self.rx.drain()
+        self.assertEqual(self.inbox.state("photo-1"), "pending")
+        self.assertEqual(self.drafts(), [])
+        self.restart()
+        self.conv.photos = self.source()
+        self.rx.drain()
+        self.assertEqual(self.inbox.state("photo-1"), "done")
+        self.assertEqual([r["state"] for r in self.drafts()], ["needs-details"])
+        digest = sha256(data).hexdigest()
+        self.assertEqual((Path(directory.name) / "originals" / digest[:2] / (digest + ".jpg")).read_bytes(), data)
+        with self.assertRaises(ValueError): self.source().fetch("photo-1", 1)
+
+    def test_restart_across_mark_and_cleanup_keeps_one_use(self):
+        import tempfile
+        directory = tempfile.TemporaryDirectory(prefix="relay-mark-")
+        self.addCleanup(directory.cleanup)
+        self.conv.settings["mediaRoot"] = directory.name
+        self.conv.photos = self.source()
+        data = (REPO_ROOT / item.JAR).read_bytes()
+        self.conv.photos.put(self.body(data=data), int(self.now.timestamp()))
+        raw = self.seal(self.event_from("new-message", guid="photo-1", text="", attachments=[{}]))
+        self.assertEqual(self.rx.accept(raw, secret=SECRET, now=self.now)["result"], "queued")
+        with mock.patch.object(self.inbox, "_mark", side_effect=OSError("mark failed")):
+            with self.assertRaises(OSError): self.rx.drain()
+        self.assertEqual(self.inbox.state("photo-1"), "pending")
+        self.assertEqual(len(self.drafts()), 1)
+        self.restart()
+        self.conv.photos = self.source()
+        with mock.patch.object(self.conv.photos, "reconcile", side_effect=[None, OSError("crash after mark")]):
+            with self.assertRaises(OSError): self.rx.drain()
+        self.assertEqual(self.inbox.state("photo-1"), "done")
+        with sqlite3.connect(self.conv.photos.path) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM photo_in").fetchone()[0], 1)
+        self.restart()
+        self.conv.photos = self.source()
+        self.rx.drain()
+        self.assertEqual(len(self.drafts()), 1)
+        with self.assertRaises(ValueError): self.source().fetch("photo-1", 1)
+        self.assertEqual(self.inbox.enqueue(bridge.Inbound("photo-1", testkit.CHAT, testkit.OWNER, "",
+                         received_at=self.now.isoformat(), attachments=1)), "duplicate")
+
+    def test_refusal_survives_failure_before_inbox_mark(self):
+        self.conv.photos = self.source()
+        body = dict(op="photo-refused", guid="photo-1", idx=0, count=1, code="too-large")
+        self.conv.photos.put(body, int(self.now.timestamp()))
+        raw = self.seal(self.event_from("new-message", guid="photo-1", text="", attachments=[{}]))
+        self.assertEqual(self.rx.accept(raw, secret=SECRET, now=self.now)["result"], "queued")
+        with mock.patch.object(self.inbox, "_mark", side_effect=OSError("mark failed")):
+            with self.assertRaises(OSError): self.rx.drain()
+        self.assertEqual(self.inbox.state("photo-1"), "pending")
+        self.restart()
+        self.conv.photos = self.source()
+        self.rx.drain()
+        self.assertEqual(self.inbox.state("photo-1"), "done")
+        with sqlite3.connect(self.conv.photos.path) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM photo_in").fetchone()[0], 0)
+        self.assertEqual(self.unsent(), 1)
+
     def test_photos_false_preserves_attachment_reply_and_config_is_boolean(self):
         self.assertFalse(host.load_host(self.host_json())["photos"])
         with self.assertRaises(host.HostConfigError): host.load_host(self.host_json(photos=1))
