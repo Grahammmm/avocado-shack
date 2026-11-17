@@ -1847,7 +1847,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             and named["change_id"] is None  # AV1537-02: a question the owner cancelled is not filled later
         if named is not None and named["state"] == "expired" or cancelled_question:  # H16 vs NB-AV-01 (2026-10-31):
             result = {**result, "revises": None}  # a closed draft has nothing left to revise; an unknown code still asks
-        result = interpret_check.check(result, self._registry(), codes)  # NB-AV-01: a bad op/arg/kind/code asks
+        result = interpret_check.check(result, self._registry(), codes,
+                                       from_intake=not legacy and bool(getattr(self, "_intake_listing", None)))
         if (said := self._weekday_conflict(msg, now, result, earlier)) is not None:  # AV2007-10: asked before any draft side effect
             result = {"question": said, "revises": result.get("revises")}
         if legacy and "question" in result:

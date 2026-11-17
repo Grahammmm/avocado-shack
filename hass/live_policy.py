@@ -194,7 +194,7 @@ LIVE = {
     # HASS-LIVE-ADD-1 (G, 2026-11-09): a NEW product may go live, with the brand, display brand and producer key the owner said in
     # this request (see unsaid) and with the picture that comes with it (the op needs one; the shop has no placeholder). Never the
     # `image` argument (an existing picture file). The brand fields pass the field gate only inside this op (see NEW_RECORD_FIELDS).
-    "product.add": {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey", "displayBrand", "labelText", "ownerText"},
+    "product.add": {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey", "displayBrand", "labelText", "ownerText", "sellingPrice"},
     # ... and a NEW maker only so that this new product can name it: the name and the place (the maker's about text is the
     # skill's "<Maker> is based in <place>."); never the link (url). A maker on its own is refused (see _lone_makers).
     "maker.add": {"key", "name", "place", "story"},
@@ -468,6 +468,15 @@ def check(draft) -> list[str]:
                     if a is not None and not valid_source(a, 'label' if field == 'labelSource' else 'owner'):
                         return UNREADABLE.copy()
                     continue  # private exact-photo provenance is not public text
+                if collection == "products" and field == "sellingPrice":
+                    from hass.content_model import valid_selling_price
+                    # Only this validated field bypasses the prose screen, on an add or its inverse.
+                    added = before is None and valid_selling_price(a) and any(
+                        call["op"] == "product.add" and (call.get("args") or {}).get("sellingPrice") == a
+                        for call in ops)
+                    removed = undo and after is None and valid_selling_price(b)
+                    if not (added or removed): reasons.add("protected field: products.sellingPrice")
+                    continue
                 if collection == "club" or (field in FIELDS.get(collection, set()) and not _created_here(collection, field, before, names)):
                     reasons.add(f"protected field: {collection}.{field}")
                 if (collection, field) in owned: continue

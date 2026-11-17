@@ -4,8 +4,8 @@ hass/content/*.json is the single editable source for catalog products, maker
 profiles, community events/route ideas and store information. The site files
 under storefront-mockup/ are generated from it by hass/sitegen.py.
 
-Standard library only. Validation is strict and closed: unknown fields are
-rejected, so commerce fields (prices, units, baskets) cannot enter the source.
+Standard library only. Validation is strict and closed: the optional public
+selling price is the only finance field admitted to product records.
 """
 
 from __future__ import annotations
@@ -34,7 +34,10 @@ SHELF_LABELS = {"fruit": "Fruit", "vegetables": "Vegetables", "dairy": "Dairy & 
 # key order (the migrated records use three historical orders; the generator
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
-PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn")  # public when present; never required (any status)
+PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn", "sellingPrice")  # public when present; never required (any status)
+# Canonical intake USD decimal, up to $999999.99, with the basis only if supplied.
+SELLING_PRICE_RE = re.compile(r"(?:0|[1-9][0-9]{0,5})\.[0-9]{2}(?: per lb| each)?")
+SELLING_PRICE_ERROR = "must be 0.00 to 999999.99 in USD, optionally followed by ' per lb' or ' each'"
 PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available", "available_on",  # owner-set word + its check day (SHOP-1)
                            "restock_on", "labelSource", "ownerSource")  # private provenance, never emitted to the site
 PRODUCT_STATUSES = ("active", "hidden", "held")
@@ -243,6 +246,10 @@ def _closed_keys(problems, where, rec, allowed, required=()):
     return True
 
 
+def valid_selling_price(value):
+    return isinstance(value, str) and SELLING_PRICE_RE.fullmatch(value) is not None
+
+
 def validate_products(problems, products, makers, site_dir: Path | None, checked: date | None = None):
     if not isinstance(products, list):
         problems.append("products: must be a list")
@@ -268,6 +275,8 @@ def validate_products(problems, products, makers, site_dir: Path | None, checked
         for field in ("name", "brand"):
             _text(problems, f"{where}.{field}", rec.get(field), limit=limits[field])
         category = rec.get("category")
+        if "sellingPrice" in rec and not valid_selling_price(rec["sellingPrice"]):
+            problems.append(f"{where}.sellingPrice: {SELLING_PRICE_ERROR}")
         if "labelSource" in rec:
             from hass.product_claims import valid_source
             if not valid_source(rec["labelSource"]):

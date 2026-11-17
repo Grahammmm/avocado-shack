@@ -1489,7 +1489,8 @@
   ],
   "product_optional_public": [
    "imageAlt",
-   "addedOn"
+   "addedOn",
+   "sellingPrice"
   ],
   "product_public_fields": [
    "id",
