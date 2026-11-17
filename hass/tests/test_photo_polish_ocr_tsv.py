@@ -4,7 +4,12 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from PIL import Image
+try:
+    from PIL import Image
+    HAVE_PIL = True
+except ImportError:  # Discovery also runs before Pillow is installed in CI.
+    Image = None
+    HAVE_PIL = False
 
 from hass import photo_polish
 
@@ -15,6 +20,7 @@ REAL_WORDS = photo_polish.words
 
 
 def read(stdout, scale=2):
+    assert Image is not None
     buf = io.BytesIO()
     Image.new("RGB", (40, 40), "white").save(buf, "PNG")
     done = SimpleNamespace(returncode=0, stdout=stdout)
@@ -23,6 +29,7 @@ def read(stdout, scale=2):
         return REAL_WORDS(buf.getvalue(), scale)
 
 
+@unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
 class OcrTsvTests(unittest.TestCase):
     def test_truncated_tsv_row_is_unreadable_not_exception(self):
         for row in ("5\t1\t1\t1\t1\t1\t10\t20\t80\t24\t91\n", "5\t1\t1\n", "5\n"):
