@@ -25,10 +25,11 @@ class RunnerShapes(unittest.TestCase):
         self._reset()
         self.addCleanup(self._restore)
         self._state = (os.getcwd(), list(sys.path), os.environ.get("OPENAI_IMAGE_MODEL"),
-                       getattr(sys, "_hermes_pin_default_home", None), sys.modules.get("hermes_bootstrap"))
+                       getattr(sys, "_hermes_pin_default_home", None),
+                       "hermes_bootstrap" in sys.modules, sys.modules.get("hermes_bootstrap"))
 
     def _restore(self):
-        cwd, path, env, flag, boot = self._state
+        cwd, path, env, flag, had_boot, boot = self._state
         os.chdir(cwd)
         sys.path[:] = path
         if env is None:
@@ -40,10 +41,10 @@ class RunnerShapes(unittest.TestCase):
                 del sys._hermes_pin_default_home
         else:
             sys._hermes_pin_default_home = flag
-        if boot is None:
-            sys.modules.pop("hermes_bootstrap", None)
-        else:
+        if had_boot:
             sys.modules["hermes_bootstrap"] = boot
+        else:
+            sys.modules.pop("hermes_bootstrap", None)
 
     def _reset(self):
         with open(self.out, "wb") as fh:
@@ -132,13 +133,16 @@ class RunnerShapes(unittest.TestCase):
         self.assert_failed(self.good(image="/nonexistent/none.png"), "io")
 
     def test_runner_tests_restore_process_state(self):
-        cwd, path = os.getcwd(), list(sys.path)
+        cwd, path, env, flag, had_boot, boot = self._state
         self.run_runner(self.good())
         self.assertEqual(os.environ.get("OPENAI_IMAGE_MODEL"), "tier")
         self._restore()
         self.assertEqual((os.getcwd(), sys.path), (cwd, path))
-        self.assertNotEqual(os.environ.get("OPENAI_IMAGE_MODEL"), "tier")
-        self.assertNotIn("hermes_bootstrap", sys.modules)
+        self.assertEqual(os.environ.get("OPENAI_IMAGE_MODEL"), env)
+        self.assertEqual(getattr(sys, "_hermes_pin_default_home", None), flag)
+        self.assertEqual("hermes_bootstrap" in sys.modules, had_boot)
+        if had_boot:
+            self.assertIs(sys.modules["hermes_bootstrap"], boot)
 
 
 if __name__ == "__main__":
