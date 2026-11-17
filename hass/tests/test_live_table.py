@@ -121,6 +121,17 @@ class RealDrafts(unittest.TestCase):
         self.assertIn("I've kept it on the list of changes to make by hand", text)
         self.assertEqual(voice.check(text), [])
 
+    def test_bulk_availability_stays_private(self):
+        name = "product.set_availability_all"
+        self.assertIn(name, policy.PRIVATE)
+        self.assertNotIn(name, policy.LIVE)
+        reasons = self.refused(op(name, shelf="vegetables", available="yes"))
+        self.assertIn(f"not live: {name}", reasons)
+        text = policy.refusal(reasons)
+        self.assertIn("changes availability for a shelf or maker", text)
+        self.assertIn("I've kept it on the list of changes to make by hand", text)
+        self.assertEqual(voice.check(text), [])
+
     def test_private_only_never_goes_live(self):
         cases = {
             "product.edit brand": [op("product.edit", id=PRODUCT, brand="Someone Else")],
