@@ -79,6 +79,17 @@ UNREADABLE = {"unsupported": "Sorry, I didn't understand that. Could you say it 
 HOSTILE_RE = re.compile(r"\b(?:ignore|disregard|forget|override|bypass)\b[^.!?]{0,40}\b(?:rules|instructions|guidelines|approval|safeguards?|previous|above)\b"
                         r"|\b(?:publish|approve|apply|post)\s+(?:everything|all\s+(?:of\s+)?(?:it|changes|drafts))\b|\bskip\s+(?:the\s+)?approvals?\b"
                         r"|\b(?:system|developer)\s+prompt\b|\bjailbreak\b|\bact\s+as\b[^.!?]{0,30}\b(?:admin|root|developer)\b", re.I)
+NEAR_STOP_REPLY = "To stop changes, send exactly: " + q("stop changes")  # AV2007-05 (QA1-12): the real words, never model-invented ones
+NEAR_RESUME_REPLY = "To resume changes, send exactly: " + q("resume changes")
+NEAR_CONTROL_RE = re.compile(r"(?:(?:please|now|thanks) )*(?:(pause|stop)|(resume))(?: changes)?(?: (?:please|now|thanks))*")
+
+
+def near_control(text):
+    """AV2007-05: whole-message pause/stop/resume [changes] with only please/now/thanks around it -> "stop" or "resume"; else None."""
+    m = NEAR_CONTROL_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower())) if isinstance(text, str) and len(text) < 100 else None
+    return None if m is None else "stop" if m.group(1) else "resume"
+
+
 HOSTILE_REPLY = "I can only publish changes you approve one at a time. Nothing was changed."  # HASS-VOICE-1: no model call, no draft
 CORRECTION_RE = re.compile(r"(?:no[,.!]|nope|that'?s (?:wrong|not right|not what)|not what i (?:meant|said|asked)|wrong\b|i didn'?t (?:mean|ask|say)|you got (?:it|that) wrong)", re.I)
 RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question stays open for a short answer; longest kept
@@ -1036,6 +1047,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             command = None  # A sentence is not a listing request unless it names something in the catalog.
         if command and command[0] == "post" and len(command[1].split()) >= 2 and not self._post_names_something(command[1]):
             command = None  # HASS-VOICE-1: "post a sale on social media" is a sentence for the interpreter, not a product or hike name
+        if command is None and msg.attachments <= 0 and (near := near_control(msg.text)) is not None:  # AV2007-05: guidance only, no model, nothing paused or resumed
+            self._reply(NEAR_STOP_REPLY if near == "stop" else NEAR_RESUME_REPLY)
+            self._record(msg, "near-control")
+            return "near-control", None
         self._close_asks(now)  # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten (FW-3: and a closed one older than 24 h)
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04

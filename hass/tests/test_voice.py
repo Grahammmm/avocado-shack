@@ -46,7 +46,7 @@ OWNER_FACING = {
 }
 MODULE_CONSTANTS = {  # names of module-level owner text
     "conversation.py": ["PAUSED_LINE", "ATTACHMENT_REPLY", "NOT_READ_REPLY", "PHOTO_QUESTION", "FETCH_FAILED", "DAILY_LIMIT", "TOO_LONG",
-                        "SOCIAL_REPLY", "UNREADABLE", "HELD_REPLY", "HOSTILE_REPLY"],
+                        "SOCIAL_REPLY", "UNREADABLE", "HELD_REPLY", "HOSTILE_REPLY", "NEAR_STOP_REPLY", "NEAR_RESUME_REPLY"],
     "chat/shared.py": ["COST_USAGE", "NOTHING", "CANT_READ", "STATUS_PLAIN"],  # AVB-12: moved with their commands
     "chat/commands.py": ["HELP_TEXT"],
     "chat/core_pack.py": ["HISTORY_USAGE"],
@@ -173,7 +173,7 @@ class EveryTemplate(unittest.TestCase):
     def test_reply_constants_pass_whole(self):
         texts = [conversation.HELP_TEXT, conversation.NOTHING, conversation.SOCIAL_REPLY, conversation.ATTACHMENT_REPLY,
                  conversation.NOT_READ_REPLY, conversation.PHOTO_QUESTION, conversation.FETCH_FAILED, conversation.DAILY_LIMIT,
-                 conversation.TOO_LONG, conversation.CANT_READ, conversation.HOSTILE_REPLY, conversation.PAUSED_LINE,
+                 conversation.TOO_LONG, conversation.CANT_READ, conversation.HOSTILE_REPLY, conversation.PAUSED_LINE, conversation.NEAR_STOP_REPLY, conversation.NEAR_RESUME_REPLY,
                  conversation.LISTING_USAGE, conversation.LISTING_NONE, conversation.LISTING_MANY, conversation.HISTORY_USAGE,
                  conversation.FIND_USAGE, conversation.POST_USAGE, conversation.HIKE_USAGE, conversation.COST_USAGE, conversation.MARGIN_USAGE,
                  conversation.HELD_REPLY, conversation.UNREADABLE["unsupported"], *media.REPLIES.values(),
