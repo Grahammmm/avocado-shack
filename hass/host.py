@@ -28,8 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("hass.host")
 MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay", "/v1/photo")
 METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"})  # a logged method is one of these, never client text
-KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "photos", "release", "clover", "live", "off", "mode_gen"}
-OPTIONAL = {"previewer", "pictures", "photos", "release", "clover", "live", "off", "mode_gen"}  # HASS-CLOVER-2: `clover` absent = Clover not configured; nothing else changes
+KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "photos", "release", "clover", "live", "off", "mode_gen", "looks"}
+OPTIONAL = {"previewer", "pictures", "photos", "release", "clover", "live", "off", "mode_gen", "looks"}  # HASS-CLOVER-2: `clover` absent = Clover not configured; nothing else changes
 PHOTO_BODY, PHOTOS_PER_MIN = 12 * 1024 * 1024, 8
 PICTURES_PER_MIN = 10  # HASS-ATTACH-1: more picture requests in a minute get `gone` with no data
 TAILSCALE = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
@@ -107,6 +107,7 @@ def load_host(path, allow_port_zero=False) -> dict:
     itp = raw.get("interpreter")
     peers = raw.get("allowedPeers")
     checks = {"photos": type(raw.get("photos", False)) is bool, "pictures": type(raw.get("pictures", False)) is bool, "state": text(raw.get("state")), "secretFile": text(raw.get("secretFile")),
+              "looks": type(raw.get("looks", False)) is bool,  # HASS-SITE-LOOK-1b: website look changes by text, default off
               "approvals": raw.get("approvals") in ("hold", "private", "live"),
               "previewer": type(raw.get("previewer", False)) is bool,
               "runtimeCommit": isinstance(raw.get("runtimeCommit"), str) and len(raw["runtimeCommit"]) == 40
@@ -457,6 +458,7 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
         conv.editor.sync_settings(conv.settings)
     elif 'site' not in cfg.get('live', []):
         conv.settings.pop("liveSite", None)
+    conv.looks = cfg.get("looks") is True  # HASS-SITE-LOOK-1b: the host.json switch for look changes (read by the conversation)
     if cfg["approvals"] == "live" and not hasattr(conv.editor, 'gate'):
         conv.editor.conv = conv
         conv.editor.reconcile()

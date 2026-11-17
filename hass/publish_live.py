@@ -21,11 +21,13 @@ from zoneinfo import ZoneInfo
 
 if __package__ in (None, ''): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # `python3 hass/publish_live.py` (runbook form)
 
-from hass import conversation, editor, live_policy, migration_check, owner_answers, release_journal as journal, sitegen
+from hass import conversation, design_check, editor, live_policy, migration_check, owner_answers, release_journal as journal, sitegen
 from hass.content_model import load_and_validate
 
 REMOTE = 'git@github-avocadoman:Grahammmm/theavocadoman-site.git'
 URL = 'https://theavocadoman.com'
+# HASS-SITE-LOOK-1b: the published paths a design change may touch (design_check.DESIGN's storefront-mockup files and pages)
+DESIGN_SITE = frozenset(p.removeprefix(sitegen.SITE_PREFIX) for p in design_check.DESIGN if p.startswith(sitegen.SITE_PREFIX))
 PACIFIC = ZoneInfo('America/Los_Angeles')
 LOG = logging.getLogger('hass.release')
 BOOK_REASON = 'the website record needs G to check it'
@@ -345,8 +347,9 @@ class LiveEditor(conversation.Editor):
             before = self.build(j['writer_before'], j['today'], j['change_id'], 'before')
             if j['kind'] != 'baseline':
                 record = self.show(j['change_id']).get('change', {})
-                collections = {r['collection'] for r in record.get('records', [])}
-                allowed = {'community.json'}
+                design = record.get('kind') == 'design'  # HASS-SITE-LOOK-1b: a look change (or its undo) changes design files only
+                collections = set() if design else {r['collection'] for r in record.get('records', [])}
+                allowed = set(DESIGN_SITE) if design else {'community.json'}
                 if collections & {'products', 'store'}: allowed |= {'index.html', 'catalog-products.js', 'hike/index.html'}
                 if 'store' in collections: allowed |= {'about/index.html', 'getting-here/index.html', 'policies/index.html', 'faq/index.html'}
                 if 'makers' in collections: allowed |= {'index.html', 'producers.js', 'catalog-products.js'}
@@ -357,7 +360,7 @@ class LiveEditor(conversation.Editor):
                             image = value.get('image') or (value.get('homeImage') or {}).get('image')
                             if image: allowed.add(image)
                 changed = {p for p in before.keys() | files.keys() if before.get(p) != files.get(p)}
-                if any(p not in allowed and not (p.startswith('assets/products/photo-') and p not in before) for p in changed):
+                if any(p not in allowed and (design or not (p.startswith('assets/products/photo-') and p not in before)) for p in changed):
                     raise ValueError('unexplained-diff')
             if privacy(files, {} if j['kind'] == 'baseline' else old, self.message(j), self.private_values()): raise ValueError('privacy')
             manifest = {p: sha(b) for p, b in files.items() if old.get(p) != b}
