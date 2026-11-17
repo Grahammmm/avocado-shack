@@ -66,16 +66,14 @@ Only when the till is connected for changes (a Clover write setup; without one H
 "I can read the till but I can't change it yet."). Each is one whole message in exactly these words, read by fixed patterns
 **before** anything else reads the message, so prices and counts never go to the model or into a website change.
 
-| Send | What happens |
-| --- | --- |
-| `received 12 Sunshine olive oil` | Draft: `Add stock to ...? Count: 12 -> 24, Received: 12` (the till's count read live, plus 12). |
-| `set Sunshine olive oil to 7` | Draft: `Set the count of ...? Count: 12 -> 7`. `... to 0` is the sold-out draft. |
-| `Sunshine olive oil is sold out` | Draft: `Mark ... as sold out? Count: 12 -> 0`, only when the name is exactly a till item (otherwise it is the website's own stock words, as before). |
-| `new item: Sunshine olive oil, 12.50, pantry` | Draft to add a till item with a new SKU (the category is optional). Nothing goes on the website. |
-| `change price of Sunshine olive oil to 14.00` | Draft: `Price: $12.50 -> $14.00 each (+12.0%)`. One yes, even for a big change. Never on the website. |
-| `hide Sunshine olive oil on the till`, `show Sunshine olive oil on the till` | Draft to hide or show the item on the till. Nothing is ever deleted. |
-| `yes <code>` / `no <code>` | `yes` makes the change, reads the item back from the till and replies `Done, and I read the till back: ...`; `no` drops it. |
-| `undo <code>` | Drafts the change back (its own yes); it refuses when the item changed again since. |
+- `received 12 Sunshine olive oil` — Draft: `Add stock to ...? Count: 12 -> 24, Received: 12` (the till's count read live, plus 12).
+- `set Sunshine olive oil to 7` — Draft: `Set the count of ...? Count: 12 -> 7`. `... to 0` is the sold-out draft.
+- `Sunshine olive oil is sold out` — Draft: `Mark ... as sold out? Count: 12 -> 0`, only when the name is exactly a till item (otherwise it is the website's own stock words, as before).
+- `new item: Sunshine olive oil, 12.50, pantry` — Draft to add a till item with a new SKU (the category is optional). Nothing goes on the website.
+- `change price of Sunshine olive oil to 14.00` — Draft: `Price: $12.50 -> $14.00 each (+12.0%)`. One yes, even for a big change. Never on the website.
+- `hide Sunshine olive oil on the till`, `show Sunshine olive oil on the till` — Draft to hide or show the item on the till. Nothing is ever deleted.
+- `yes <code>` / `no <code>` — `yes` makes the change, reads the item back from the till and replies `Done, and I read the till back: ...`; `no` drops it.
+- `undo <code>` — Drafts the change back (its own yes); it refuses when the item changed again since.
 
 Every draft ends `Reply yes <code> to do this, or no <code> to drop it. Nothing changes until you say yes.` The code is 8
 characters and works only from the owner who asked, in his own one-to-one chat; a group chat, someone else, an edit or a
