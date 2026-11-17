@@ -794,6 +794,15 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._named(row), head=head, undo=_is_undo(row),
                                       live_site=self.settings.get("liveSite") if draft.get("environment", {}).get("env") != "sandbox" else None,
                                       now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
+        listing = getattr(self, "_intake_listing", None)
+        if listing is None and not _is_undo(row) and self.dispatch is not None and self.dispatch.simple_intake():
+            req = self.requests.get(self._chat(), self._now())
+            if req and req["draft_code"] == row["code"] and req["slots"].get("intake", {}).get("simple"):
+                listing = req["slots"]
+        if listing:
+            from hass.skills import intake_simple
+            text = (head + "\n" if head else "") + intake_simple.preview(listing, None if reasons else row["code"])
+            text += "\n" + (live_policy.refusal(reasons) if reasons else "Nothing changes until your yes.") + tail
         if self._paused(): text += "\n" + PAUSED_LINE
         self._reply(text, shots, long_ok=True)
 
@@ -845,7 +854,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                       ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires,
                       proposed_at=_iso(now), missing_json=None)  # AVB-03: the proposal instant itself; a filled question has nothing missing
         if row is not None:
-            self._move(row, "proposed", **fields)
+            if row["state"] == "proposed" and getattr(self, "_intake_listing", None):
+                # A preview edit refreshes the hash/base/expiry atomically under the
+                # same owner code. It is not an approval or a lifecycle transition.
+                self.db.execute("UPDATE drafts SET " + ", ".join(k + " = ?" for k in fields) + " WHERE row_id = ? AND state = 'proposed'",
+                                (*fields.values(), row["row_id"]))
+            else:
+                self._move(row, "proposed", **fields)
             new = self._row(row["row_id"])
         else:
             cur = self.db.execute(
@@ -954,7 +969,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self._label_jobs = []  # AV2152-04: one job per new photo draft, in the order sent; reset on every message
         self._polish_jobs = []  # HASS-IMAGE-1: stored photos to clean up in the background, after the commit
         self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
-        self._intake_receipt(msg)  # HASS-INTAKE-2: a bare photo's first question goes out before the photo is fetched
+        # Intake waits for the label read, then sends one complete preview, not an early interview question.
         self._till_job = None  # HASS-CLOVER-4: the till code an owner's yes approved; the till is called only after this message is saved
         try:
             with self._tx():
@@ -968,7 +983,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return "approval-held"
         till_approvals.recover(self)  # also reconciles a redelivered provider id
         for job in self._label_jobs:  # AV1537-15: after the commit, never holding the lock; AV2152-04: a failed one never stops the next
-            try: self._read_label(*job)
+            try:
+                final = self._read_label(*job)
+                if final is not None:
+                    disposition = final
+                    with self._tx(): self.db.execute("UPDATE messages SET disposition = ? WHERE provider_id = ?", (final, msg.provider_id))
             except Exception: continue  # noqa: BLE001 - no label is today's reply exactly
         for sha in self._polish_jobs:  # HASS-IMAGE-1: a daemon thread each; never waited for, never a reply
             photo_polish.start(self.settings["mediaRoot"], sha, log=self.log, transport=self.polish_transport)
@@ -1043,6 +1062,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text, listing_names=True)
+        if msg.text.strip() == "?" and self.dispatch is not None:
+            req = self.requests.get(msg.chat, now)
+            if req and self.dispatch.simple_intake(req): command = None
         if command and command[0] == "listing" and command[1] and len(command[1].split()) >= 2 and not self._listing_names_something(command[1]):
             command = None  # A sentence is not a listing request unless it names something in the catalog.
         if command and command[0] == "post" and len(command[1].split()) >= 2 and not self._post_names_something(command[1]):
@@ -1606,6 +1628,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         cap = self.settings["interpreterDailyCap"]
         skills_on = self.skills_mode != dispatch_mod.DEFAULT_MODE
         req = self.requests.get(self._chat(), now) if skills_on else None  # SKILLS-FW-3: the owner's own open request
+        if skills_on: msg, req = self.dispatch.intake_text(msg, now, req)
         if (held := self._open_question(now)) is not None and SEPARATE_RE.fullmatch(msg.text.strip().lower()):  # AV2007-13: its own message
             disposition = self._request_now(msg, now, None, True)  # no old context; the question stays open
             if self.requests.by_provider(self._chat(), held["provider_id"], now) is not None: self._hold(msg, held)
@@ -1799,7 +1822,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"]) if self._mine(r)]
         if same and (revised is None or revised["row_id"] == same[0]["row_id"]):
             row = same[0]
-        elif revised is not None and revised["state"] == "needs-details":
+        elif revised is not None and (revised["state"] == "needs-details" or getattr(self, "_intake_listing", None)):
+            if revised["state"] == "proposed": self._audit("refused", revised, "replaced")
             row = self._propose(draft, msg.sender, now, row=revised)
         else:
             row = self._propose(draft, msg.sender, now, like=revised)  # AVB-10: a correction stays the same request
@@ -1927,18 +1951,19 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             web = Path(media.web_copy(self.settings["mediaRoot"], sha)["path"]).read_bytes()  # metadata-free copy only
             products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
             found = self.labels.read(web, sorted({p["category"] for p in products if isinstance(p.get("category"), str)}))
-        except Exception: return  # noqa: BLE001 - no label is today's reply exactly
+        except Exception: found, products = {}, []  # noqa: BLE001 - one honest missing-detail preview, not a silent reading state
         if code is None:
             msg, request_id, now, question_id = reply_id
             with self._answer_to(msg.chat), self._tx():
                 req = self.requests.get(msg.chat, now)
-                if (not found or req is None or req["request_id"] != request_id or req["state"] != "open"
+                if (req is None or req["request_id"] != request_id or req["state"] != "open"
                         or req["skill"] != "item.add" or req["attachments"] != [sha]): return
-                slots = {**req["slots"], "intake": {**req["slots"].get("intake", {}), "photo_details": found}}
+                slots = {**req["slots"], "intake": {**req["slots"].get("intake", {}), "photo_details": found,
+                                                   "reading_photo": False, "simple": True}}
                 # Replace only this message's unsent question; an early receipt already sent stays sent.
                 self.db.execute("DELETE FROM outbox WHERE id = ? AND sent_at IS NULL", (question_id,))
-                self.dispatch._advance(Inbound(**{**vars(msg), "text": ""}), now, req,
-                                       self.dispatch.registry.get("item.add"), slots, None, resolved=True)
+                return self.dispatch._advance(Inbound(**{**vars(msg), "text": ""}), now, req,
+                                              self.dispatch.registry.get("item.add"), {"intake": slots["intake"]}, None, resolved=True)
             return
         line = label_reader.question(found, self._makers(), products) if found else None  # AVB-10: matching records
         with self._tx():
