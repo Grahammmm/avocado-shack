@@ -12,6 +12,7 @@ import os
 import sqlite3
 import time
 import unittest
+from unittest import mock
 
 from hass import morning_report
 from hass.tests import test_morning_report as base  # module import: the AVB-23 tests are not collected twice
@@ -262,6 +263,28 @@ class MorningReportHikesTests(unittest.TestCase):
         self.assertNotIn(SENTINEL, out)
         self.assertNotIn("example.invalid", out)
         self.assertEqual((self.tree_bytes(), sorted(p.name for p in self.dir.iterdir())), (before, names))
+
+    def test_hike_weekday_ignores_locale_sensitive_date_format(self):  # RF0500-10
+        class Foreign(morning_report.date):  # a foreign-locale %A canary at the date-formatting boundary
+            def __format__(self, spec):
+                return "mardi"
+        self.hikes(hike("ridge", "2026-11-03T09:00:00-08:00"))
+        plain, plain_json = self.report(), self.report("--json")
+        with mock.patch.object(morning_report, "date", Foreign):
+            hostile, hostile_json = self.report(), self.report("--json")
+        self.assertEqual(self.hikes_line(), f"Hikes: Tuesday at 9 am, Ridge ({UNAV})")
+        self.assertNotIn("mardi", hostile)
+        self.assertEqual((hostile, hostile_json), (plain, plain_json))
+
+    def test_every_hike_weekday_has_the_fixed_english_name(self):  # RF0500-10
+        names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        for day, name in zip(range(28, 35), names):  # 2026-12-28 Monday .. 2027-01-03 Sunday, across the year end
+            month, num = ("12", day) if day <= 31 else ("01", day - 31)
+            iso = f"{'2026' if month == '12' else '2027'}-{month}-{num:02d}"
+            with self.subTest(day=iso):
+                self.hikes(hike("h", f"{iso}T09:00:00-08:00"))
+                line = self.run_report("--today", iso).split("\n")[-2]
+                self.assertEqual(line, f"Hikes: {name} at 9 am, H ({UNAV})")
 
 
 if __name__ == "__main__":
