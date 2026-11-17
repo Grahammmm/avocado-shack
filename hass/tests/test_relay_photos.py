@@ -231,21 +231,24 @@ class PhotoTests(harness.HostCase):
         self.assertIsInstance(labels.transport, cloud_codex.CodexTransport)
         self.assertIsInstance(labels.fallback.transport, cloud_codex.Remaining)
 
-    def test_photo_post_to_real_worker_interview_and_one_coded_proposal(self):
+    def test_photo_post_to_real_worker_one_price_question_then_one_coded_preview(self):
         import tempfile
+        from hass.tests.test_intake_simple import DETAILS
+        from hass.tests.test_label_reader import reader, recorded
         media_dir = tempfile.TemporaryDirectory(prefix="relay-media-")
         self.addCleanup(media_dir.cleanup)
         chat = item.Chat([], settings={"itemIntake": True, "mediaRoot": media_dir.name})
         self.addCleanup(chat.close)
         chat.kit._real_assets()  # fixture writer must not write into symlinked assets
+        chat.base_commits = int(testkit._git(chat.kit.wt, "rev-list", "--count", "HEAD"))
         self.now = chat.now
         srv, cfg = self.photo_server(state=str(chat.kit.repo.state))
         srv.receiver = receiver.Receiver(state=inbox.Inbox(cfg["state"], self.now.isoformat(), clock=self.clock), settings=None)
         self.addCleanup(srv.receiver.inbox.close)
         work = host.make_worker(cfg, self.store, editor=chat.kit.editor, build=lambda: chat.interp, clock=self.clock)
         self.addCleanup(work.conv.db.close)
-        work.conv.answer_reader = None  # no network: interview answers here use the fixed reader
         self.assertIsInstance(work.conv.labels, host.label_reader.LabelReader)
+        work.conv.labels, transport = reader(recorded(DETAILS))  # recorded label read: no network
         data = (REPO_ROOT / item.JAR).read_bytes()
         self.assertEqual(self.post(srv, "/v1/photo", self.sealed(self.body(data=data)))[0], 200)
         def say(text, guid, count=0):
@@ -256,25 +259,24 @@ class PhotoTests(harness.HostCase):
             work.cycle()
         original = media.store_original
         def store(*args, **kw):
-            self.assertEqual(self.relay_rows(), [ii.START])  # sent BEFORE storing the original
+            self.assertEqual(self.relay_rows(), [])  # no early interview question: nothing is sent before the original is stored
             return original(*args, **kw)
         with mock.patch.object(media, "store_original", side_effect=store): say("", "photo-1", 1)
         digest = sha256(data).hexdigest()
         self.assertEqual((Path(media_dir.name) / "originals" / digest[:2] / (digest + ".jpg")).read_bytes(), data)
         pending = work.conv.requests.get(testkit.CHAT, self.now)
-        self.assertEqual(pending["asked_slot"], "name")
-        say("Wildflower honey", "name")
-        say("Bee Happy Farm", "maker")
-        say("Atascadero, California", "town")
-        self.assertEqual(work.conv.requests.get(testkit.CHAT, self.now)["asked_slot"], ii.PREFIX + "maker_site")
-        from hass.tests.test_item_intake_conversation import REPLIES
-        for i, text in enumerate(REPLIES): say(text, f"answer-{i}")
-        chat.script("yes", item.reply())
-        say("yes", "badge")
-        chat.script("skip", item.reply())
-        say("skip", "story")
+        self.assertEqual(pending["asked_slot"], ii.PREFIX + "price")
+        self.assertEqual(len(self.relay_rows()), 1, self.relay_rows())
+        self.assertEqual(self.relay_rows()[0].count("?"), 1)
+        self.assertEqual(self.drafts(), [])
+        say("bought 100 at $1, sell for $2", "money")
         drafts = [dict(r) for r in work.conv.db.execute("SELECT * FROM drafts")]
         self.assertEqual(len(drafts), 1, self.relay_rows())
         self.assertEqual(drafts[0]["state"], "proposed")
         self.assertTrue(drafts[0]["code"])
-        self.assertIn("Here's the change I'd make:", self.relay_rows()[-1])
+        self.assertEqual(len(self.relay_rows()), 2, self.relay_rows())  # the question, then exactly one preview
+        self.assertIn("Here's the listing:", self.relay_rows()[-1])
+        self.assertIn("yes " + drafts[0]["code"], self.relay_rows()[-1])
+        self.assertNotIn("?", self.relay_rows()[-1])
+        self.assertEqual(len(transport.calls), 1)  # one label read
+        self.assertEqual(chat.commits(), 0)  # nothing approved or published
