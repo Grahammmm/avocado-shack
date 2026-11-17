@@ -381,6 +381,8 @@ SOLD_KEYS = {"item": "item", "items": "item", "piece": "item", "pieces": "item",
 
 def _parse_sold_by(text):
     """item, pound, bag or bundle from a COMPLETE answer that names exactly one of them ("per pound", "by the bag", "each"), else None."""
+    if any(c.isnumeric() for c in _clean(text)):  # "per 2 pounds" is not "per pound": a number is never erased
+        return None
     words = re.sub(r"[^a-z ]", " ", _clean(text).lower()).split()
     rest = [w for w in words if w not in SOLD_FILLER]
     if not rest:
@@ -389,6 +391,8 @@ def _parse_sold_by(text):
 
 
 def _parse_unit(text):
+    if any(c.isnumeric() for c in _clean(text)):  # "jar2" is not "jar": a number is never erased
+        return None
     words = re.sub(r"[^a-z ]", "", _clean(text).lower()).split()
     unit = UNIT_WORDS.get(words[0]) if len(words) == 1 else None
     return unit if unit and unit != "dozen" else None
