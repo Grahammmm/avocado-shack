@@ -37,7 +37,10 @@ class UrllibTransport:
             with self._opener.open(req, timeout=self._timeout) as reply:
                 return Response(reply.status, _lower(reply.headers), reply.read(BODY_LIMIT + 1))
         except urllib.error.HTTPError as err:  # 4xx/5xx and refused redirects: status and headers only, the body is not read
-            return Response(err.code, _lower(err.headers), b"")
+            try:
+                return Response(err.code, _lower(err.headers), b"")
+            finally:
+                err.close()  # release the error stream deterministically, still without reading it
 
 
 def _lower(headers):
