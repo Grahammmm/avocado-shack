@@ -49,6 +49,7 @@ class PhotoTests(harness.HostCase):
         self.assertEqual((status, relay.unseal_control(json.loads(response), SECRET, now=self.now, seen=set())),
                          (200, dict(op="photo-ok", guid="photo-1", idx=0)))
         self.assertEqual(self.post(srv, "/v1/photo", raw)[0], 400)
+        self.assertEqual(self.post(srv, "/v1/photo", self.sealed(self.body(data=b"x" * 65537)))[0], 200)
         self.assertEqual(self.post(srv, "/v1/photo", self.sealed(self.body()))[0], 400)
         bad = json.loads(self.sealed(self.body(guid="bad"))); bad["mac"] = "0" * 64
         self.assertEqual(self.post(srv, "/v1/photo", json.dumps(bad).encode())[0], 400)
@@ -59,7 +60,7 @@ class PhotoTests(harness.HostCase):
             self.assertEqual(self.post(srv, path, b"", headers={"Content-Length": str(cap + 1)})[0], 413)
         self.assertEqual(self.post(srv, "/v1/relay", self.sealed(self.body(guid="wrong")))[0], 400)
         self.assertEqual(self.post(srv, "/v1/photo", self.sealed(dict(op="pull", max=1)))[0], 400)
-        for i in range(6): self.assertEqual(self.post(srv, "/v1/photo", self.sealed(self.body(guid=f"g{i}")))[0], 200)
+        for i in range(5): self.assertEqual(self.post(srv, "/v1/photo", self.sealed(self.body(guid=f"g{i}")))[0], 200)
         self.assertEqual(self.post(srv, "/v1/photo", self.sealed(self.body(guid="limited")))[0], 429)
         self.now += timedelta(seconds=60)
         self.assertEqual(self.post(srv, "/v1/photo", self.sealed(self.body(guid="later")))[0], 200)

@@ -155,7 +155,7 @@ class Inbox:
         return "queued" if state == "pending" else "history"
 
     def _next(self):
-        return self.db.execute("SELECT provider_id, payload, tries, next_try_at FROM inbound WHERE state = 'pending'"
+        return self.db.execute("SELECT provider_id, payload, tries, next_try_at, enqueued_at FROM inbound WHERE state = 'pending'"
                                " ORDER BY received_at, provider_id LIMIT 1").fetchone()
 
     def _retry(self, provider_id: str, tries: int) -> None:
@@ -182,7 +182,9 @@ class Inbox:
             except (TypeError, ValueError, RecursionError):  # a poison payload must not block every later message
                 msg = None
             try:  # last_try only on the last try, so a plain handle(msg) stand-in still works
-                last = row["tries"] + 1 >= MAX_TRIES
+                photos = getattr(getattr(conversation, "conversation", conversation), "photos", None)
+                lifetime = getattr(photos, "retry_seconds", 0) if msg is not None and msg.attachments else 0
+                last = (self.clock() >= parse_aware(row["enqueued_at"]) + timedelta(seconds=lifetime)) if lifetime else row["tries"] + 1 >= MAX_TRIES
                 disposition = "unreadable" if msg is None else \
                     conversation.handle(msg, last_try=True) if last else conversation.handle(msg)
             except AttachmentPending:
