@@ -5,6 +5,7 @@ import io
 import json
 import os
 import tempfile
+import threading
 import time
 import unittest
 from datetime import date
@@ -43,6 +44,11 @@ class FakeRunner:
 
 
 OK = {"ok": True, "text": '{"question": "Which day should change?"}', "model": "gpt-6.1-sol", "ms": 2100}
+TILL = ["change the price of X to 5", "set X to 7", "change the price of website honey to 5", "honey is $6 now", "jam costs 5 dollars",
+        "how many jars of honey do we have", "is honey in stock", "low stock", "give the plum jam a sku", "scan the barcode on the jam",
+        "qty 12 eggs", "new item: plum jam", "update the count of eggs to 12", "mark jam down 20%", "add plum jam to the till",
+        "we received 12 jars of honey", "make the eggs 4.50 a dozen, set them to 4.5", "what did we sell today"]
+CLOUD = ["when should the hours change?", "move saturday's hike to 5pm", "change the hike to 10:30 am", "put the new photo on the website"]
 
 
 def codex(runner, prompt=SECRET):
@@ -140,10 +146,74 @@ class HassSideTests(unittest.TestCase):
         req = runner.requests[0]
         self.assertEqual((req["instructions"], req["text"], req["images"][0][:22]), (label_reader.PROMPT, "", "data:image/png;base64,"))
         answers = cloud_codex.reader(answer_reader.AnswerReader, BLOCK_OK, cloud_codex.CodexTransport("low", runner), think=None)
-        answers.fallback.transport = lambda *a: chat_reply('{"value": "9.57"}')
+        answers.fallback.transport = lambda *a: chat_reply('{"value": "2026-11-20"}')
         with self.assertLogs("hass.cloud", "ERROR"):
-            self.assertEqual(answers.read("price", "nine fifty-seven", date(2026, 11, 16)), {"value": "9.57"})
+            self.assertEqual(answers.read("best_by", "next friday", date(2026, 11, 16)), {"value": "2026-11-20"})
         self.assertEqual((answers.last_fallback, answers.last_primary_error, answers.calls), (True, "codex-rate", 2))
+        self.assertIsInstance(labels.fallback.transport, cloud_codex.Remaining)  # both readers' fallbacks are inside BUDGET
+        sent = len(runner.requests)
+        for key, words in (("price", "nine fifty-seven"), ("cost", "4.31"), ("qty", "a dozen jars"), ("low_stock", "3")):
+            answers.fallback.transport = lambda *a: chat_reply('{"value": "1"}')
+            with self.subTest(key=key):
+                self.assertEqual(answers.read(key, words, date(2026, 11, 16)), {"value": "1"})
+                self.assertEqual((len(runner.requests), answers.last_primary_error), (sent, "codex-local"))
+
+    def test_till_price_and_stock_texts_never_reach_the_runner(self):
+        runner = FakeRunner(OK)
+        local = interpreter_local.LocalInterpreter("http://127.0.0.1:8010", "q", "p", api="openai", transport=lambda *a: chat_reply(OK["text"]))
+        itp = interpreter_local.FallbackInterpreter(codex(runner), local, lambda r: True)
+        for text in TILL:
+            with self.subTest(text=text):
+                self.assertEqual(itp.interpret(text, []), {"question": "Which day should change?"})
+                self.assertEqual((runner.requests, itp.last_fallback, itp.last_primary_error), ([], True, "codex-local"))
+        itp.interpret("5", [], recent={"question": "Which day should change?", "earlier": ["change the price of honey"]})
+        itp.interpret("ok", [], notes=["honey is $6 a jar"])
+        self.assertEqual((runner.requests, cloud_codex._alerted), ([], {}))  # a local route, never an alert
+        for text in CLOUD:
+            itp.interpret(text, [])
+        self.assertEqual([json.loads(r["text"])["message"] for r in runner.requests], CLOUD)
+
+    def test_the_fallback_gets_only_what_is_left_of_the_budget(self):
+        seen, codex_side = [], cloud_codex.CodexTransport("low", FakeRunner(OK))
+        now = [120.0]
+        fallback = cloud_codex.Remaining(codex_side, lambda u, b, h, timeout: seen.append(timeout) or chat_reply("{}"), clock=lambda: now[0])
+        codex_side.started = 100.0
+        fallback("u", b"", {}, 60)
+        fallback("u", b"", {}, 60)  # no codex start since: the whole budget, still capped by its own timeout
+        fallback("u", b"", {}, 5)
+        self.assertEqual(seen, [cloud_codex.BUDGET - 20, cloud_codex.BUDGET, 5])
+        codex_side.started, now[0] = 100.0, 100.0 + cloud_codex.BUDGET - 0.5
+        with self.assertRaises(interpreter_local._Failed) as failed:
+            fallback("u", b"", {}, 60)
+        self.assertEqual((failed.exception.args[0], len(seen)), ("timeout", 3))
+
+    def test_a_slow_runner_and_a_slow_fallback_finish_inside_the_worker_deadline(self):
+        self.assertEqual((cloud_codex.SLACK, cloud_codex.BUDGET), (3, 28))  # the real bound: 20 + 3 of cloud, then what is left
+        release = threading.Event()
+        self.addCleanup(release.set)
+        seen = []
+
+        def stuck(url, body, headers, timeout):
+            seen.append(timeout)
+            release.wait(120)
+            return chat_reply(OK["text"])
+        with tempfile.TemporaryDirectory() as tmp:
+            slow = Path(tmp) / "python"
+            slow.write_text("#!/bin/sh\nexec sleep 60\n")
+            os.chmod(slow, 0o700)
+            runner = cloud_codex.Runner()
+            runner.found = (str(slow), tmp)
+            primary = interpreter_local.LocalInterpreter(None, "gpt-6.1-sol", "p", timeout=20, api="codex", transport=cloud_codex.CodexTransport("low", runner))
+            local = interpreter_local.LocalInterpreter("http://127.0.0.1:8010", "q", "p", timeout=120, api="openai", transport=stuck)
+            itp = interpreter_local.FallbackInterpreter(primary, cloud_codex.budget(primary.transport, local), lambda r: True)
+            started = time.monotonic()
+            with self.assertLogs("hass.cloud", "ERROR"):
+                self.assertEqual(itp.interpret("when?", []), {"unsupported": interpreter_local.FAILED})
+            took = time.monotonic() - started
+        self.assertLess(took, 30)
+        self.assertGreater(took, 20 + cloud_codex.SLACK)  # the slow fallback was really asked, and stopped at the budget
+        self.assertEqual((itp.last_primary_error, itp.last_error), ("codex-timeout", "timeout"))
+        self.assertLessEqual(seen[0], cloud_codex.BUDGET - 20 - cloud_codex.SLACK + 0.5)
 
     def test_check_prints_only_result_model_ms_or_a_code(self):
         self.assertEqual(cloud_codex.check(BLOCK_OK, FakeRunner(OK)), {"result": "ok", "model": "gpt-6.1-sol", "ms": 2100})
@@ -170,6 +240,8 @@ class HostConfigTests(unittest.TestCase):
             made = host.interpreter_builder({"interpreter": BLOCK_OK}, "/nonexistent")()
         self.assertEqual((made.primary.api, made.primary.timeout, made.primary.transport.effort), ("codex", 12, "low"))
         self.assertEqual((made.fallback.api, made.fallback.url, made.fallback.timeout), ("openai", "http://127.0.0.1:8010/v1/chat/completions", 60))
+        self.assertIsInstance(made.fallback.transport, cloud_codex.Remaining)  # 60 s stays configured; the call gets what is left
+        self.assertIs(made.fallback.transport.codex, made.primary.transport)
 
 
 class CloverAndTranscriptTests(ConversationTestCase):
@@ -187,6 +259,18 @@ class CloverAndTranscriptTests(ConversationTestCase):
         row = self.conv.db.execute("SELECT backend, fallback, primary_error, error FROM interpreter_audit").fetchall()
         self.assertEqual([tuple(r) for r in row], [("codex", 0, None, None)])
         self.assertEqual({k: v for k, v in cloud_codex.transcript(self.conv.interpreter).items() if k != "ms"}, {"backend": "codex", "model": "gpt-6.1-sol"})
+
+    def test_the_returned_till_texts_reach_no_runner_with_or_without_a_till(self):
+        runner = FakeRunner(OK)
+        local = interpreter_local.LocalInterpreter("http://127.0.0.1:8010", "q", "p", api="openai", transport=lambda *a: 1 / 0)
+        self.conv.interpreter = interpreter_local.FallbackInterpreter(codex(runner), local, lambda r: conversation._checked(r) is r)
+        self.conv.till = None
+        self.say("change the price of X to 5")
+        seed(Path(self.repo.state))
+        self.conv.till = chat.TillDesk(str(self.repo.state), BLOCK)
+        self.say("set X to 7")
+        self.say("change the price of website honey to 5")
+        self.assertEqual(runner.requests, [])
 
 
 if __name__ == "__main__":

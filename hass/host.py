@@ -386,7 +386,9 @@ def interpreter_builder(cfg, worktree):
                                                       think=c.get("think"), hinter=hinter, api=api)
         main = one(itp, itp.get("api", "ollama"))
         if "fallback" not in itp: return main  # HASS-INTERP-OPENAI-1: no fallback block, no second call
-        return interpreter_local.FallbackInterpreter(main, one(itp["fallback"], itp["fallback"].get("api", "ollama")), lambda r: conversation._checked(r) is r)
+        fb = one(itp["fallback"], itp["fallback"].get("api", "ollama"))
+        if main.api == "codex": cloud_codex.budget(main.transport, fb)  # HASS-CLOUD-CODEX-1: cloud + local inside the 30 s deadline
+        return interpreter_local.FallbackInterpreter(main, fb, lambda r: conversation._checked(r) is r)
     return build
 
 
