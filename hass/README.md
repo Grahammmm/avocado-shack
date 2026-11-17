@@ -282,3 +282,11 @@ Ops (`hass/ops/specials.py`), all through draft, preview, approval and `history.
 - `hide the sample hikes` / `show the sample hikes` (`hike.samples`) switch the sample invitation and archive (AV1422-10).
 - The home page carries local-business data without quoting the phone (AV1422-11).
 - Docs and acceptance: FEATURES states match main (AV1422-13); the H25 acceptance map runs the H04 and H13 modules (AV1422-14).
+
+## AV1622: owner-visible behaviour (see BUILD_LEDGER.md)
+
+- `/hike`: a hike's calendar link opens the page at that hike (AV1622-01), the calendar file carries the address and details (02), and real completed hikes show as journal entries (03).
+- The shop page shows old shelf checks as old in an old build (AV1622-04); a newly added product shows New for 14 Pacific days (06).
+- `stop showing the eggs as sold out` (`product.clear_availability`) takes one availability word off a card (AV1622-05).
+- `listing <id>` reads one saved listing; it is not a live website check (AV1622-09).
+- Docs and checks: the phone guide and limits cover these (AV1622-11), the interpreter eval has five more cases (12) and the H25 acceptance map runs the new modules (13).
