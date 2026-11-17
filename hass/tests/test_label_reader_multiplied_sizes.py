@@ -51,7 +51,7 @@ class MultipliedSizes(unittest.TestCase):
 
     def test_spacing_and_previous_guard_precedence(self):
         self.assertEqual(keep({"name": "2 x 500\u2028ml"}, CATS), {})
-        self.assertEqual(keep({"name": "2 x 500 ml organic"}, CATS), {})
+        self.assertEqual(keep({"name": "2 x 500 ml organic"}, CATS), {"printed_claims": ["2 x 500 ml organic"]})
         self.assertEqual(keep({"name": "2 x 500 ml", "brand": "null"}, CATS), {})
         for value in ["12 oz", "1.5 L", "1/2 lb", "$4.99"]:
             self.assertEqual(keep({"name": value}, CATS), {})

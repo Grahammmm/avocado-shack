@@ -21,6 +21,7 @@ from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_polic
 from hass import capabilities, photo_polish, transcript  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
+from hass.clover import approvals as till_approvals  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
 # imported back here, so hass.conversation.<name> still works for every caller and test.
 from hass.chat.shared import (  # noqa: E402,F401
@@ -850,7 +851,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     # -- message handling ----------------------------------------------------------------------------------------
     _answering = None  # AV0022-10 (H16): received_at of the message handle() is running; replies are tagged with it
-    till = None  # HASS-CLOVER-2: a hass.clover.chat.TillDesk when host.json has a `clover` block (make_worker); None = no till replies
+    _till = None
+
+    @property
+    def till(self):
+        return self._till
+
+    @till.setter
+    def till(self, desk):
+        self._till = desk  # engine attachment is still separately gated; read-only desks never gain one here
+        till_approvals.recover(self)
     _forwarded = None  # HASS-SEC-2 (L5): when the message reached the inbox (inbox.Inbox.forwarded_at); None when not known
 
     def handle(self, msg: Inbound, last_try=False, apply=True, forwarded_at=None) -> str:
@@ -939,12 +949,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             with self._tx():
                 disposition, approved = self._handle(msg, last_try)
                 if approved is not None and not apply: raise _Held(approved["code"])
+                till_approvals.save(self, msg, self._till_job, apply)
         except _Held as held:
             with self._tx():
                 self._reply(HELD_REPLY.format(code=held.code))
                 self._record(msg, "approval-held")
             return "approval-held"
-        if self._till_job is not None: self._till_apply(msg, self._till_job, apply)
+        till_approvals.recover(self)  # also reconciles a redelivered provider id
         for job in self._label_jobs:  # AV1537-15: after the commit, never holding the lock; AV2152-04: a failed one never stops the next
             try: self._read_label(*job)
             except Exception: continue  # noqa: BLE001 - no label is today's reply exactly
@@ -968,10 +979,14 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         site = lambda: editor_mod._load(str(self.sdir))[2]  # noqa: E731
         if ops and self.till.site_moved(base, site):
             self.till.drop(code, self._asker, msg.chat)
-            with self._tx(): self._reply(self.till.SITE_MOVED)
+            with self._tx():
+                self._reply(self.till.SITE_MOVED)
+                till_approvals.finish(self, msg)
             return
         text, ops = (HELD_REPLY, ()) if not apply else self.till.approve(code, sender=self._asker, chat=msg.chat)
-        with self._tx(): self._reply(text, long_ok=True)
+        with self._tx():
+            self._reply(text, long_ok=True)
+            till_approvals.finish(self, msg)
         if not ops: return
         try:
             if self.till.site_moved(base, site): raise ValueError("site")  # changed while the till was written: keep the newer word
@@ -1783,9 +1798,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(said)
             return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
         if self.skills_mode != dispatch_mod.DEFAULT_MODE and self.dispatch.photo_skills():  # SKILLS-FW-3 (spec 2.7): the photo joins the open request
+            intake_answers = None
+            if self.settings.get("itemIntake") is True:
+                caption, intake_answers = item_intake.caption_answers(caption)
             as_text = Inbound(**{**vars(msg), "text": caption})
-            done = self.dispatch.photo(as_text, now, sha, caption)
-            return done if done is not None else self._request(as_text, now)  # no skill yet: the caption is the next text of that request
+            done = self.dispatch.photo(as_text, now, sha, caption, intake_answers=intake_answers)
+            done = done if done is not None else self._request(as_text, now)
+            req = self.requests.get(msg.chat, now)
+            if (self.labels is not None and self.settings.get("itemIntake") is True and req
+                    and req["skill"] == "item.add" and req["state"] == "open" and req["attachments"] == [sha]
+                    and not req["slots"].get("intake", {}).get("photo_details")):
+                question = self.db.execute("SELECT id FROM outbox WHERE chat = ? AND sent_at IS NULL ORDER BY id DESC LIMIT 1",
+                                           (msg.chat,)).fetchone()
+                self._label_jobs.append((None, sha, (as_text, req["request_id"], now, question["id"] if question else None)))
+            return done
         code = self._photo_row(sha, msg, now)
         if not caption:
             self._photo_question(code, sha)
@@ -1850,6 +1876,18 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
             found = self.labels.read(web, sorted({p["category"] for p in products if isinstance(p.get("category"), str)}))
         except Exception: return  # noqa: BLE001 - no label is today's reply exactly
+        if code is None:
+            msg, request_id, now, question_id = reply_id
+            with self._answer_to(msg.chat), self._tx():
+                req = self.requests.get(msg.chat, now)
+                if (not found or req is None or req["request_id"] != request_id or req["state"] != "open"
+                        or req["skill"] != "item.add" or req["attachments"] != [sha]): return
+                slots = {**req["slots"], "intake": {**req["slots"].get("intake", {}), "photo_details": found}}
+                # Replace only this message's unsent question; an early receipt already sent stays sent.
+                self.db.execute("DELETE FROM outbox WHERE id = ? AND sent_at IS NULL", (question_id,))
+                self.dispatch._advance(Inbound(**{**vars(msg), "text": ""}), now, req,
+                                       self.dispatch.registry.get("item.add"), slots, None, resolved=True)
+            return
         line = label_reader.question(found, self._makers(), products) if found else None  # AVB-10: matching records
         with self._tx():
             if line and self.db.execute("UPDATE drafts SET summary = summary || ? WHERE code = ? AND state = "

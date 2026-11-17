@@ -74,15 +74,18 @@ class SpacedClaimTests(unittest.TestCase):
                             ("Made", "In France Salt"), ("Non", "GMO Tea")):
             for dash in self.DASHES:
                 with self.subTest(value=repr(left + dash + right)):
-                    self.assertEqual(keep({"name": left + dash + right, "brand": "Etto"}, CATS), {"brand": "Etto"})
+                    raw = left + dash + right
+                    expected = {"brand": "Etto"}
+                    if "\t" not in raw: expected["printed_claims"] = [raw]
+                    self.assertEqual(keep({"name": raw, "brand": "Etto"}, CATS), expected)
 
     def test_claim_drop_is_field_local(self):
         claim = "Gluten - Free"
-        self.assertEqual(keep({"name": claim, "brand": "Etto", "category": "tea"}, CATS), {"brand": "Etto", "category": "tea"})
-        self.assertEqual(keep({"name": "Oats", "brand": claim, "category": "tea"}, CATS), {"name": "Oats", "category": "tea"})
+        self.assertEqual(keep({"name": claim, "brand": "Etto", "category": "tea"}, CATS), {"brand": "Etto", "category": "tea", "printed_claims": [claim]})
+        self.assertEqual(keep({"name": "Oats", "brand": claim, "category": "tea"}, CATS), {"name": "Oats", "category": "tea", "printed_claims": [claim]})
         self.assertEqual(keep({"name": "Oats", "brand": "Etto", "category": claim}, ["tea", claim]),
-                         {"name": "Oats", "brand": "Etto"})
-        self.assertEqual(keep({"name": claim, "brand": "Cage - Free", "category": "x"}, CATS), {})
+                         {"name": "Oats", "brand": "Etto", "printed_claims": [claim]})
+        self.assertEqual(keep({"name": claim, "brand": "Cage - Free", "category": "x"}, CATS), {"printed_claims": [claim, "Cage - Free"]})
 
     def test_claim_comparison_does_not_rewrite_safe_label_text(self):
         self.assertEqual(keep({"name": "Plain  -  Oats", "brand": "Big - Sur"}, CATS),
@@ -94,5 +97,5 @@ class SpacedClaimReaderTests(unittest.TestCase):
         from hass.tests.test_label_reader import reader, recorded
         labels, transport = reader(recorded({"name": "Gluten - Free Oats", "brand": "Etto", "category": "tea"}))
         self.assertEqual(labels.read(JPG, CATS),
-                         {"brand": "Etto", "category": "tea"})
+                         {"brand": "Etto", "category": "tea", "printed_claims": ["Gluten - Free Oats"]})
         self.assertEqual((len(transport.calls), labels.last_error), (1, None))
