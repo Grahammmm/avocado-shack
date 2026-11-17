@@ -128,6 +128,17 @@ class DurableYes(client_tests.NoNetwork, conv_tests.ConversationTestCase):
         self.assertEqual(self.say("yes " + self.code, pid=self.pid), "duplicate")
         self.assertEqual((self.writes(), len(self.replies())), (1, 1))
         self.assertEqual(self.say("yes " + self.code, pid="another-provider"), "till-approved")
+        self.assertEqual((self.writes(), self.replies()), (1, [approvals.SAVED]))
+
+    def test_pending_same_code_gets_an_explicit_pending_outcome(self):
+        with mock.patch.object(self.conv, "_till_apply", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt): self.say("yes " + self.code, pid=self.pid)
+        with mock.patch.object(approvals, "recover"):
+            self.assertEqual(self.say("yes " + self.code, pid="second-pending"), "till-approved")
+        self.assertEqual((self.writes(), self.status(), self.replies()), (0, "draft", [approvals.PENDING]))
+        approvals.recover(self.conv)
+        self.assertEqual((self.writes(), self.status(), len(self.replies())), (1, "applied", 1))
+        self.assertEqual(self.say("yes " + self.code, pid="second-pending"), "duplicate")
         self.assertEqual((self.writes(), self.replies()), (1, []))
 
     def test_recovery_refuses_expired_drafts_without_writing(self):
@@ -173,6 +184,17 @@ class DurableYes(client_tests.NoNetwork, conv_tests.ConversationTestCase):
         self.conv.till = chat.TillDesk(str(self.state), self.block)
         self.assertIsNone(self.conv.till.engine)
         self.assertEqual((self.writes(), len(self.replies())), (0, 1))
+
+    def test_fresh_approval_after_paused_recovery_is_not_silently_lost(self):
+        self.kill("after-job")
+        self.conv = self.start(attach=False)
+        with mock.patch.object(self.conv, "_paused", return_value=True): approvals.recover(self.conv)
+        self.assertEqual((self.writes(), self.status(), self.replies()), (0, "draft", [approvals.HELD]))
+        self.assertEqual(self.say("yes " + self.code, pid="fresh-approval"), "till-approved")
+        self.assertEqual((self.writes(), self.status()), (1, "applied"))
+        self.assertEqual(len(self.replies()), 1)
+        self.assertEqual(self.say("yes " + self.code, pid="fresh-approval"), "duplicate")
+        self.assertEqual((self.writes(), self.replies()), (1, []))
 
     def test_apply_false_is_durable_held_and_never_upgrades_on_restart(self):
         msg = conversation.Inbound(self.pid, conv_tests.CHAT, conv_tests.OWNER, "yes " + self.code)

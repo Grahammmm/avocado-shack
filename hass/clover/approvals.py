@@ -15,6 +15,7 @@ SCHEMA = """CREATE TABLE IF NOT EXISTS till_jobs(
  UNIQUE(identity, code))"""
 MAX_JOBS = 256
 HELD = "I couldn't finish your approved till change. I won't send it again; please check that item on the till."
+PENDING = "That till change already has an approval being processed. I won't send it twice."
 SAVED = "Your approved till change was saved and read back. I won't send it again."
 FAILED = "Your approved till change did not finish. Please check that item on the till before asking for a new change."
 
@@ -31,8 +32,16 @@ def save(c, msg, job, allowed):
                  (max(0, c.db.execute("SELECT count(*) FROM till_jobs").fetchone()[0] - MAX_JOBS + 1),))
     if c.db.execute("SELECT count(*) FROM till_jobs").fetchone()[0] >= MAX_JOBS:
         raise RuntimeError("till approval queue full; message not acknowledged")
-    c.db.execute("INSERT OR IGNORE INTO till_jobs(provider_id,identity,code,sender,chat,received_at,shelf,allowed) VALUES(?,?,?,?,?,?,?,?)",
-                 (msg.provider_id, c.till.engine.journal.identity, code, c._asker, msg.chat, msg.received_at, int(shelf), int(allowed)))
+    identity = c.till.engine.journal.identity
+    # Completed jobs no longer own the code: a fresh message must get its own
+    # outcome. Journal reconciliation still forbids replaying an intent.
+    c.db.execute("DELETE FROM till_jobs WHERE identity=? AND code=? AND done=1", (identity, code))
+    inserted = c.db.execute("INSERT OR IGNORE INTO till_jobs(provider_id,identity,code,sender,chat,received_at,shelf,allowed) VALUES(?,?,?,?,?,?,?,?)",
+                            (msg.provider_id, identity, code, c._asker, msg.chat, msg.received_at, int(shelf), int(allowed)))
+    if not inserted.rowcount:
+        # Another approval is already pending. Do not turn this message into
+        # a second write, but do not silently acknowledge it either.
+        c._reply(PENDING, long_ok=True)
 
 
 def finish(c, msg):
