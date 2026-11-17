@@ -6,10 +6,10 @@
 
 create refuses a symlinked or odd config.json/writer.lock before anything opens it, takes the writer lock and copies a
 settled state dir (config.json, drafts, changes, screenshots, the audit log and consistent sqlite snapshots of inbox.sqlite3, then
-conversation.sqlite3, then clover/cache.sqlite3 if present; never writer.lock, a journal, a symlink or an unknown entry) into a new private
+conversation.sqlite3, transcript.sqlite3 and clover/cache.sqlite3 if present; never writer.lock, a journal, a symlink or an unknown entry) into a new private
 <out>/hass-state-<UTC stamp>/ (out: an existing 0700 user dir; built aside, renamed in) and writes MANIFEST.json last.
-verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on both
-stores, and that config.json is an object naming the manifest's exact worktree; listed photo originals and sidecars must pair one-to-one
+verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on each
+store, and that config.json is an object naming the manifest's exact worktree; listed photo originals and sidecars must pair one-to-one
 and match media.originals. restore verifies first, then builds a NEW state dir bound
 to a separate drill worktree (only config.json `worktree` is rewritten). Isolation rule: nothing restores over an existing
 dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
@@ -35,11 +35,12 @@ from hass.editor import UnsafeState  # noqa: E402
 
 MANIFEST, CONFIG, DB, LOCK = "MANIFEST.json", "config.json", "conversation.sqlite3", "writer.lock"
 INBOX = "inbox.sqlite3"  # H16 inbound queue; snapshotted like DB
+TRANSCRIPT = "transcript.sqlite3"  # Private append-only conversation history; online snapshot like DB.
 CLOVER = "clover/cache.sqlite3"  # till cache (hass/clover/cache.py); snapshotted; the item link table will join it
 BUNDLE = "content.bundle"  # FAV-07: git bundle of the writer worktree's HEAD == contentCommit
 DIRS = ("drafts", "changes", "screenshots", "audit")  # AVB-10: audit/ is the one audit log (ids only), kept with the state
 ORIG = "media/originals/"  # H10 photo originals <aa>/<sha>.<ext> + <aa>/<sha>.json, aa == sha[:2] (hass/media.py)
-FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|clover/cache\.sqlite3|content\.bundle"
+FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|transcript\.sqlite3|clover/cache\.sqlite3|content\.bundle"
                      r"|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
                      r"|screenshots/[0-9A-Za-z_-][0-9A-Za-z._-]*\.png"
                      r"|audit/[0-9]{4}-[0-9]{2}-[0-9]{2}\.jsonl"
@@ -120,7 +121,7 @@ def _scan(sdir: Path):
                 if sub.is_symlink(): bad.append(f"symlink: {rel}")
                 elif sub.is_file(follow_symlinks=False) and FILE_RE.fullmatch(rel): files.append(rel)
                 else: bad.append(f"unknown entry: {rel}")
-        elif entry.is_file(follow_symlinks=False) and entry.name in (CONFIG, DB, INBOX): files.append(entry.name)
+        elif entry.is_file(follow_symlinks=False) and entry.name in (CONFIG, DB, INBOX, TRANSCRIPT): files.append(entry.name)
         elif not (entry.is_file(follow_symlinks=False) and entry.name == LOCK): bad.append(f"unknown entry: {entry.name}")
     return files, bad
 
@@ -178,7 +179,7 @@ def create(state, out, now=None, media=None) -> dict:
         for rel in sorted(files + mfiles, key=lambda rel: rel != INBOX):
             (dest / rel).parent.mkdir(mode=0o700, exist_ok=True)
             src = mroot / rel[len("media/"):] if rel.startswith(ORIG) else sdir / rel
-            (_snapshot if rel in (DB, INBOX, CLOVER) else _copy)(src, dest / rel)
+            (_snapshot if rel in (DB, INBOX, TRANSCRIPT, CLOVER) else _copy)(src, dest / rel)
             hashes[rel] = hashlib.sha256(_read(dest / rel)).hexdigest()
         doc = {"schemaVersion": 1, "createdAt": now.isoformat(), "worktree": cfg["worktree"], "files": hashes}
         commit = _head(Path(cfg["worktree"]))  # inside the writer lock; read-only
@@ -269,7 +270,7 @@ def verify(backup) -> dict:
     for rel, digest in sorted(files.items()):
         if rel not in seen: problems.append(f"missing: {rel}")
         elif hashlib.sha256(_read(bdir / rel)).hexdigest() != digest: problems.append(f"hash mismatch: {rel}")
-        elif rel in (DB, INBOX, CLOVER) and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
+        elif rel in (DB, INBOX, TRANSCRIPT, CLOVER) and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
         elif rel == CONFIG and (cfg_wt := _config_worktree(bdir / rel)) is None:
             problems.append("config: not a JSON object with a worktree")
         elif rel == CONFIG and cfg_wt != doc["worktree"]: problems.append("config: worktree does not match manifest")

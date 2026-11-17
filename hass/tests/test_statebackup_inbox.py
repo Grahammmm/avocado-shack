@@ -60,7 +60,7 @@ class RoundTripTests(InboxBackupTestCase):
         (self.repo.state / INBOX).unlink()
         self.apply("kumquat desc")
         state = self.repo.state
-        expected = {"config.json", "conversation.sqlite3", "content.bundle"} | {
+        expected = {"config.json", "conversation.sqlite3", "transcript.sqlite3", "content.bundle"} | {
             f"{d}/{name}" for d in statebackup.DIRS if (state / d).is_dir() for name in os.listdir(state / d)}
         self.assertEqual(set(self.files(self.backup())), expected)
 
@@ -69,7 +69,7 @@ class RoundTripTests(InboxBackupTestCase):
         with mock.patch.object(statebackup, "_snapshot", wraps=statebackup._snapshot) as snap, \
                 mock.patch.object(statebackup, "_copy", wraps=statebackup._copy) as copy:
             self.backup()
-        self.assertEqual([call.args[0].name for call in snap.call_args_list], [INBOX, statebackup.DB])
+        self.assertEqual([call.args[0].name for call in snap.call_args_list], [INBOX, statebackup.DB, "transcript.sqlite3"])
         self.assertNotIn(INBOX, [call.args[0].name for call in copy.call_args_list])
 
     def test_message_handled_between_snapshots_is_a_duplicate_after_restore(self):

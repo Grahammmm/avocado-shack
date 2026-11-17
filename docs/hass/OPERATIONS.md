@@ -65,6 +65,37 @@ repeat. Exit 1 (problems) is not a failed unit; exit 2 (unsafe state, bad `--see
 
 Each live publish is an info line, never a page. What to check for each id is in `SUPPORT.md`.
 
+## Private conversation transcript (HASS-TRANSCRIPT-1)
+
+G authorized retaining the full on-box conversation record on 2026-11-16. New events reaching `Conversation.handle`
+are retained in `<state>/transcript.sqlite3` (0600 inside the private state directory), including ignored messages,
+edits, reactions and every owner/G chat. Repeated inbound provider ids retain only their first event. Existing
+conversations cannot be reconstructed from the old ids-only message table. No live install is performed by this change.
+
+The append-only transcript keeps full text as received by the conversation core and cleaned text queued by `Outbox.add`.
+Inbound rows are appended in the entry wrapper's `finally`, before any return, with the processing outcome (or `error`).
+Outgoing rows say `queued`: they are not proof of delivery, and send-time delay prefixes/transport notices are not
+part of the queued text. Provider/reply ids, sender keys, UTC capture time, explicit approval code, interpreter backend
+and model when an audit row identifies the call, and elapsed processing milliseconds accompany the text. Unknown
+metadata is null; attachment-count-only inbound messages are classified as photo because the core receives no MIME
+information. Already-fetched photo bytes and readable outbound pictures are hashed, never fetched again or copied;
+unavailable attachment digests are absent. Original photos remain in `mediaRoot`; preview pictures remain in screenshots.
+A retry retains the first inbound event, even if its first processing attempt failed. Transcript failure emits only
+`ALERT transcript-write-failed` to the application logger and never changes a reply.
+
+Read-only, offline tools (JSONL to stdout; keep output on-box and private, never paste transcripts into Git or alerts):
+
+```
+python3 -B hass/transcript.py export --state DIR --since YYYY-MM-DD
+python3 -B hass/transcript.py export --state DIR --since YYYY-MM-DD --chat ID
+python3 -B hass/transcript.py stats --state DIR
+```
+
+Export uses the UTC capture date; stats groups counts by UTC day and disposition. Both refuse missing, non-regular
+or non-private database files without creating/chmodding them. Keep everything: no transcript expiry or deletion code
+exists. `statebackup.py create` snapshots this database using SQLite's online backup API, `verify` checks integrity,
+and restore/drill includes it. In the isolated restore drill, compare the restored export with the backup's export.
+
 ## Restore drill (unchanged)
 
 1. `python3 hass/statebackup.py verify BACKUP`
@@ -98,6 +129,7 @@ these reads that way. A nightly timer for it is proposed in
 | Mac spool | 7 days after delivery |
 | Relay rows | 30 days after ack (picture bytes cleared at ack) |
 | Proposal and result screenshots | 90 days |
+| Transcript | Keep everything (G authorized 2026-11-16); not subject to this proposal |
 | Conversation messages and outbox | 1 year |
 | Approvals, change records, release journals | 2 years (the audit trail of live changes) |
 | Photo originals | 1 year after last use |
