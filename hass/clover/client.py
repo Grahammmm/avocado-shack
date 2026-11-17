@@ -219,8 +219,11 @@ class CloverClient:
     def _retry_wait(response, attempt):
         """Seconds to wait: Retry-After when Clover sent a whole number (1-30), else 1, 2, 4 ..."""
         raw = (response.headers.get("retry-after") if response is not None else None) or ""
-        if raw.strip().isdigit():
-            return max(1, min(30, int(raw.strip())))
+        text = raw.strip()
+        if text and text.isascii() and text.isdigit():  # ASCII digits only: int() refuses e.g. superscripts
+            digits = text.lstrip("0")
+            # clamp on length first so a huge digit string is never converted to an int
+            return 30 if len(digits) > 2 else max(1, min(30, int(digits or "0")))
         return min(30, 2 ** attempt)
 
     @staticmethod
