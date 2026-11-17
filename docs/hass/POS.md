@@ -9,23 +9,25 @@ the read token and the write journal.
 
 | View | Example (fixture) |
 |---|---|
-| till summary | `Till at 12:00 pm: 6 items, 2 sold out, 0 running low, 1 with no count. Website: 2 linked, 1 stock words waiting. Count drops today: 3 items, 33 units.` |
+| till summary | `Till at 12:00 pm: 6 items, 2 sold out, 0 running low, 1 with no count. Website: 2 linked, stock words waiting: not available yet. Count drops today: 3 items, 33 units.` |
 | price of / how many | `Eggs, dozen: $7.00 each, 0 in the till (as of 12:00 pm).` |
 | low stock | the existing stock report: names plus counts, sold out first |
 | what sold today / this week | `Biggest count drops today: Eggs, dozen 14, Sunshine olive oil 14, Hass avocado 5 (count drops, not exact sales: a recount or a till edit also shows here)` |
 | website vs till | the existing mismatch report as text: each heading with up to five rows |
 
-"Stock words waiting" is the number of site products whose stock word disagrees with the till count (the mismatch report's "Stock word
-disagreements"). "Linked" is the saved links less the broken ones.
+"Stock words waiting" is not available yet (`stockWordsWaiting` is null in `pos-totals.json`): a stock word that disagrees with the till is not a
+pending change, and the real pending/deferred count arrives with the STOCK-SITE totals integration. "Linked" is the saved links less the broken ones.
 
 ## Count drops, not exact sales
 
-The cache keeps the counts of every read for **14 days** (`snapshots`, written and pruned in the same transaction as the sync; items
+The cache keeps the counts of every read for **14 days** (`snapshots`, written and pruned in the same transaction as the sync, and emptied by a sync to a different configured till; items
 the till does not count have no row). A drop is the count at the start of the period, less the count now, **plus Hass's own change**:
 
 - the start is the earliest read from one hour before Pacific midnight of the first day (today, or the last 7 days);
-- Hass's own changes are the applied `set_stock` rows of its write journal (`journal.sqlite3`, opened read-only, same till only) dated in the
-  period. A count Hass lowered is taken off the drop; stock it received is added back, so a delivery does not hide sales;
+- Hass's own changes are the applied `set_stock` rows of its write journal (`journal.sqlite3`, opened read-only, same till only) made strictly between the start read
+  and the read now. The journal keeps no apply time, so the time used is when the owner was offered the draft (`expires` less 10 minutes;
+  approval comes at most 10 minutes later). A receipt before the start read is already in the start count, and one after the last read is not in
+  the count yet, so neither is added back. A count Hass lowered is taken off the drop; stock it received is added back, so a delivery does not hide sales;
 - a count changed by hand at the register, a recount or a till edit is **not** known, so it also shows as a drop. That is why every reply says
   "count drops, not exact sales". Exact sales need the Orders permission, which this card does not use.
 

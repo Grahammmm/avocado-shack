@@ -24,7 +24,7 @@ NOW_COUNTS = ["11", "40", "0", "0", "7.5", None]    # 12:00 Pacific today (= T0)
 EARLIER = ["30", "50", "14", "0", "7.5", None]      # yesterday 06:00 Pacific
 NOTE = "(count drops, not exact sales: a recount or a till edit also shows here)"
 GONE = "I don't have an earlier till count to compare with yet, so no count drops today"
-SUMMARY = ("Till at 12:00 pm: 6 items, 2 sold out, 0 running low, 1 with no count. Website: 2 linked, 1 stock words waiting. "
+SUMMARY = ("Till at 12:00 pm: 6 items, 2 sold out, 0 running low, 1 with no count. Website: 2 linked, stock words waiting: not available yet. "
            "Count drops today: 3 items, 33 units.")   # 14 + 14 + 5 (the avocado's 10 less Hass's own 5)
 
 
@@ -43,11 +43,11 @@ class PosCase(CliCase):
         self.snaps = cache.history(self.state, identity())
         self.snapshot, self.reachable = cache.read(self.state, identity())
 
-    def journal(self, day, item_id, before, after, kind="set_stock", status="applied"):
+    def journal(self, day, item_id, before, after, kind="set_stock", status="applied", at=None):
         with Journal(self.state, SimpleNamespace(environment="production", merchant_id=MID)).locked() as db:
             result = json.dumps({"kind": kind, "item_id": item_id, "before": {"stock": before}, "after": {"stock": after}})
             n = db.execute("SELECT count(*) FROM changes").fetchone()[0]
-            db.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?,?)", (f"c{n}", "{}", "s", "c", 0, status, day, result))
+            db.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?,?)", (f"c{n}", "{}", "s", "c", ((at or T0 - timedelta(hours=1)).timestamp() + 600), status, day, result))
 
     def deltas(self):
         return pos.journal_deltas(self.state, identity(), "2026-11-04")
@@ -64,11 +64,22 @@ class ViewTests(PosCase):
         self.journal("2026-11-10", IDS[0], "25", "31")      # received 6 at the shelf: the drop is 14 + 6
         self.journal("2026-11-10", IDS[2], "14", "99", status="draft")
         self.journal("2026-11-10", IDS[2], "14", "99", kind="set_price")
-        self.journal("2026-11-09", IDS[1], "50", "10")      # yesterday: not in today's reply
+        self.journal("2026-11-09", IDS[1], "50", "10", at=T0 - timedelta(hours=26))      # yesterday: not in today's reply
         self.assertEqual(pos.drops(self.snapshot, self.snaps, self.deltas(), T0),
                          f"Biggest count drops today: Sunshine olive oil 20, Eggs, dozen 14, Hass avocado 10 {NOTE}")
         self.assertEqual(pos.drops(self.snapshot, self.snaps, self.deltas(), T0, days=7),
                          f"Biggest count drops this week: Sunshine olive oil 25, Eggs, dozen 14 {NOTE}")
+
+    def test_only_changes_strictly_between_the_first_and_last_count_are_added_back(self):
+        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=5))   # +10 on the oil before the first count (25 -> 11: drop 14)
+        self.assertEqual(pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1)[1][1], 14)     # already in the first count: no 24
+        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=3, minutes=30))     # at the first count: not after it
+        self.journal("2026-11-10", IDS[0], "25", "35", at=T0)                                      # at the last count: not before it
+        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 + timedelta(hours=1))                 # after the last count
+        self.assertEqual([(i.name, n) for i, n in pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1)][:2],
+                         [("Eggs, dozen", 14), ("Sunshine olive oil", 14)])
+        self.journal("2026-11-10", IDS[0], "25", "35", at=T0 - timedelta(hours=2))                 # between the two counts: added back
+        self.assertEqual(pos.drop_rows(self.snapshot, self.snaps, self.deltas(), T0, 1)[0][1], 24)
 
     def test_week_and_the_note_is_always_present(self):
         self.assertEqual(pos.drops(self.snapshot, self.snaps, [], T0, days=7),
@@ -138,7 +149,7 @@ class ReportTests(PosCase):
         self.run_pos()
         text = (self.folder / "pos-totals.json").read_text()
         self.assertEqual(json.loads(text), {
-            "asOf": "2026-11-10T20:00:00+00:00", "items": 6, "soldOut": 2, "low": 0, "noCount": 1, "stockWordsWaiting": 1,
+            "asOf": "2026-11-10T20:00:00+00:00", "items": 6, "soldOut": 2, "low": 0, "noCount": 1, "stockWordsWaiting": None,
             "countDropItems": 3, "countDropUnits": "38", "tillReachable": True, "snapshot": "fresh"})
         rows, _ = sync.rows(fixture("items.json")["elements"], fixture("item_stocks.json")["elements"])
         for row in rows:
@@ -177,6 +188,16 @@ class HistoryTests(PosCase):
         put(self.state, T0 - timedelta(hours=29) + timedelta(days=14), BASE)       # now it is over 14 days old: pruned with this sync
         self.assertNotIn(T0 - timedelta(hours=30), [t for t, _ in cache.history(self.state, identity())])
         self.assertEqual(len(cache.history(self.state, identity())), 4)
+
+    def test_a_good_sync_of_another_till_empties_the_history_with_no_failed_sync_between(self):
+        other = cache.Identity("production", "FAKEMERCH0002")
+        self.assertEqual(len(cache.history(self.state, identity())), 3)
+        rows, _ = sync.rows(fixture("items.json")["elements"], fixture("item_stocks.json")["elements"])
+        cache.write_items(self.state, rows, T0 + timedelta(hours=1), other)
+        self.assertEqual(cache.history(self.state, identity()), [])
+        self.assertEqual([t for t, _ in cache.history(self.state, other)], [T0 + timedelta(hours=1)])     # only this till's own read
+        cache.write_items(self.state, rows, T0 + timedelta(hours=2), other)       # the same till again keeps its history
+        self.assertEqual(len(cache.history(self.state, other)), 2)
 
     def test_other_till_drops_history_and_an_old_cache_reads_empty(self):
         other = cache.Identity("production", "FAKEMERCH0002")

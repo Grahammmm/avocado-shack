@@ -9,7 +9,7 @@ import sqlite3
 import stat
 import tempfile
 from contextlib import closing
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import quote
@@ -32,7 +32,8 @@ def since_day(now, days):
 
 
 def journal_deltas(state, identity, since):
-    """[(day, item id, change)]: Hass's own applied count changes on or after `since` (ISO day); [] when there is no journal."""
+    """[(time, item id, change)]: Hass's own applied count changes on or after `since` (ISO day); [] when there is no journal. time = when
+    the owner was offered the draft (expires - 600 s: the journal keeps no apply time; an approval comes at most 10 minutes later)."""
     path = Path(state) / "clover" / "journal.sqlite3"
     try:
         if not cache._private_dir(path.parent, False) or not cache._private_file(path, False):
@@ -40,10 +41,10 @@ def journal_deltas(state, identity, since):
         with closing(sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=5)) as db:
             if db.execute("SELECT v FROM meta WHERE k='identity'").fetchone()[0] != json.dumps(list(identity)):
                 return []
-            rows = db.execute("SELECT day, result FROM changes WHERE status='applied' AND day >= ?", (since,)).fetchall()
-        entries = [(day, json.loads(result)) for day, result in rows]
-        return [(day, e["item_id"], Decimal(e["after"]["stock"]) - Decimal(e["before"]["stock"]))
-                for day, e in entries if e["kind"] == "set_stock" and e["before"]["stock"] is not None]
+            rows = db.execute("SELECT expires, result FROM changes WHERE status='applied' AND day >= ?", (since,)).fetchall()
+        entries = [(datetime.fromtimestamp(expires - 600, timezone.utc), json.loads(result)) for expires, result in rows]
+        return [(at, e["item_id"], Decimal(e["after"]["stock"]) - Decimal(e["before"]["stock"]))
+                for at, e in entries if e["kind"] == "set_stock" and e["before"]["stock"] is not None]
     except (cache.CacheUnsafe, sqlite3.Error, ValueError, KeyError, TypeError, ArithmeticError):
         return []
 
@@ -52,12 +53,12 @@ def drop_rows(snapshot, snaps, deltas, now, days):
     """[(item, units)] biggest first, or None when no earlier count covers the period. units = count before - count now + Hass's own change."""
     first = since_day(now, days)
     start = datetime.combine(first, time.min, reads.PACIFIC) - timedelta(hours=1)
-    base = next((c for t, c in snaps if start <= t < snapshot.fetched_at), None)
+    began, base = next(((t, c) for t, c in snaps if start <= t < snapshot.fetched_at), (None, None))
     if base is None:
         return None
     own = {}
-    for day, iid, change in deltas:
-        if day >= first.isoformat():
+    for at, iid, change in deltas:
+        if began < at < snapshot.fetched_at:   # only changes between the two counts; a receipt before the first count is already in it
             own[iid] = own.get(iid, 0) + change
     rows = [(i, base[i.id] - i.stock + own.get(i.id, 0)) for i in snapshot.items if i.stock is not None and i.id in base]
     return sorted(((i, n) for i, n in rows if n > 0), key=lambda r: (-r[1], r[0].name))
@@ -86,7 +87,7 @@ def summary(snapshot, snaps, deltas, now, content, links, reachable=True, thresh
     tail = "not enough history yet" if rows is None else f"{len(rows)} items, {_units(rows)} units"
     return _say(snapshot, now, reachable, f"Till at {reads.when(snapshot.fetched_at, now)}: {len(snapshot.items)} items, {sold} sold out, "
                 f"{few} running low, {none} with no count. Website: {len(links) - len(sec['Broken links'])} linked, "
-                f"{len(sec['Stock word disagreements'])} stock words waiting. Count drops today: {tail}.")
+                f"stock words waiting: not available yet. Count drops today: {tail}.")
 
 
 def price_of(query, snapshot, now, reachable=True, show=reads._as_is):
@@ -112,7 +113,7 @@ def build(snapshot, snaps, deltas, now, content, links, reachable=True, threshol
     today = drop_rows(snapshot, snaps, deltas, now, 1)
     sold, few, none = (len(r) for r in reports.low_stock(snapshot, threshold)["sections"].values())
     totals = {"asOf": snapshot.fetched_at.isoformat(), "items": len(snapshot.items), "soldOut": sold, "low": few, "noCount": none,
-              "stockWordsWaiting": len(reports.till_vs_site(snapshot, content, links)["sections"]["Stock word disagreements"]),
+              "stockWordsWaiting": None,   # unavailable until the STOCK-SITE totals integration: a till/site mismatch is not a pending count
               "countDropItems": None if today is None else len(today),
               "countDropUnits": None if today is None else _units(today), "tillReachable": bool(reachable),
               "snapshot": reads.freshness(snapshot, now, reachable)[0]}

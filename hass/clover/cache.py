@@ -163,6 +163,8 @@ def write_items(state, rows, now, identity):
     with closing(_open_write(state)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
+            if _refusal(_meta(db), identity):
+                db.execute("DELETE FROM snapshots")   # a switch to another till: its counts never show under this one
             db.execute("DELETE FROM items")
             db.executemany(f"INSERT INTO items({', '.join(COLUMNS)}) VALUES ({', '.join('?' * len(COLUMNS))})",
                            [tuple(r[c] for c in COLUMNS) for r in rows])
