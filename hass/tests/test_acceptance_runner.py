@@ -224,7 +224,8 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(acceptance.MAP["H03"], ("test_catalog_ops", "test_clear_availability",
                          "test_product_new", "test_maker_hide_products", "test_maker_optional_url"))
         self.assertEqual(acceptance.MAP["H12"], ("test_attachment_reply", "test_photo_draft",
-                         "test_photo_on_product", "test_photo_new_product", "test_photo_home_image"))
+                         "test_photo_on_product", "test_photo_new_product", "test_photo_home_image",
+                         "test_photo_batch", "test_media_batch"))
         self.assertEqual(acceptance.MAP["H22"], ("test_interpreter_cap", "test_interpreter_prompt"))
         self.assertEqual(acceptance.MAP["H17"], ("test_status_pause", "test_help",
                          "test_status_photos", "test_listing_command", "test_status_notice",
@@ -232,10 +233,19 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(acceptance.MAP["H25"], "release step")
         self.assertEqual(acceptance.MAP["H04"], ("test_hike_ops", "test_route_add",
                          "test_route_edit", "test_route_hide", "test_hike_samples",
-                         "test_hike_repeat", "test_hike_ics"))
+                         "test_hike_repeat", "test_hike_ics", "test_hike_cancel_note",
+                         "test_preview_cancel_note"))
+        self.assertEqual(acceptance.MAP["H05"], ("test_conversation", "test_near_approval",
+                         "test_unknown_approval_code", "test_again", "test_interpreter_prompt_shelf_maker",
+                         "test_interpreter_prompt_descriptions", "test_claims_health_awards"))
+        self.assertEqual(acceptance.MAP["H06"], ("test_preview", "test_undo", "test_history_search",
+                         "test_store_field_undo"))
         self.assertEqual(acceptance.MAP["H13"], ("test_store_ops", "test_store_intro",
                          "test_store_headline", "test_store_story",
-                         "test_store_home_image", "test_store_clear_home_image"))
+                         "test_store_home_image", "test_store_clear_home_image", "test_notice_start",
+                         "test_club_intro"))
+        for id_ in ("H04", "H05", "H06", "H12", "H13"):
+            self.assertEqual(len(acceptance.MAP[id_]), len(set(acceptance.MAP[id_])))
 
     def test_av1622_modules_selected_once(self):
         class Recorder(unittest.TestLoader):
@@ -287,6 +297,41 @@ class RunnerTest(unittest.TestCase):
         rows, code, _ = acceptance.run({"H25": acceptance.MAP["H25"]}, Recorder(), expected_ids=("H25",))
         self.assertEqual((code, rows[0]["result"], rows[0]["tests"], rows[0]["note"]),
                          (0, "not covered", 0, "release step"))
+
+    def test_av2152_modules_selected_once_in_order(self):
+        class Recorder(unittest.TestLoader):
+            def __init__(self):
+                super().__init__()
+                self.names = []
+
+            def loadTestsFromName(self, name, module=None):
+                self.names.append(name)
+                return unittest.TestSuite([unittest.FunctionTestCase(lambda: None)])
+
+        want = {"H04": ("test_hike_cancel_note", "test_preview_cancel_note"),
+                "H05": ("test_unknown_approval_code", "test_again", "test_interpreter_prompt_shelf_maker",
+                        "test_interpreter_prompt_descriptions", "test_claims_health_awards"),
+                "H06": ("test_history_search", "test_store_field_undo"),
+                "H12": ("test_photo_batch", "test_media_batch"),
+                "H13": ("test_notice_start", "test_club_intro")}
+        for id_, mods in want.items():
+            rec = Recorder()
+            rows, code, probs = acceptance.run({id_: acceptance.MAP[id_]}, rec, expected_ids=(id_,))
+            self.assertEqual((code, probs), (0, []))
+            self.assertEqual(rec.names, ["hass.tests." + m for m in acceptance.MAP[id_]])
+            self.assertEqual(len(rec.names), len(set(rec.names)))
+            self.assertEqual([n for n in rec.names if n[len("hass.tests."):] in mods],
+                             ["hass.tests." + m for m in mods])
+
+    def test_h25_stays_release_step(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = acceptance.main(["--only", "H25"])
+        lines = out.getvalue().splitlines()
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(lines[0]), {"id": "H25", "result": "not covered", "tests": 0,
+                                                "failures": 0, "note": "release step"})
+        self.assertEqual(json.loads(lines[1]), {"summary": {"ids": 1, "pass": 0, "fail": 0, "not covered": 1}})
 
 
 UNEXP = textwrap.dedent("""
