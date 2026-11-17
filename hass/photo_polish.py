@@ -480,6 +480,9 @@ def _hue(rgb, mask):
     return math.degrees(math.atan2(sy, sx)) % 360
 
 
+TSV_HEADER = "level page_num block_num par_num line_num word_num left top width height conf text".split()
+
+
 def words(framed, scale=2):
     """[(word, (left, top, width, height))] for the label words tesseract reads on the house-framed 800 px edited picture
     (read at ``scale`` times the size, where small label print is still legible; boxes in the picture's own coordinates;
@@ -498,15 +501,22 @@ def words(framed, scale=2):
                                   check=False)
         except (OSError, subprocess.TimeoutExpired):
             return None
-    if done.returncode != 0 or not done.stdout.startswith("level\t"):  # a failed read is no read, not an empty label
+    lines = [ln for ln in done.stdout.splitlines() if ln.strip()]
+    if done.returncode != 0 or not lines or lines[0].split("\t") != TSV_HEADER:  # a failed read is no read, not an empty label
         return None
     out = []
-    for line in done.stdout.splitlines()[1:]:
-        cols = line.split("\t")
+    for line in lines[1:]:
+        cols = line.split("\t", 11)  # the text is last and may be empty (hierarchy rows)
         try:
+            if len(cols) != 12:
+                return None
             conf, box = float(cols[10]), tuple(int(v) // scale for v in cols[6:10])
-        except (IndexError, ValueError):
-            continue
+            for value in cols[:6]:
+                int(value)
+        except ValueError:
+            return None  # a malformed row is unreadable output, never partial label evidence
+        if not math.isfinite(conf):
+            return None
         token = "".join(TEXT_TOKEN.findall(cols[11].upper()))
         if conf >= TEXT_CONF and len(token) >= 3:
             out.append((token, box))

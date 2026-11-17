@@ -75,13 +75,15 @@ class ReportTests(CliCase):
         with mock.patch.object(cli, "_token", side_effect=AssertionError("token")), \
                 mock.patch.object(cli, "_client", side_effect=AssertionError("network")):
             code, out, stdout = self.run_cli("report", "--all")
-        self.assertEqual((code, out["result"], out["reports"]), (0, "ok", 2))
+        self.assertEqual((code, out["result"], out["reports"]), (0, "ok", 3))
         folder = self.state / "clover/reports"
         self.assertEqual(stat.S_IMODE(folder.stat().st_mode), 0o700)
-        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["2026-11-10-mismatch.md", "2026-11-10-stock.md"])
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["2026-11-10-mismatch.md", "2026-11-10-pos.md", "2026-11-10-stock.md", "pos-totals.json"])
         for p in folder.iterdir():
             self.assertEqual(stat.S_IMODE(p.stat().st_mode), 0o600)
-            self.assertIn("Last sync: 2026-11-10T20:00:00+00:00", p.read_text())
+            if p.name.endswith(("-mismatch.md", "-stock.md")):
+                self.assertIn("Last sync: 2026-11-10T20:00:00+00:00", p.read_text())
+        self.assertIn("Till summary", (folder / "2026-11-10-pos.md").read_text())
         self.assertIn("Stock word disagreements (1)", (folder / "2026-11-10-mismatch.md").read_text())
         self.assertEqual(cache.path_for(self.state).read_bytes(), before)
         for value in ("Olive", "1250", "12.50", str(folder)):

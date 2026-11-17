@@ -1393,7 +1393,8 @@
    "pantry",
    "drinks",
    "bread",
-   "flowers"
+   "flowers",
+   "general"
   ],
   "highest_id_number": 174,
   "id_pattern": "photo-product-NNN (next = highest + 1)",
@@ -1517,6 +1518,7 @@
    "drinks": "Drinks & coffee",
    "eggs": "Eggs",
    "flowers": "Flowers",
+   "general": "General",
    "fruit": "Fruit",
    "meat": "Meat",
    "pantry": "Pantry",
