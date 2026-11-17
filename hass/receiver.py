@@ -137,7 +137,12 @@ class Receiver:
     def drain(self) -> list:
         """HASS-RCV-1: hand every pending message to handle(), in order; [(provider_id, disposition)]."""
         self._codes = {}
-        return self.inbox.drain(self)
+        photos = getattr(self.conversation, "photos", None)
+        reconcile = getattr(photos, "reconcile", None)
+        if callable(reconcile): reconcile(self.inbox)  # recover cleanup interrupted after a durable mark
+        handled = self.inbox.drain(self)
+        if callable(reconcile): reconcile(self.inbox)
+        return handled
 
     def receive(self, raw, *, secret, now) -> dict:
         """One sealed envelope (JSON text, bytes or dict) -> {result, draft_id, reason, disposition}. result is

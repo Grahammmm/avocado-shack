@@ -49,6 +49,22 @@ class RelayPhotos:
             except sqlite3.IntegrityError: raise ValueError("photo duplicate") from None
 
     def fetch(self, guid, n):
+        return self._fetch(guid, n, consume=True)
+
+    def fetch_for_inbox(self, guid, n):
+        """Keep the arrival until the durable inbox marks this message done."""
+        return self._fetch(guid, n, consume=False)
+
+    def reconcile(self, inbox):
+        """Remove completed arrivals, including a crash after marking the inbox."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._expire(db, int(self.clock().timestamp()))
+            guids = db.execute("SELECT DISTINCT guid FROM photo_in").fetchall()
+            db.executemany("DELETE FROM photo_in WHERE guid = ?",
+                           ((guid,) for (guid,) in guids if inbox.state(guid) == "done"))
+
+    def _fetch(self, guid, n, *, consume):
         if not bridge_photos._valid_guid(guid) or type(n) is not int or not 1 <= n <= media.MAX_PHOTOS_PER_MESSAGE:
             raise ValueError("photo request")
         refused, out = None, []
@@ -62,7 +78,7 @@ class RelayPhotos:
                         or not 1 <= len(data) <= relay.PHOTO_MAX or sha256(data).hexdigest() != digest
                         for i, (idx, count, digest, data, code) in enumerate(rows))
                 if not pending: out = [row[3] for row in rows]
-            if refused is not None or out: db.execute("DELETE FROM photo_in WHERE guid = ?", (guid,))
+            if consume and (refused is not None or out): db.execute("DELETE FROM photo_in WHERE guid = ?", (guid,))
         if refused is not None: raise refused
         if not out: raise ValueError("photo pending")
         return out
