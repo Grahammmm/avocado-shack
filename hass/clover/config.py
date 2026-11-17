@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from hass.clover.mapper import CATEGORIES, MAX_PRICE_CENTS
 
 KEYS = {"environment", "merchantId", "tokenFile", "liveApproved", "dailyWriteCap", "priceConfirmPct", "maxPriceCents",
-        "lowStockThreshold", "maxStock", "categoryMap"}
+        "lowStockThreshold", "maxStock", "categoryMap", "writeTokenFile", "writes"}
 REQUIRED = ("environment", "merchantId", "tokenFile")
 
 
@@ -30,17 +30,20 @@ class CloverConfig:
     merchant_id: str
     token_file: str
     daily_write_cap: int = 20          # Clover changes per Pacific day; an undo does not count
-    price_confirm_pct: int = 25        # a price move bigger than this (up or down) needs a second yes
+    price_confirm_pct: int = 25        # legacy warning threshold only; never an extra approval
     max_price_cents: int = MAX_PRICE_CENTS
     low_stock_threshold: int = 5       # at or under this count is "low"
     max_stock: int = 100_000           # a typo guard on a typed count
     category_map: dict = field(default_factory=dict)  # Hass category word -> Clover category name
-    live_approved: bool = False        # writes to production: not used by any code yet (there is no write path)
+    live_approved: bool = False        # explicit write go-live gate (sandbox too)
+
+    write_token_file: str = ""
+    writes: bool = False
 
     @property
     def writes_allowed(self):
-        """False for production unless liveApproved. Nothing calls a write today; a later write card must check this AND hold a write token."""
-        return self.environment == "sandbox" or self.live_approved
+        """All three write gates are required, even on sandbox; the service also validates the separate file."""
+        return self.live_approved and self.writes and bool(self.write_token_file) and self.write_token_file != self.token_file
 
 
 def _int(v, low, high):
@@ -57,6 +60,8 @@ def from_settings(raw):
         "environment": raw.get("environment") in ("sandbox", "production"),
         "merchantId": isinstance(raw.get("merchantId"), str) and 8 <= len(raw["merchantId"]) <= 20 and raw["merchantId"].isalnum(),
         "tokenFile": isinstance(raw.get("tokenFile"), str) and 0 < len(raw["tokenFile"]) <= 4096 and raw["tokenFile"].startswith("/"),
+        "writeTokenFile": isinstance(raw.get("writeTokenFile", ""), str) and ("writeTokenFile" not in raw or (raw["writeTokenFile"].startswith("/") and raw["writeTokenFile"] != raw.get("tokenFile"))),
+        "writes": type(raw.get("writes", False)) is bool,
         "liveApproved": type(raw.get("liveApproved", False)) is bool,
         "dailyWriteCap": _int(raw.get("dailyWriteCap", 20), 1, 200),
         "priceConfirmPct": _int(raw.get("priceConfirmPct", 25), 1, 1000),
@@ -70,4 +75,4 @@ def from_settings(raw):
         raise ConfigProblem(bad)
     return CloverConfig(raw["environment"], raw["merchantId"], raw["tokenFile"], raw.get("dailyWriteCap", 20), raw.get("priceConfirmPct", 25),
                         raw.get("maxPriceCents", MAX_PRICE_CENTS), raw.get("lowStockThreshold", 5), raw.get("maxStock", 100_000), dict(cmap),
-                        raw.get("liveApproved", False))
+                        raw.get("liveApproved", False), raw.get("writeTokenFile", ""), raw.get("writes", False))

@@ -113,7 +113,11 @@ def say(r) -> str:
 
 
 def _say(r) -> str:
-    price, cost = D(r["price"]), D(str(r["sellable_cost"]).rstrip("."))
+    price, i = D(r["price"]), r["inputs"]
+    r["sellable_cost"]  # still required (KeyError if absent), but it is six-place display text: never round cents from it
+    with localcontext() as ctx:  # recompute from the exact inputs, same 60-digit ceiling policy as _compute/_check
+        ctx.prec, ctx.rounding = 60, ROUND_CEILING
+        cost = (D(i["pack_cost"]) / D(i["units"])) / (1 - D(i["shrink_pct"]) / 100)
     paid = cost.quantize(CENT, ROUND_CEILING)
     if r.get("below_cost") is True:
         return f"At ${price} you would lose money: each one costs you about ${paid}. This is only an idea. Nothing changes unless you ask."
