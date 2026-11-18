@@ -475,6 +475,25 @@ def check(case, result, public, products, intake):
             if seen is not None:
                 out.append(("draft_products_known_shape:" + state, got in (sorted(names), sorted(seen)),
                             f"{state} drafts may only show the wanted {json.dumps(sorted(names))} or the reproduced {json.dumps(sorted(seen))}, got {json.dumps(got)}"))
+    if "draft_card_turn" in want:
+        turn = want["draft_card_turn"]
+        replies = result["turns"][turn - 1]["replies"]
+        marker = "All website card text:\n"
+        cards = [s.split(marker, 1)[1].split("\nNothing changes until your yes.", 1)[0]
+                 for s in replies if marker in s and "\nNothing changes until your yes." in s]
+        adds = [op["args"] for d in result["drafts"] if d["state"] == "proposed"
+                for op in json.loads(d["ops_json"]) if op.get("op") == "product.add"]
+        def normalized(s): return " ".join(s.split())
+        matched = False
+        if len(cards) == 1 and len(adds) == 1:
+            args, card = adds[0], cards[0]
+            fields = [args.get(k) for k in ("name", "brand", "sellingPrice", "description")]
+            if all(isinstance(v, str) and v.strip() for v in fields):
+                name, brand, price, description = fields
+                lines = [normalized(line) for line in card.splitlines() if line.strip()]
+                matched = all(normalized(value) in lines for value in (name, brand, "$" + price)) and \
+                    normalized(description) in normalized(card)
+        out.append(("draft_card_matches", matched, "staged card must match the proposed product name, brand, price and description"))
     if "draft_public_lacks" in want:
         replies = result["turns"][-1]["replies"]
         marker = "All website card text:\n"

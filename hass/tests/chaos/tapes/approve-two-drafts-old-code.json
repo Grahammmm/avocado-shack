@@ -105,7 +105,7 @@
    "attrs": {},
    "method": "capture",
    "result": {
-    "cardText": "Hillside Kitchen\n\nRaspberry Jam\n\n$7.00\n\nAsk us about the source in store.\n\nNew\n\nHillside Kitchen Raspberry Jam comes in a burgundy jar with a gold-coloured lid and an off-white label. The label lists a net weight of. 10 oz. Burgundy with a gold-coloured lid and an off-white label. Label says: “Organic”.\n\nLink to this",
+    "cardText": "Hillside Kitchen\n\nSUPERGRIP GLUE\n\n$7.00\n\nAsk us about the source in store.\n\nNew\n\nSUPERGRIP GLUE comes in a tall, rectangular container with a tapered yellow top and a black label with yellow lettering. 2 fl oz. Off-white with a yellow top and a black label.\n\nLink to this",
     "checks": {
      "description": true,
      "imageShown": true,
@@ -117,10 +117,10 @@
     "error": null,
     "ok": true
    },
-   "route": "browser",
-   "seconds": 2.097,
+   "route": "browser-routed",
+   "seconds": 0.0,
    "turn": 2,
-   "note": "MAIN-RED: copied verbatim from the recorded tape intake-photo-jam-organic-label (same jam.jpg bytes, same owner text 'raspberry jam $7', recorded live on the private host); the old tape for this case predates HASS-LIVE-FIX-2, which reads a label on every photo"
+   "note": "Captured from this replay's staged overlay with screenshot.cjs and Chromium, using serverless local-file request routing; timing not measured."
   },
   {
    "attrs": {},
