@@ -2999,3 +2999,135 @@ Progress from the H10 to H18 work: several photos open separate coded drafts, al
 ### Issue #3 (reliable operation)
 
 Progress toward release readiness: the site contrast audit is a measurement that supports readiness, not a newly completed H id; the phone guide and limits are documented and the acceptance map selects the new regressions. See the AV2152-12, -14 and -15 entries above. Still open: H25 stays a release step, the audit failures are not repaired, and launch is not authorised by this ledger.
+
+## AV0222 evidence roll-up
+
+The sections below record the fourteen merged AV0222 units (AV0222-01 to -14) in id order; each cites its merge commit on main, its PR, a check run again for this roll-up on November 18, 2026 and its remaining limits. Test counts are from that re-run on the branch rb/av0222-15 cut from origin/main, not copied from the PRs. They were not run on a bridge or phone, and the FEATURES rows are unchanged.
+
+## Held cheese recall evidence (AV0222-01) — November 4, 2026
+
+Branch rb/av0222-01 from origin/main (AV0222-01, issue #2, PR [#406](https://github.com/Grahammmm/avocado-shack/pull/406): merged as 9248280d45349eb9b30ce4809abd8f0b4d065c68). For Michael: `reports/held-cheese-recall-2026-11.md` compares the two held Sierra Nevada raw milk cheddars with official recall notices and states that both stay held.
+
+Review steps (source report only): `git show -s 9248280d45349eb9b30ce4809abd8f0b4d065c68` and read `reports/held-cheese-recall-2026-11.md` against `hass/content/products.json` — no runtime test exists for this prose report, so none was invented.
+
+Limits: Both products remain held; the report authorizes no release and confirms no package is safe, it is a text-only read of public pages, not exhaustive, and it changes no product record.
+
+## Shelf and availability questions in site words (AV0222-02) — November 5, 2026
+
+Branch rb/av0222-02 from origin/main (AV0222-02, issue #1, PR [#465](https://github.com/Grahammmm/avocado-shack/pull/465): merged as 1c058d957503ff1581acd2050094e743e62f1a9f). For Michael: the interpreter checker and shelf labels now ask shelf and availability questions in the site's own words.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_interpret_check_enum hass.tests.test_shelf_labels` — 8 tests, OK.
+
+Limits: Offline fixtures only; no real interpreter model was called and no site content changed.
+
+## Price and plain-text questions before drafting (AV0222-03) — November 6, 2026
+
+Branch rb/av0222-03 from origin/main (AV0222-03, issue #1, PR [#469](https://github.com/Grahammmm/avocado-shack/pull/469): merged as 5db8e74b793dc4e54efffb4f3e56c33e2ef287d9). For Michael: a request that names a price or sends plain text to publish gets an explanation first; the checker and prompt were changed and the prompt golden updated.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_interpret_check_prices hass.tests.test_interpreter_prompt_design` — 23 tests, OK.
+
+Limits: The site stays catalog-only with no prices, and the editor policy is unchanged; this is offline checker and prompt coverage, not a model-quality claim.
+
+## Photos needing replacement list (AV0222-04) — November 6, 2026
+
+Branch rb/av0222-04 from origin/main (AV0222-04, issue #2, PR [#470](https://github.com/Grahammmm/avocado-shack/pull/470): merged as 4f1e730d686186a0ea812bfd66a3322a28e1cfec). For Michael: a new command lists active products whose saved photos need replacing, and COMMANDS.md documents it.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_photos_to_take hass.tests.test_commands_doc hass.tests.test_help` — 40 tests, OK.
+
+Limits: The list is bounded and comes from saved data only; the live site and real photos were not checked.
+
+## Separate saved notes and owner aliases (AV0222-05) — November 5, 2026
+
+Branch rb/av0222-05 from origin/main (AV0222-05, issue #2, PR [#455](https://github.com/Grahammmm/avocado-shack/pull/455): merged as 73d7db71a26663a96b68cee759f7f1d28154d1a4). For Michael: saved notes and readable aliases are listed separately in memory, with capped lists and clearer wording for a missing or hidden target; COMMANDS.md and LIMITS.md were updated.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_memory_listing hass.tests.test_memory_chat hass.tests.test_memory_alias hass.tests.test_memory_unchanged hass.tests.test_limits_doc` — 67 tests, OK.
+
+Limits: Memory is fixture data in tests, with no real owner memory read; the caps are fixed in code.
+
+## Pacific approval times in history (AV0222-06) — November 17, 2026
+
+Branch rb/av0222-06 from origin/main (AV0222-06, issue #2, PR [#988](https://github.com/Grahammmm/avocado-shack/pull/988): merged as 37c3fd4c21cae78c8f8fdd681604373ae68c4429). For Michael: history shows the approval time in Pacific time and falls back to unknown wording when no approval time is stored.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_history_times hass.tests.test_history_approved hass.tests.test_history_search hass.tests.test_audit` — 47 tests, OK.
+
+Limits: Only approved changes carry a time; rows without one show unknown.
+
+## Undo and cancel phrases (AV0222-07) — November 17, 2026
+
+Branch rb/av0222-07 from origin/main (AV0222-07, issue #1, PR [#998](https://github.com/Grahammmm/avocado-shack/pull/998): merged as 58a31b2d303b5b14795ee3bf3b6a167edc835b89). For Michael: common undo and cancel phrases are recognized as commands, and COMMANDS.md lists them.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_undo_cancel_phrases hass.tests.test_commands_doc` — 17 tests, OK.
+
+Limits: An undo still needs approval before anything changes; no live bridge or phone message was sent.
+
+## Notice windows and shelf-check days in words (AV0222-08) — November 17, 2026
+
+Branch rb/av0222-08 from origin/main (AV0222-08, issue #1, PR [#992](https://github.com/Grahammmm/avocado-shack/pull/992): merged as d8bc298e6af61dd338b8d228d949c04ff83cad0e). For Michael: proposals show notice windows and shelf-check days in plain words.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_proposal_notice_words hass.tests.test_shelf_check_flow` — 42 tests, OK.
+
+Limits: Display wording only; stored summaries are unchanged.
+
+## New products first in the shop (AV0222-09) — November 7, 2026
+
+Branch rb/av0222-09 from origin/main (AV0222-09, issue #2, PR [#503](https://github.com/Grahammmm/avocado-shack/pull/503): merged as 07180a573befac16310a2d60c4e3f57507c4aac8). For Michael: the shop lists New products first while filters and deep links keep working.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_catalog_new_order` — 8 tests, OK.
+
+Limits: Ordering is checked by a local script driver, not a live browser on the deployed site; no product data changed.
+
+## Makers without a story (AV0222-10) — November 15, 2026
+
+Branch rb/av0222-10 from origin/main (AV0222-10, issue #2, PR [#863](https://github.com/Grahammmm/avocado-shack/pull/863): merged as 795e4f16675caba865f84b7bc92bde99b3f1f51d). For Michael: a maker can be added without a story and a story can be cleared, and nothing is invented to fill the gap; shop, social draft and prompt were adjusted.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_maker_optional_story hass.tests.test_field_words hass.tests.test_question_missing_fields` — 25 tests, OK.
+
+Limits: The existing 26 stories are untouched; a maker story stays optional and is never written by the tool; the live site was not checked.
+
+## Map source readiness for two routes (AV0222-11) — November 4, 2026
+
+Branch rb/av0222-11 from origin/main (AV0222-11, issue #2, PR [#410](https://github.com/Grahammmm/avocado-shack/pull/410): merged as 7c82a58fd26b9adac09e07ce314a66fe6d9bb1bd). For Michael: `reports/hiking-club/route-map-sources-2026-11.md` lists the sources and licences needed to map the Cass Hill and Fiscalini routes.
+
+Review steps (source report only): `git show -s 7c82a58fd26b9adac09e07ce314a66fe6d9bb1bd` and read `reports/hiking-club/route-map-sources-2026-11.md` against the two route ideas in `hass/content/community.json` — no runtime test exists for this prose report, so none was invented.
+
+Limits: Research only, with no map assets downloaded or created; source availability is not a finished map, access clearance or permission to publish, and the routes stay undated ideas.
+
+## Phone guide and limits for owner shortcuts (AV0222-12) — November 18, 2026
+
+Branch rb/av0222-12 from origin/main (AV0222-12, issue #3, PR [#1019](https://github.com/Grahammmm/avocado-shack/pull/1019): merged as 7ccaaacd75980b27bae28d63e3a279ec9b5b8599). For Michael: PHONE_GUIDE.md and LIMITS.md explain the owner shortcuts and the fixed shelves in owner-readable words.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_limits_doc` — 43 tests, OK.
+
+Limits: Docs only; the guide was not tried on a real phone.
+
+## Interpreter eval set v10 (AV0222-13) — November 17, 2026
+
+Branch rb/av0222-13 from origin/main (AV0222-13, issue #1, PR [#1005](https://github.com/Grahammmm/avocado-shack/pull/1005): merged as 09987e172ded9e11715216cef8eb11bc8f654cf7). For Michael: the offline interpreter eval fixtures gain cases for no-price and no-story requests.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases` — 75 tests, OK.
+
+Limits: The eval is offline with synthetic replies, so there is no model-quality claim.
+
+## Acceptance map for AV0222 regressions (AV0222-14) — November 18, 2026
+
+Branch rb/av0222-14 from origin/main (AV0222-14, issue #3, PR [#1026](https://github.com/Grahammmm/avocado-shack/pull/1026): merged as add0ceef4226d19cb0c65499aa9c1ace515a2761). For Michael: the acceptance runner registers the shelf, price and owner-command regression tests.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_acceptance_runner` — 31 tests, OK.
+
+Limits: H25 stays a release step; this is fixture coverage only, and the live phone, trial and launch checks remain open.
+
+## AV0222 milestone issue summaries
+
+These are local Markdown drafts for the three milestone issues, not GitHub issue updates or comments. No issue was edited and no box was checked. They link the sections above and add no unit heading. No real bridge, phone trial, deployment, send or mail evidence was added, and the held cheeses stay held. The existing issue links are in `docs/hass/HERMES_START.md`.
+
+### Issue #1 — working text demo
+
+Link: [issue #1](https://github.com/Grahammmm/avocado-shack/issues/1). Progress: [AV0222-02](#shelf-and-availability-questions-in-site-words-av0222-02--november-5-2026) and [AV0222-03](#price-and-plain-text-questions-before-drafting-av0222-03--november-6-2026) tighten the shelf words and refuse prices, [AV0222-07](#undo-and-cancel-phrases-av0222-07--november-17-2026) adds undo and cancel phrases, [AV0222-08](#notice-windows-and-shelf-check-days-in-words-av0222-08--november-17-2026) shows dates in words, and [AV0222-13](#interpreter-eval-set-v10-av0222-13--november-17-2026) adds offline eval cases. Still open: every live requirement; the offline eval makes no model-quality claim.
+
+### Issue #2 — owner trial
+
+Link: [issue #2](https://github.com/Grahammmm/avocado-shack/issues/2). Progress: [AV0222-04](#photos-needing-replacement-list-av0222-04--november-6-2026) lists photos to replace, [AV0222-05](#separate-saved-notes-and-owner-aliases-av0222-05--november-5-2026) and [AV0222-06](#pacific-approval-times-in-history-av0222-06--november-17-2026) cover aliases and history, [AV0222-09](#new-products-first-in-the-shop-av0222-09--november-7-2026) and [AV0222-10](#makers-without-a-story-av0222-10--november-15-2026) cover the catalog and makers, and [AV0222-01](#held-cheese-recall-evidence-av0222-01--november-4-2026) and [AV0222-11](#map-source-readiness-for-two-routes-av0222-11--november-4-2026) are source-only reports. Still open: no trial has been run, both cheeses stay held, and the source reports release or build nothing.
+
+### Issue #3 — reliable operation
+
+Link: [issue #3](https://github.com/Grahammmm/avocado-shack/issues/3). Progress: [AV0222-12](#phone-guide-and-limits-for-owner-shortcuts-av0222-12--november-18-2026) explains shortcuts and shelves in the guide, and [AV0222-14](#acceptance-map-for-av0222-regressions-av0222-14--november-18-2026) registers the regressions in the acceptance map. Still open: H25 stays a release step and the real-device checks remain open.
