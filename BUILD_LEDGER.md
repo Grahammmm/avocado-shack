@@ -2786,11 +2786,11 @@ Limits: again works for 7 days only and still needs a new approval (`yes <new co
 
 ## H12: two to four photos open separate drafts (AV2152-04) — November 14, 2026
 
-Branch rb/av2152-04 (PR #845, head 4cde81735ace, merged as 33e2101020a8f3b12fc9686674c3cff196d2664c). For the owner: a message with 2 to 4 photos opens one draft per photo, each with its own code and its own photo question, in the order sent. Every photo is checked before any is stored, so one refused photo saves none. `docs/hass/COMMANDS.md` and `docs/hass/LIMITS.md` were updated.
+Branch rb/av2152-04 (PR #845, head 4cde81735ace, merged as 33e2101020a8f3b12fc9686674c3cff196d2664c). For the owner: a message with 2 to 4 photos opens one draft per novel photo, each with its own code and its own photo question, in the order sent. Every photo is checked before any is stored, so one refused photo saves none. `docs/hass/COMMANDS.md` and `docs/hass/LIMITS.md` were updated.
 
-Checks at PR head 4cde81735ace (historical, recorded in PR #845): `python3 -B -m unittest hass.tests.test_photo_batch hass.tests.test_media_batch` ran 19 and 8 tests, and 19 related modules (208 tests) passed, OK. PREPUSH-TESTS NOT-RUN (budget used up). CI `quick`, `site community` and `site static` SUCCESS at that head.
+Checks (historical, recorded in PR #845): at the earlier pre-merge head, `python3 -B -m unittest hass.tests.test_photo_batch hass.tests.test_media_batch` ran 19 and 8 tests, and 19 related modules (208 tests) passed, OK. PREPUSH-TESTS NOT-RUN (budget used up). At merged PR head 4cde81735ace, CI `quick`, `site community` and `site static` SUCCESS.
 
-Limits: up to four photos per message, five or more are refused with nothing saved; each photo has an independent code; a caption sent with several photos is not read.
+Limits: up to four photos per message, five or more are refused with nothing saved; a photo already in a waiting draft (including an earlier photo in the same message) or on an active or hidden product opens no draft; each new draft has an independent code; a caption sent with several photos is not read.
 
 ## H05: interpreter prompt lists product shelf and maker (AV2152-05) — November 14, 2026
 
