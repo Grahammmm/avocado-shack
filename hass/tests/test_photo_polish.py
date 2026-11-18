@@ -174,6 +174,18 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(target, f"assets/products/photo-{sha[:16]}.jpg")
         self.assertEqual(Image.open(io.BytesIO(data)).size, (800, 800))
 
+    def test_fidelity_search_covers_a_product_filling_a_portrait_frame(self):
+        edited = edit_of(photo("jar-white-sheet"))
+        framed = photo_polish.frame(edited)["jpeg"]
+        im = Image.open(io.BytesIO(framed))
+        _, _, (x0, y0, x1, y1) = photo_polish._product(framed)
+        portrait = im.crop((max(0, x0 * 2 - 8), max(0, y0 * 2 - 8),
+                            min(im.width, x1 * 2 + 8), min(im.height, y1 * 2 + 8)))
+        self.assertGreater(portrait.height, portrait.width)
+        verdict = photo_polish.gate(png(portrait), edited)
+        self.assertTrue(verdict["ok"], verdict["code"])
+        self.assertGreater(verdict["metrics"]["where"][3], .85)  # matched the full jar, not just its label
+
     def assertFallback(self, stub, code, photo_name="jar-white-sheet", data=None):
         bare = Bare(self)
         data = data or photo(photo_name)

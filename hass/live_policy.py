@@ -194,7 +194,7 @@ LIVE = {
     # HASS-LIVE-ADD-1 (G, 2026-11-09): a NEW product may go live, with the brand, display brand and producer key the owner said in
     # this request (see unsaid) and with the picture that comes with it (the op needs one; the shop has no placeholder). Never the
     # `image` argument (an existing picture file). The brand fields pass the field gate only inside this op (see NEW_RECORD_FIELDS).
-    "product.add": {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey", "displayBrand", "labelText", "ownerText", "sellingPrice"},
+    "product.add": {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey", "displayBrand", "labelText", "ownerText", "sellingPrice", "supplier"},
     # ... and a NEW maker only so that this new product can name it: the name and the place (the maker's about text is the
     # skill's "<Maker> is based in <place>."); never the link (url). A maker on its own is refused (see _lone_makers).
     "maker.add": {"key", "name", "place", "story"},
@@ -293,6 +293,14 @@ def _names(records) -> tuple:
     names = {claims.skeleton(v) for r in records if isinstance(r, dict) for side in (r.get("before"), r.get("after"))
              if isinstance(side, dict) for v in (side.get(f) for f in NAME_FIELDS) if isinstance(v, str)}
     return tuple(claims._pattern(n) for n in sorted(names, key=len, reverse=True) if n and _plain_name(n))
+
+
+def _supplier_claims(value):
+    # Apply the existing narrow farm-noun exception only in this field.
+    # The product label cannot justify the store's supplier.
+    if value is None: return Counter(), set()
+    name = claims.skeleton(value)
+    return _protected("From " + value, "products", (claims._pattern(name),) if _plain_name(name) else ())
 
 
 def _changes(before, after):
@@ -482,7 +490,10 @@ def check(draft) -> list[str]:
                     reasons.add(f"protected field: {collection}.{field}")
                 if (collection, field) in owned: continue
                 for old, new in _text_changes(b, a):
-                    if collection == "products":
+                    if collection == "products" and field == "supplier":
+                        bp, bk = _supplier_claims(old)
+                        ap, ak = _supplier_claims(new)
+                    elif collection == "products":
                         from hass.product_claims import protected
                         bp, bk = protected(old, before or after or {}, names_seen)
                         ap, ak = protected(new, after or before or {}, names_seen)

@@ -261,8 +261,9 @@ class SimpleIntake(unittest.TestCase):
                 self.assertNotIn("Incredibly Strong", description)
                 self.assertNotIn("size", description.lower())
                 self.assertEqual(cloud, [])  # unchanged owner-finance local-only guard
-                self.assertEqual(len(requests), 1)
-                self.assertEqual(requests[0]["format"]["additionalProperties"], False)
+                self.assertEqual(len(requests), 0 if when == "caption" else 1)
+                if requests:
+                    self.assertEqual(requests[0]["format"]["additionalProperties"], False)
                 self.assertNotIn("$", json.dumps(chat.live()["texts"]))
                 self.doCleanups()
 

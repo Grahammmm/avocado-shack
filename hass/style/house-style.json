@@ -1490,7 +1490,8 @@
   "product_optional_public": [
    "imageAlt",
    "addedOn",
-   "sellingPrice"
+   "sellingPrice",
+   "supplier"
   ],
   "product_public_fields": [
    "id",
