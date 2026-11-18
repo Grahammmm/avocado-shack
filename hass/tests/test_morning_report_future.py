@@ -19,7 +19,7 @@ class MorningReportFutureTests(unittest.TestCase):
         self.content([product("Figs", "yes"), product("Pears", "no")], checked_days_ago=-1)
         lines = self.report().split("\n")
         self.assertEqual(lines[0], "Your last shelf check is dated Tuesday, November 3" + FUTURE)
-        self.assertEqual(lines[1:], ["On the shelves: 1 available, 0 running low, 1 sold out, 0 not confirmed.", "Sold out: Pears", LAST])
+        self.assertEqual(lines[1:], ["On the shelves: 0 available, 0 running low, 0 sold out, 2 not confirmed.", LAST])  # AV1922-02: no word is current under a future check
         facts = json.loads(self.report("--json"))
         self.assertEqual((facts["checked_on"], facts["future"], facts["stale"]), ("2026-11-03", True, False))
         self.assertEqual(list(facts)[:3], ["checked_on", "stale", "future"])
@@ -59,14 +59,14 @@ class MorningReportFutureTests(unittest.TestCase):
         self.content([product(n, "limited") for n in names], checked_days_ago=-1)
         text = self.report()
         self.assertTrue(text.split("\n")[0].endswith(FUTURE))
-        self.assertEqual(text.split("\n")[2], "Running low: " + ", ".join(names[:10]) + ", and 2 more")
+        self.assertEqual(text.split("\n")[1], "On the shelves: 0 available, 0 running low, 0 sold out, 12 not confirmed.")  # AV1922-02: no word is current under a future check
         self.assertLessEqual(len(text), 1200)
         self.content([product(n, "limited") for n in names] + [product(n + "s", "no") for n in names], checked_days_ago=-1)
         text = self.report()
         self.assertLessEqual(len(text), 1200)
         self.assertTrue(text.split("\n")[0].endswith(FUTURE))
         self.assertEqual(text.split("\n")[-1], LAST)
-        self.assertIn("12 running low, 12 sold out", text)
+        self.assertIn("0 running low, 0 sold out, 24 not confirmed", text)
 
     def test_bad_today_and_unreadable_content_exit_codes_unchanged(self):
         self.content([product("Figs", "yes")], checked_days_ago=-1)

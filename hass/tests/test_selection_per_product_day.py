@@ -116,7 +116,7 @@ class PerProductDayTests(CatalogTestCase):
         del content.store["selection_checked_on"]  # a dated word with no store check at all
         with self.assertRaises(ContentError) as caught:
             validate(content, None)
-        self.assertEqual(caught.exception.problems, [f"{where}: {self.today.isoformat()} is after "
+        self.assertEqual(caught.exception.problems, [f"{where}: {self.today.isoformat()} needs a recorded "
                                                      "store.selection_checked_on"])
 
     def test_backdated_check_dates_named_products_and_never_publishes_the_day(self):
@@ -138,25 +138,23 @@ class PerProductDayTests(CatalogTestCase):
         facts = self.facts(content)
         self.assertEqual((facts["available"], facts["sold_out"]), (1, 0))
 
-    def test_set_availability_dates_its_word_with_todays_check_or_refuses(self):
-        self.assertIn("check the selection first", self.refused((SET, {"id": self.a, "available": "no"})))
+    def test_set_availability_dates_its_word_with_its_own_day_after_a_first_check(self):
+        self.assertIn("check the selection first", self.refused((SET, {"id": self.a, "available": "no"})))  # no check ever
         self.at(self.today - timedelta(days=1))
         self.r.run((CHECK, {"yes": [self.a]}))
         self.at(self.today)
-        self.assertIn("check the selection first", self.refused((SET, {"id": self.b, "available": "no"})))
-        self.assertEqual(self.words()[self.a], "Available today")  # yesterday's check is still the latest
-        self.r.run((CHECK, {}))
-        self.r.run((SET, {"id": self.b, "available": "limited"}))
+        self.r.run((SET, {"id": self.b, "available": "limited"}))  # yesterday's check is the latest full check
         self.assertEqual(self.product(self.b)["available_on"], self.today.isoformat())
-        self.assertEqual(self.words(), {self.a: f"Last confirmed {sitegen._day_text(self.today - timedelta(days=1))}",
-                                        self.b: "Limited", self.c: None})
+        self.assertEqual(self.r.store()["selection_checked_on"], (self.today - timedelta(days=1)).isoformat())
+        self.assertEqual(self.words(), {self.a: "Available today", self.b: "Limited", self.c: None})
         self.assertEqual(self.facts()["limited_names"], [self.product(self.b)["name"]])
 
-    def test_set_availability_never_dates_a_word_after_a_backdated_check(self):
+    def test_set_availability_after_a_backdated_check_keeps_the_full_check_day(self):
         day = self.today - timedelta(days=2)
         self.r.run((CHECK, {"date": day.isoformat(), "yes": [self.a]}))
-        self.assertIn("check the selection first", self.refused((SET, {"id": self.a, "available": "no"})))
-        self.assertEqual(self.product(self.a)["available_on"], day.isoformat())
+        self.r.run((SET, {"id": self.a, "available": "no"}))
+        self.assertEqual(self.product(self.a)["available_on"], self.today.isoformat())
+        self.assertEqual(self.r.store()["selection_checked_on"], day.isoformat())
 
 
 if __name__ == "__main__":

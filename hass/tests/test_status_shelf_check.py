@@ -30,6 +30,9 @@ class ShelfCheckStatusTests(StoreMixin, ConversationTestCase):
     def shelf(self, lines):
         return [line for line in lines if (line == NOT_DONE or line.startswith("Your last shelf check"))]
 
+    def uncounted(self, lines):  # AV1922-02: status adds the report's count line right after the shelf line
+        return [line for line in lines if not line.startswith("On the shelves:")]
+
     def test_not_done_yet(self):  # 1
         self.assertNotIn("selection_checked_on", json.loads(self.content_file("store.json").read_text("utf-8")))
         self.assertEqual(self.status(), ["Everything is ready.", conversation.NOTHING, NOT_DONE])
@@ -64,6 +67,8 @@ class ShelfCheckStatusTests(StoreMixin, ConversationTestCase):
         self.checked(date(2026, 10, 1))
         valid = self.status()
         self.assertEqual(self.shelf(valid), ["Your last shelf check was Thursday, October 1." + CALL])
+        self.assertEqual(sum(line.startswith("On the shelves:") for line in valid), 1)
+        valid = self.uncounted(valid)
         good = {name: self.content_file(name).read_text("utf-8") for name in ("store.json", "products.json")}
         products = json.loads(good["products.json"])
         active = next(p for p in products["products"] if p.get("status") == "active")
@@ -83,7 +88,7 @@ class ShelfCheckStatusTests(StoreMixin, ConversationTestCase):
         self.checked(date(2026, 10, 25))
         self.now = T0 + timedelta(seconds=601)  # the proposal lapsed; status must not expire it
         before = self.drafts()
-        self.assertEqual(self.status(), ["Changes are paused since today at 9 am. Say resume changes when you're ready.",
+        self.assertEqual(self.uncounted(self.status()), ["Changes are paused since today at 9 am. Say resume changes when you're ready.",
                                          conversation.NOTHING, "Your last shelf check was Sunday, October 25." + CALL])
         self.assertEqual((self.drafts(), before[0]["state"], self.commits()), (before, "proposed", 0))
         self.assertEqual(self.say("did it work?"), "status")  # the same reply
@@ -100,7 +105,9 @@ class ShelfCheckStatusTests(StoreMixin, ConversationTestCase):
         self.assertEqual(lines[:3], ["Everything is ready.", f"Waiting for your yes: the opening hours for Avocado Shack (reply yes {one['code']})",  # the code follows the content hash, so it is read, not pinned
                                   f"Waiting for your yes: the description for Hass avocado (reply yes {two['code']})"])
         self.assertEqual(len(self.shelf(lines)), 1)
-        self.assertEqual(lines[3:], ["Your last shelf check was Sunday, November 1."])
+        self.assertEqual(lines[3], "Your last shelf check was Sunday, November 1.")
+        self.assertTrue(lines[4].startswith("On the shelves:"))  # AV1922-02: the counts follow the shelf line
+        self.assertEqual(len(lines), 5)
         self.assertIn(f"reply yes {one['code']}", lines[1])
         self.assertIn(f"reply yes {two['code']}", lines[2])
 
