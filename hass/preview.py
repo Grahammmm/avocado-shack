@@ -303,11 +303,12 @@ class Previewer:
                 self.env.update(PLAYWRIGHT_MODULE=str(module), CHROMIUM_PATH=str(shells[0]))
         self.last_server = None  # {"pid", "port"} of the most recent preview server (for checks)
 
-    def capture(self, files, target, out_png, assets=None) -> dict:
+    def capture(self, files, target, out_png, assets=None, *, viewports=None) -> dict:
         """Never raises: any failure comes back as ok False with a short error.
-        ``assets`` (site path -> bytes, new product photos only) are laid into the copy's own assets folder."""
+        ``assets`` (site path -> bytes, new product photos only) are laid into the copy's own assets folder.
+        AV1922-01: ``viewports`` overrides this instance's viewports for this call only (None keeps them)."""
         try:
-            return self._capture(dict(files), dict(target), Path(out_png), dict(assets or {}))
+            return self._capture(dict(files), dict(target), Path(out_png), dict(assets or {}), viewports)
         except Exception as exc:  # noqa: BLE001 - the caller reports the error; a preview never blocks a reply
             return {"ok": False, "png": None, "checks": {}, "error": f"{type(exc).__name__}: {exc}"[:200]}
 
@@ -328,11 +329,12 @@ class Previewer:
         _write_overlay(tmp, files)
         return site
 
-    def _capture(self, files: dict, target: dict, out_png: Path, assets: dict | None = None) -> dict:
+    def _capture(self, files: dict, target: dict, out_png: Path, assets: dict | None = None, viewports=None) -> dict:
         if target.get("kind") == "unreadable":  # a damaged change record: no copy, no server
             return {"ok": False, "png": None, "checks": {}, "error": "preview target unreadable"}
-        if self.viewports not in (("phone",), VIEWPORTS):
-            raise ValueError(f"unsupported viewports {self.viewports!r}"[:80])
+        viewports = self.viewports if viewports is None else tuple(viewports)  # AV1922-01: call-local, never stored
+        if viewports not in (("phone",), VIEWPORTS):
+            raise ValueError(f"unsupported viewports {viewports!r}"[:80])
         with tempfile.TemporaryDirectory(prefix="hass-preview-") as raw:
             tmp = Path(raw)
             site = self._copy_site(tmp, files, assets)
@@ -352,7 +354,7 @@ class Previewer:
                     if server.poll() is not None or time.monotonic() > deadline:
                         return {"ok": False, "png": None, "checks": {}, "error": "preview server did not start"}
                     time.sleep(0.1)
-                for name in self.viewports:
+                for name in viewports:
                     shot = tmp / ("shot.png" if name == "phone" else f"shot-{name}.png")
                     node_env = {**base, "PREVIEW_URL": f"http://127.0.0.1:{port}", "TARGET": json.dumps({**target, "defaultIntro": DEFAULT_INTRO} if target.get("kind") == "store" else target),
                                 "OUT": str(shot), "VIEWPORT": name,
@@ -390,7 +392,7 @@ class Previewer:
             if checks is None:
                 return {"ok": False, "png": None, "checks": {}, "error": failure}
             _write_private(out_png, data)
-            error, extra = None, ({"desktopPng": None} if "desktop" in self.viewports else {})
+            error, extra = None, ({"desktopPng": None} if "desktop" in viewports else {})
             for _name, data, more, failure in runs[1:]:
                 if more is None:
                     error = "desktop: " + failure
