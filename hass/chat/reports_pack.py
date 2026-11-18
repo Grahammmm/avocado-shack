@@ -27,15 +27,16 @@ POST_REFUSALS = {"no such product": "I don't know a product called {id}. Try " +
                  "no photo on the site": "{id} has no photo on the website yet, so I can't make a post for it."}  # other reasons: POST_CANT
 POST_CANT = "I can't make a post for {id} right now. Nothing was posted."
 _NUM = r"[-+]?[0-9.][0-9.,_]*(?:e[-+]?[0-9]+)?"  # AV1102-12: looks like a number; margins.compute is the only validator
-MARGIN_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")
-MARGIN_ID_RE = re.compile(rf"(?!\$?{_NUM}\s+for\s)(\S.*?)\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")  # AV1222-10: saved cost
+_END = r"(?:\s+(?i:ending)\s+\.(49|99))?"  # AV1352-09: round the price up to the next .49 / .99 (margins.compute round_to)
+MARGIN_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?{_END}")
+MARGIN_ID_RE = re.compile(rf"(?!\$?{_NUM}\s+for\s)(\S.*?)\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?{_END}")  # AV1222-10: saved cost
 _PRICE = rf"\s+price\s+\$?({_NUM})(?:\s+shrink\s+({_NUM})\s*%)?"  # AV1352-08: the shelf price to check; margins.check is the only validator
 PRICE_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})" + _PRICE, re.IGNORECASE)
 PRICE_ID_RE = re.compile(rf"(?!\$?{_NUM}\s+for\s)(\S.*?)" + _PRICE, re.IGNORECASE)
 COST_RE = re.compile(r"\$?(\S+)\s+for\s+(\S+)", re.IGNORECASE)  # AV1222-10: margins.compute is the only number validator
 
 MARGIN_USAGE = ("Tell me what you pay for a pack (or a product with a saved cost), how many are in it and the margin you want, like "
-                + q("margin 24 for 12 at 35%") + ", or the shelf price to check, like " + q("margin 24 for 12 price 3.49") + ". Add " + q("shrink 5%") + " if some is lost.")
+                + q("margin 24 for 12 at 35%") + ", or the shelf price to check, like " + q("margin 24 for 12 price 3.49") + ". Add " + q("shrink 5%") + " if some is lost, or " + q("ending .99") + " (or " + q(".49") + ") to round the price up.")
 
 _STEP_WORDS = {"unit_cost": "Each one costs you", "sellable_cost": "Each one you can sell costs you", "price": "Shelf price", "margin_actual": "Your margin"}
 
@@ -89,7 +90,7 @@ class ReportsPack:
         priced = None if found or by_id else PRICE_RE.fullmatch(rest.strip())  # AV1352-08: the margin a shelf price gives
         by_price = None if found or by_id or priced else PRICE_ID_RE.fullmatch(rest.strip())
         try:
-            text = margins.say(margins.compute(found[1], found[2], found[4] or "0", found[3])) if found else \
+            text = margins.say(margins.compute(found[1], found[2], found[4] or "0", found[3], found[5] and "." + found[5])) if found else \
                 self._margin_saved(*by_id.groups()) if by_id else \
                 _margin_steps(margins.check(priced[1], priced[2], priced[4] or "0", priced[3])) if priced else \
                 self._margin_saved(by_price[1], None, by_price[3], price=by_price[2]) if by_price else MARGIN_USAGE
@@ -99,7 +100,7 @@ class ReportsPack:
         self._reply(text)
         return "margin"
 
-    def _margin_saved(self, ident, margin, shrink, *, price=None) -> str:
+    def _margin_saved(self, ident, margin, shrink, ending=None, *, price=None) -> str:
         """AV1222-10: margins for the saved cost.<id> (read-only; the memory table is not created for a read)."""
         has_table = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
         if self.memory is None and has_table: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
@@ -108,7 +109,7 @@ class ReportsPack:
         if row is None: return f"I don't have a cost saved for {q(typed)}. Tell me first, like " + q(f"cost {typed}: 24 for 12") + "."
         pack, _, units = row["value"].partition(" for ")
         calc = _margin_steps(margins.check(pack, units, shrink or "0", price)) if price is not None else \
-            margins.say(margins.compute(pack, units, shrink or "0", margin))
+            margins.say(margins.compute(pack, units, shrink or "0", margin, ending and "." + ending))
         try:  # RF1221-12: the saved date is only a label; an unreadable one never drops the calculation
             saved = datetime.fromisoformat(row["created_at"])
             if saved.utcoffset() is None: raise ValueError("naive")
