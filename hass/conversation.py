@@ -2326,6 +2326,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             lines = self._history_lines(HISTORY_MAX)
             self._reply("\n".join(["Here's what we changed lately:"] + lines) if lines else "We haven't made any changes yet.", long_ok=True)
             return "history"
+        if verb == "undo" and code is None and msg.text.strip().lower().rstrip(".!") == "undo":
+            # Bare undo refers to this owner's latest waiting listing, not an older saved change.
+            for row in reversed(self._drafts("state = 'proposed'")):
+                if (self._mine(row) and self._expiry(row) > now
+                        and any(op["op"] == "product.add" for op in json.loads(row["ops_json"]))):
+                    self._reply(f"Nothing is published. Keep it, change something, or say no {row['code']}.")
+                    return "question"
         done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")  # AV0022-07: skip undos
                 if self._visible_undo(r) and (code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code)]
         # HASS-LIVE-PLAN-1: only the asking owner's own changes (by chat) can be taken back, with or without a code
