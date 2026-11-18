@@ -35,6 +35,12 @@
       "from": "mike",
       "text": "yes {code}",
       "photos": []
+    },
+    {
+      "at_s": 150,
+      "from": "mike",
+      "text": "undo",
+      "photos": []
     }
   ],
   "inputs": {
@@ -55,6 +61,11 @@
         "turn": 2,
         "count": 1,
         "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft"
       }
     ],
     "state": "published",
@@ -63,7 +74,20 @@
     "approved_draft_hash": "v1",
     "commits": 1,
     "checks": [
-      "delivery_approval"
-    ]
-  }
+      "delivery_approval",
+      "reply"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    }
+  },
+  "control": "sole-delivery control (spec row 24: restart after v1 is the sole delivered version; a bare `yes <code>` publishes v1's draft hash)"
 }

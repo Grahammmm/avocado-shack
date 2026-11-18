@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "about": "Reviewed voice phrase bank (design 1.8, R2.2). Every phrase is a complete sentence with NO factual assertion about the product, its maker, ingredients, origin, quality or performance, and carries no digit, number word or currency. The model may only pick IDs. A phrase applies to the kinds listed and, when categories or categories_except is present, only to those shelf categories. For each bank, kind and category exactly one applicable phrase is the default used by the deterministic fallback.",
+  "about": "Reviewed voice phrase bank (design 1.8, R2.2). Every phrase is a complete sentence with NO factual assertion about the product, its maker, ingredients, origin, quality or performance, and carries no digit, number word or currency. The model may only pick IDs. A phrase applies to the kinds listed and, when categories or categories_except is present, only to those shelf categories. Only the story_close bank has a default phrase: the deterministic DESCRIPTION fallback uses no phrase at all (see copy-templates.json defaults), because two listings that fall back to the same bank phrases would repeat each other word for word and fail the no-copying gate. Every phrase is at most 7 words, and no phrase run may repeat a span of 8 or more words from any catalog description.",
   "banned_words": [
     "best", "finest", "amazing", "incredible", "perfect", "ultimate", "premium", "world-class", "gourmet", "artisan", "handcrafted", "award-winning",
     "delicious", "mouthwatering", "unbeatable", "luxury", "authentic", "healthy", "natural", "pure", "fresh-picked", "guaranteed", "strongest"
@@ -10,36 +10,37 @@
     "cook", "bake", "sweet", "flavor", "toast", "soup"
   ],
   "phrases": [
-    {"id": "food-open-1", "bank": "open", "kinds": ["food"], "text": "Something good for the kitchen.", "default": true},
+    {"id": "food-open-1", "bank": "open", "kinds": ["food"], "text": "Something good for the kitchen."},
     {"id": "food-open-2", "bank": "open", "kinds": ["food"], "text": "Something to have on hand."},
     {"id": "food-open-3", "bank": "open", "kinds": ["food"], "text": "A good addition to the table."},
-    {"id": "food-use-1", "bank": "use", "kinds": ["food"], "text": "Bring it out with bread and something simple.", "default": true},
-    {"id": "food-use-2", "bank": "use", "kinds": ["food"], "text": "Taste it plain, then decide what it belongs with."},
-    {"id": "food-use-3", "bank": "use", "kinds": ["food"], "text": "Set it out and let the table decide."},
-    {"id": "food-close-1", "bank": "close", "kinds": ["food"], "text": "Nobody needs a more complicated plan.", "default": true},
+    {"id": "food-use-1", "bank": "use", "kinds": ["food"], "text": "Bring it out with some bread."},
+    {"id": "food-use-2", "bank": "use", "kinds": ["food"], "text": "Taste it plain, then decide."},
+    {"id": "food-use-3", "bank": "use", "kinds": ["food"], "text": "Set it out and see."},
+    {"id": "food-close-1", "bank": "close", "kinds": ["food"], "text": "Nobody needs a more complicated plan."},
     {"id": "food-close-2", "bank": "close", "kinds": ["food"], "text": "Simple is plenty."},
     {"id": "food-close-3", "bank": "close", "kinds": ["food"], "text": "The rest is up to you."},
 
-    {"id": "drink-open-1", "bank": "open", "kinds": ["drink"], "text": "Something good for the glass.", "default": true},
+    {"id": "drink-open-1", "bank": "open", "kinds": ["drink"], "text": "Something good for the glass."},
     {"id": "drink-open-2", "bank": "open", "kinds": ["drink"], "text": "A pour worth making time for."},
-    {"id": "drink-use-1", "bank": "use", "kinds": ["drink"], "text": "Pour a little, taste, and decide.", "default": true},
+    {"id": "drink-use-1", "bank": "use", "kinds": ["drink"], "text": "Pour a little, taste, and decide."},
     {"id": "drink-use-2", "bank": "use", "kinds": ["drink"], "text": "Serve it however suits you."},
-    {"id": "drink-close-1", "bank": "close", "kinds": ["drink"], "text": "The rest is up to you.", "default": true},
+    {"id": "drink-close-1", "bank": "close", "kinds": ["drink"], "text": "The rest is up to you."},
     {"id": "drink-close-2", "bank": "close", "kinds": ["drink"], "text": "Simple is plenty."},
 
-    {"id": "fresh-open-1", "bank": "open", "kinds": ["fresh"], "categories_except": ["flowers"], "text": "Something fresh for the kitchen.", "default": true},
+    {"id": "fresh-open-1", "bank": "open", "kinds": ["fresh"], "categories_except": ["flowers"], "text": "Something fresh for the kitchen."},
     {"id": "fresh-open-2", "bank": "open", "kinds": ["fresh"], "categories_except": ["flowers"], "text": "Good to have on the counter."},
-    {"id": "fresh-use-1", "bank": "use", "kinds": ["fresh"], "categories_except": ["flowers"], "text": "Wash it, taste it, and decide what comes next.", "default": true},
+    {"id": "fresh-use-1", "bank": "use", "kinds": ["fresh"], "categories_except": ["flowers"], "text": "Wash it, taste it, then decide."},
     {"id": "fresh-use-2", "bank": "use", "kinds": ["fresh"], "categories_except": ["flowers"], "text": "Slice it open and see."},
-    {"id": "flowers-open-1", "bank": "open", "kinds": ["fresh"], "categories": ["flowers"], "text": "A little color for the kitchen table.", "default": true},
-    {"id": "flowers-use-1", "bank": "use", "kinds": ["fresh"], "categories": ["flowers"], "text": "No occasion required.", "default": true},
+    {"id": "flowers-open-1", "bank": "open", "kinds": ["fresh"], "categories": ["flowers"], "text": "Bring a little color indoors."},
+    {"id": "flowers-open-2", "bank": "open", "kinds": ["fresh"], "categories": ["flowers"], "text": "Something bright for the front room."},
+    {"id": "flowers-use-1", "bank": "use", "kinds": ["fresh"], "categories": ["flowers"], "text": "Any room will do."},
     {"id": "flowers-use-2", "bank": "use", "kinds": ["fresh"], "categories": ["flowers"], "text": "Put them where you will see them."},
 
-    {"id": "nonfood-open-1", "bank": "open", "kinds": ["non-food"], "text": "Something practical to have around the house.", "default": true},
+    {"id": "nonfood-open-1", "bank": "open", "kinds": ["non-food"], "text": "Something practical to have around the house."},
     {"id": "nonfood-open-2", "bank": "open", "kinds": ["non-food"], "text": "A useful thing to keep close."},
-    {"id": "nonfood-use-1", "bank": "use", "kinds": ["non-food"], "text": "Keep it where you will reach for it.", "default": true},
-    {"id": "nonfood-use-2", "bank": "use", "kinds": ["non-food"], "text": "Put it on the shelf or in the drawer where it belongs."},
-    {"id": "nonfood-close-1", "bank": "close", "kinds": ["non-food"], "text": "Plain, practical, and easy to find.", "default": true},
+    {"id": "nonfood-use-1", "bank": "use", "kinds": ["non-food"], "text": "Keep it where you can reach it."},
+    {"id": "nonfood-use-2", "bank": "use", "kinds": ["non-food"], "text": "Put it where it belongs."},
+    {"id": "nonfood-close-1", "bank": "close", "kinds": ["non-food"], "text": "Plain, practical, and easy to find."},
     {"id": "nonfood-close-2", "bank": "close", "kinds": ["non-food"], "text": "Nothing fancy needed."},
 
     {"id": "story-close-1", "bank": "story_close", "kinds": ["food", "drink", "fresh", "non-food"], "text": "A good name to know.", "default": true}

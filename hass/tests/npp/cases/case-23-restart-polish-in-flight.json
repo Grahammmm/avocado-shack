@@ -35,6 +35,12 @@
       "from": "mike",
       "text": "yes {code}-1",
       "photos": []
+    },
+    {
+      "at_s": 180,
+      "from": "mike",
+      "text": "undo",
+      "photos": []
     }
   ],
   "inputs": {
@@ -55,6 +61,11 @@
         "turn": 2,
         "count": 1,
         "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft"
       }
     ],
     "state": "published",
@@ -71,7 +82,20 @@
     "commits": 1,
     "checks": [
       "picture",
-      "reply"
-    ]
-  }
+      "reply",
+      "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    }
+  },
+  "control": "restart control (spec row 23: one card, restart while the polish is in flight); v1 is the only delivered version"
 }

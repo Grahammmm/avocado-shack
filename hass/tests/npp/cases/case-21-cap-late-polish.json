@@ -34,6 +34,12 @@
       "from": "mike",
       "text": "yes {code}-2",
       "photos": []
+    },
+    {
+      "at_s": 320,
+      "from": "mike",
+      "text": "undo",
+      "photos": []
     }
   ],
   "inputs": {
@@ -57,12 +63,22 @@
       {
         "turn": 1,
         "count": 1,
-        "kind": "card"
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-2, or tell me what to change.",
+          "(picture: your own photo)"
+        ],
+        "note": "the edit builds v2; the picture stays the raw bytes of v1"
       },
       {
         "turn": 2,
         "count": 1,
         "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft"
       }
     ],
     "state": "published",
@@ -75,6 +91,32 @@
       "picture",
       "reply",
       "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    },
+    "edit_keeps": [
+      "name",
+      "brand",
+      "origin",
+      "category",
+      "imageAlt",
+      "picture_bytes",
+      "description",
+      "maker_panel",
+      "story"
     ]
   }
 }

@@ -32,7 +32,19 @@
     {
       "at_s": 2460,
       "from": "mike",
-      "text": "yes {code}-1",
+      "text": "make it $10",
+      "photos": []
+    },
+    {
+      "at_s": 2520,
+      "from": "mike",
+      "text": "yes {code}-2",
+      "photos": []
+    },
+    {
+      "at_s": 2580,
+      "from": "mike",
+      "text": "undo",
       "photos": []
     }
   ],
@@ -64,7 +76,22 @@
       {
         "turn": 2,
         "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-2, or tell me what to change."
+        ],
+        "note": "the edit builds v2; every other field is copied from v1"
+      },
+      {
+        "turn": 3,
+        "count": 1,
         "kind": "posted"
+      },
+      {
+        "turn": 4,
+        "count": 1,
+        "kind": "undo_draft",
+        "note": "undo drafts the hide of the posted listing; nothing is hidden until its own yes"
       }
     ],
     "state": "published",
@@ -75,6 +102,32 @@
     "checks": [
       "reply",
       "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    },
+    "edit_keeps": [
+      "name",
+      "brand",
+      "origin",
+      "category",
+      "imageAlt",
+      "picture_bytes",
+      "description",
+      "maker_panel",
+      "story"
     ]
   }
 }

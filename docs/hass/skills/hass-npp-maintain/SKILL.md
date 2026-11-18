@@ -14,7 +14,10 @@ Hermes profile skill at runtime, so an edit never changes Hass output unseen.
 ## Procedure
 1. Find the owner of the contract: which asset, which stage, which cases name it (each case file lists its `contracts`).
 2. Edit the asset in `hass/npp/assets/`. Closed sets stay closed: a new template or phrase is reviewed for assertions, carries
-   no digit, number word, currency or superlative, and keeps exactly one default per bank and kind.
+   no digit, number word, currency or superlative, and is at most 7 words. Only `story_close` has a default phrase; the
+   deterministic description defaults are item-anchored templates (`copy-templates.json` `defaults`), because a default made of
+   bank phrases repeats word for word across products and fails the 8-word no-copying gate. After any phrase, template or default
+   edit the asset test replays that gate against the whole catalog and a previously published default.
 3. If the TSV changed, regenerate `limits.json`: `python3 scripts/hass/npp_limits.py` (never edit it by hand).
 4. Refresh the pins: `python3 scripts/hass/npp_limits.py pins`, then confirm with `python3 scripts/hass/npp_limits.py pins --check`.
 5. Run the asset test: `python3 -B -m unittest hass.tests.test_npp_assets` and the offline replay for the cases the asset

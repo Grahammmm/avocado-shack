@@ -7,6 +7,18 @@
     "sentence_rule": "sentences = count of [.!?] followed by space or end of the rendered text",
     "literal": "everything else is literal text"
   },
+  "no_copying": {
+    "rule": "design 3.2: no 8+-word span of the final description may appear in another catalog description. Compare normalised word lists: lower-case, letters and digits only, words split on any other character; punctuation and sentence breaks do not separate a span.",
+    "span_words": 8,
+    "compare_with": "every other description in storefront-mockup/shop-data.json and every description already published or committed by the pipeline; never the same listing's own earlier versions",
+    "resolution": [
+      "1. render the model's selection; if it shares a span with another description, step 2",
+      "2. swap one bank phrase at a time for the next allowed phrase of that bank in file order (kind and category allowed), keeping the template; take the first rendering with no shared span",
+      "3. use rung a of defaults.description for the kind (key flowers for category flowers); if it shares a span, rung b (desc-default-short)",
+      "4. both rungs shared a span: stop and treat it as a failing case for hass-npp-maintain (two other listings published with these exact fallbacks whose names share 6 or more words of prefix and suffix with this item's); never publish a copying description and never skip the check"
+    ],
+    "why_defaults_are_anchored": "a default made only of bank phrases is identical for every product of the kind, so after the first one is published every later fallback would be a copy"
+  },
   "slot_types": {
     "item": {"sources": ["S2.item"], "note": "plain product name from S2, code-normalised (single spaces); keeps the product kind"},
     "brand": {"sources": ["owner_words", "official_site"], "note": "public only from his words or a verified official-site fact; else the field uses the no-brand template"},
@@ -36,6 +48,13 @@
     {"id": "desc-nonfood-plain", "field": "description", "text": "{phrase:open} {phrase:use} {phrase:close}", "slots": {}, "phrases": {"open": "open", "use": "use", "close": "close"}, "kinds": ["non-food"], "asserts": [], "sentences": 3},
     {"id": "desc-nonfood-maker", "field": "description", "text": "{item|cap} from {maker_name}. {phrase:use} {phrase:close}", "slots": {"item": "item", "maker_name": "maker_name"}, "phrases": {"use": "use", "close": "close"}, "kinds": ["non-food"], "asserts": ["identity", "maker"], "sentences": 3},
 
+    {"id": "desc-food-default", "field": "description", "text": "Pick up {item} for the kitchen. Set {item} out on the table.", "slots": {"item": "item"}, "kinds": ["food"], "asserts": ["identity"], "sentences": 2},
+    {"id": "desc-drink-default", "field": "description", "text": "Pick up {item} for the glass. Taste {item}, then decide.", "slots": {"item": "item"}, "kinds": ["drink"], "asserts": ["identity"], "sentences": 2},
+    {"id": "desc-fresh-default", "field": "description", "text": "Pick up {item} for the counter. Wash {item}, taste, and decide.", "slots": {"item": "item"}, "kinds": ["fresh"], "categories_except": ["flowers"], "asserts": ["identity"], "sentences": 2},
+    {"id": "desc-flowers-default", "field": "description", "text": "Pick up {item} for the house. Put {item} in the front room.", "slots": {"item": "item"}, "kinds": ["fresh"], "categories": ["flowers"], "asserts": ["identity"], "sentences": 2},
+    {"id": "desc-nonfood-default", "field": "description", "text": "Pick up {item} for the house. Keep {item} close at hand.", "slots": {"item": "item"}, "kinds": ["non-food"], "asserts": ["identity"], "sentences": 2},
+    {"id": "desc-default-short", "field": "description", "text": "Take {item} home. Keep {item} handy.", "slots": {"item": "item"}, "kinds": ["food", "drink", "fresh", "non-food"], "asserts": ["identity"], "sentences": 2},
+
     {"id": "story-nature-town", "field": "story", "text": "{maker_name} is {nature|a} in {town}.", "slots": {"maker_name": "maker_name", "nature": "nature", "town": "town"}, "kinds": ["food", "drink", "fresh", "non-food"], "requires_facts_any": ["nature"], "asserts": ["maker", "nature", "base_town"], "sentences": 1},
     {"id": "story-makes-town", "field": "story", "text": "{maker_name} makes {makes} in {town}.", "slots": {"maker_name": "maker_name", "makes": "makes", "town": "town"}, "kinds": ["food", "drink", "fresh", "non-food"], "requires_facts_any": ["makes"], "asserts": ["maker", "makes", "base_town"], "sentences": 1},
     {"id": "story-nature-makes-town", "field": "story", "text": "{maker_name} is {nature|a} in {town}, and it makes {makes}.", "slots": {"maker_name": "maker_name", "nature": "nature", "town": "town", "makes": "makes"}, "kinds": ["food", "drink", "fresh", "non-food"], "requires_facts_any": ["nature", "makes"], "requires_facts_all": ["nature", "makes"], "asserts": ["maker", "nature", "base_town", "makes"], "sentences": 1},
@@ -46,8 +65,8 @@
   "defaults": {
     "name": "name-item",
     "imageAlt": "alt-name",
-    "description": {"food": "desc-food-plain", "drink": "desc-food-plain", "fresh": "desc-fresh-plain", "non-food": "desc-nonfood-plain"},
-    "description_phrase_rule": "each phrase bank has exactly one default phrase per kind (and per category where a bank is category-specific); the default description is rendered with the default phrases",
+    "description": {"food": ["desc-food-default", "desc-default-short"], "drink": ["desc-drink-default", "desc-default-short"], "fresh": ["desc-fresh-default", "desc-default-short"], "flowers": ["desc-flowers-default", "desc-default-short"], "non-food": ["desc-nonfood-default", "desc-default-short"]},
+    "description_rule": "the deterministic description is the first rung of the ladder for the product kind (the key flowers when the category is flowers, otherwise the kind) that passes the no-copying resolution below. Every rung is ANCHORED: it carries the product's own name in each sentence and no bank phrase, so it is never the same text for two products. Rung a (kind specific) has at most 5 fixed words between two name slots. Rung b (desc-default-short, all kinds) has at most 2, so two names that share a prefix and a suffix of up to 5 words in total (the same brand and the same kind of product) still share no span of 8 words. A rung needs only the item slot, so it can always be rendered.",
     "story": {"select": "first template in order whose required facts are all kept and whose slots can all be bound; none qualifies means the story is omitted", "order": ["story-full", "story-nature-makes-town", "story-makes-founded", "story-nature-town", "story-makes-town", "story-founded"], "phrase": "the default story_close phrase where the template has one"}
   }
 }

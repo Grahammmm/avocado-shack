@@ -24,7 +24,11 @@ plain one. Vary phrases within the kind so cards in one shelf do not read identi
 3. Compares the **whole** field to that rendering (S7). Unknown IDs, extra fields, a token outside the rendering, a
    needed slot that cannot be bound, or a story with no kept fact: the field takes its deterministic default (`defaults`)
    and the reply line says `basic wording`. An optional story without support is simply absent.
-4. Applies the existing gates unchanged afterwards: `claims.unstated`, and with `liveSite` `live_policy.unsaid` and
+4. Runs the no-copying gate (design 3.2: no span of 8 or more words shared with another catalog description) on the rendered
+   description and follows `copy-templates.json` `no_copying.resolution`: swap one bank phrase, then the item-anchored default
+   (rung a), then rung b. The defaults carry the product's own name in every sentence and no bank phrase, so the fallback is
+   never the same text for two products.
+5. Applies the existing gates unchanged afterwards: `claims.unstated`, and with `liveSite` `live_policy.unsaid` and
    `live_policy.check`. After removing an offending value it rebuilds and rechecks the affected field.
 
 ## Rules
@@ -43,3 +47,7 @@ plain one. Vary phrases within the kind so cards in one shelf do not read identi
 - Letting a lexicon of "factual words" stand in for the conformance check. A lexicon is a secondary lint only.
 - Choosing a template whose slots cannot be bound: pick the maker template only when maker (and town) are bound.
 - Editing a template or phrase without refreshing the pin and running the cases that name copy (30, 36).
+- A default description made only of bank phrases. It is the same text for every product, so the second published fallback is a
+  copy of the first. Keep the defaults anchored on `{item}` with at most 5 fixed words between two name slots.
+- A phrase of more than 7 words, or two phrases that together restate a sentence of an existing description (the flower
+  bouquet's live text is the example the asset test keeps checking).

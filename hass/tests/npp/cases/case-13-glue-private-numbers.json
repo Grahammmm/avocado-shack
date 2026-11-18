@@ -26,7 +26,19 @@
     {
       "at_s": 60,
       "from": "mike",
-      "text": "yes {code}-1",
+      "text": "make it $3",
+      "photos": []
+    },
+    {
+      "at_s": 120,
+      "from": "mike",
+      "text": "yes {code}-2",
+      "photos": []
+    },
+    {
+      "at_s": 180,
+      "from": "mike",
+      "text": "undo",
       "photos": []
     }
   ],
@@ -56,14 +68,29 @@
       {
         "turn": 1,
         "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-2, or tell me what to change."
+        ],
+        "note": "the edit builds v2; every other field is copied from v1"
+      },
+      {
+        "turn": 2,
+        "count": 1,
         "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft",
+        "note": "undo drafts the hide of the posted listing; nothing is hidden until its own yes"
       }
     ],
     "state": "published",
     "variant": "polished",
     "listing": {
       "category": "general",
-      "price": "$2.00",
+      "price": "$3.00",
       "maker_panel": false,
       "brand": "From the market"
     },
@@ -95,7 +122,35 @@
       "fields_present",
       "picture",
       "render",
-      "existing_gates"
+      "existing_gates",
+      "reply",
+      "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    },
+    "edit_keeps": [
+      "name",
+      "brand",
+      "origin",
+      "category",
+      "imageAlt",
+      "picture_bytes",
+      "description",
+      "maker_panel",
+      "story"
     ]
   }
 }

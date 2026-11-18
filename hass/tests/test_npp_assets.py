@@ -6,6 +6,7 @@ items, min/max Items, minimum, maximum, minLength, maxLength, pattern, and $ref 
 No network, no model, no live Hass: files under hass/npp, hass/tests/npp and the generator script only.
 """
 import importlib.util
+import itertools
 import json
 import re
 import unittest
@@ -122,12 +123,47 @@ def applicable(phrase, kind, category):
     return category not in phrase.get("categories_except", ())
 
 
-def default_phrases(templates_doc, phrases_doc, template, kind, category):
+def default_phrases(phrases_doc, template, kind, category):
     out = {}
     for slot, bank in template.get("phrases", {}).items():
         found = [p for p in phrases_doc["phrases"] if p["bank"] == bank and p.get("default") and applicable(p, kind, category)]
         out[slot] = found[0]["text"] if len(found) == 1 else None
     return out
+
+
+def words(text):
+    """The no-copying gate's normalisation (copy-templates.json no_copying): lower-case letters and digits, any other character splits."""
+    return re.findall(r"[^\W_]+", text.lower())
+
+
+def spans(text, n):
+    w = words(text)
+    return {tuple(w[i:i + n]) for i in range(len(w) - n + 1)}
+
+
+def shared_span(a, b, n=8):
+    """True when the two descriptions share a run of n or more words (design 3.2 no-copying)."""
+    return bool(spans(a, n) & spans(b, n))
+
+
+def catalog():
+    """(product id, category, description) of every record of the live catalog snapshot in the repo."""
+    data = json.loads((ROOT / "storefront-mockup" / "shop-data.json").read_text(encoding="utf-8"))
+    return [(p["id"], p["category"], p["name"], p["description"]) for p in data["products"] if p.get("description")]
+
+
+def kind_key(category, kind):
+    return "flowers" if (category, kind) == ("flowers", "fresh") else kind
+
+
+def resolve_default(templates_doc, kind, category, item, published):
+    """Steps 3 and 4 of copy-templates.json no_copying.resolution: rung a, else rung b, else a failing case (AssertionError)."""
+    by_id = {t["id"]: t for t in templates_doc["templates"]}
+    for rung in templates_doc["defaults"]["description"][kind_key(category, kind)]:
+        text = render(by_id[rung]["text"], {"item": item}, {})
+        if not any(shared_span(text, other) for other in published):
+            return rung, text
+    raise AssertionError(f"both default rungs copy a published description: {item}")
 
 
 class SchemaCheckerTest(unittest.TestCase):
@@ -391,24 +427,103 @@ class CopyTemplatesTest(unittest.TestCase):
             self.assertEqual(sentences(ph["text"]), 1, ph["id"])
             self.assertFalse(words & banned, ph["id"])
             self.assertFalse(words & NUMBER_WORDS, ph["id"])
+            self.assertLessEqual(len(ph["text"].split()), 7, ph["id"] + ": a phrase of 8+ words is itself a copyable span")
             self.assertTrue(set(ph["kinds"]) <= set(KINDS), ph["id"])
             if ph["kinds"] == ["non-food"]:
                 self.assertFalse(words & non_food, ph["id"])
 
     def test_every_default_resolves_and_renders_within_limits(self):
-        """Contract: the deterministic fallback always exists: for every kind and category the default templates have exactly one default phrase per bank and render inside the limits. Bug: a kind or category with no default, so a conformance failure would leave a card with no description."""
+        """Contract: the deterministic fallback always exists: every kind (and the flowers category) has two item-anchored rungs that need only the item slot and carry it in every sentence with no bank phrase: rung a (kind specific) with at most 5 fixed words between two name slots, rung b (the short universal one) with at most 2 and render inside the limits even for a long name. Bug: a kind or category with no default, or a default that needs a phrase or a slot code cannot bind."""
         limits = asset("hass-gallery-style/limits.json")["limits"]["description"]
+        ladder = self.t["defaults"]["description"]
+        self.assertEqual(set(ladder), {"food", "drink", "fresh", "flowers", "non-food"})
+        long_item = "montana de oro sea salt tortilla chips"
+        for key, rungs in ladder.items():
+            self.assertEqual(len(rungs), 2, key)
+            self.assertEqual(rungs[1], "desc-default-short", key)
+            for n, rung in enumerate(rungs):
+                tpl = self.by_id[rung]
+                self.assertEqual((tpl["slots"], tpl.get("phrases", {})), ({"item": "item"}, {}), rung)
+                kind = "fresh" if key == "flowers" else key
+                self.assertIn(kind, tpl["kinds"], rung)
+                if n == 0:
+                    self.assertEqual(tpl.get("categories") == ["flowers"], key == "flowers", rung)
+                runs = [len(run.split()) for run in tpl["text"].split("{item}")[1:-1]]
+                self.assertTrue(runs and max(runs) <= (5, 2)[n], (rung, runs))
+                self.assertEqual(tpl["text"].count("{item}"), 2, rung)
+                text = render(tpl["text"], {"item": long_item}, {})
+                self.assertLessEqual(len(text), limits["hard_max_chars"], rung)
+                self.assertEqual(sentences(text), 2, rung)
         for kind in KINDS:
-            tpl = self.by_id[self.t["defaults"]["description"][kind]]
-            self.assertIn(kind, tpl["kinds"])
             for category in CATEGORIES:
-                got = default_phrases(self.t, self.p, tpl, kind, category)
-                self.assertTrue(all(v for v in got.values()), (kind, category, got))
-                text = render(tpl["text"], {}, got)
-                self.assertLessEqual(len(text), limits["hard_max_chars"], (kind, category))
-                self.assertIn(sentences(text), (2, 3), (kind, category))
+                if category == "flowers" and kind != "fresh":
+                    continue
+                tpls = [self.by_id[r] for r in ladder[kind_key(category, kind)]]
+                self.assertTrue(all(applicable(t, kind, category) for t in tpls), (kind, category))
+        stories = [x for x in self.p["phrases"] if x.get("default")]
+        self.assertEqual([x["bank"] for x in stories], ["story_close"], "only story_close has a default phrase")
         self.assertIn(self.t["defaults"]["name"], self.by_id)
         self.assertIn(self.t["defaults"]["imageAlt"], self.by_id)
+
+    def test_no_selection_or_default_copies_the_catalog_and_fallbacks_do_not_copy_each_other(self):
+        """Contract: design 3.2 no-copying (no 8+-word span shared with another catalog description) run for real over the 170-odd live descriptions: every renderable phrase combination, every default rung, and a sequence of published fallbacks. Bug: a fallback such as the flower default 'A little color for the kitchen table. No occasion required.' that is already the live bouquet text, or a phrase-only default that is identical for every product so the second published fallback copies the first."""
+        records = catalog()
+        self.assertGreater(len(records), 150)
+        live = [r[3] for r in records]
+        bouquet = next(r[3] for r in records if r[0] == "photo-product-006")
+        self.assertTrue(shared_span(bouquet, "A little color for the kitchen table. No occasion required."), "negative control: the comparison finds the old flower default")
+        by_bank = {}
+        for ph in self.p["phrases"]:
+            by_bank.setdefault(ph["bank"], []).append(ph)
+        for tpl in self.t["templates"]:
+            if tpl["field"] != "description" or not tpl.get("phrases"):
+                continue
+            for kind in tpl["kinds"]:
+                for category in CATEGORIES:
+                    if "categories" in tpl and category not in tpl["categories"] or category in tpl.get("categories_except", ()):
+                        continue
+                    banks = [[x for x in by_bank[b] if applicable(x, kind, category)] for b in tpl["phrases"].values()]
+                    for combo in itertools.product(*banks):
+                        slots = {"item": "zq item", "maker_name": "zm maker", "town": "zt town"}
+                        text = render(tpl["text"], slots, dict(zip(tpl["phrases"], (x["text"] for x in combo))))
+                        for other in live:
+                            self.assertFalse(shared_span(text, other), (tpl["id"], kind, category, text, other))
+        for key, rungs in self.t["defaults"]["description"].items():
+            for rung in rungs:
+                text = render(self.by_id[rung]["text"], {"item": "zq item"}, {})
+                self.assertFalse(any(shared_span(text, other) for other in live), rung)
+        published = list(live)
+        kinds = {"fruit": "fresh", "vegetables": "fresh", "flowers": "fresh", "drinks": "drink", "general": "non-food"}
+        rung_b = 0
+        for _pid, category, name, _desc in records:
+            got = resolve_default(self.t, kinds.get(category, "food"), category, name.lower(), published)
+            rung_b += got[0].endswith("-b")
+            published.append(got[1])
+        self.assertLess(rung_b, len(records) // 4, "rung b is the rare second choice, not the norm")
+        flower = resolve_default(self.t, "fresh", "flowers", "mixed flower bouquet", live)
+        self.assertEqual(flower[0], "desc-flowers-default")
+        self.assertFalse(shared_span(flower[1], bouquet))
+
+    def test_a_colliding_fallback_takes_the_short_rung_and_brand_mates_stay_unique(self):
+        """Contract: no_copying.resolution step 3: when rung a would share 8 words with an already published fallback, rung b (short fixed runs) is used and passes, including for two products of one brand and kind (shared prefix and suffix); two different names never publish the same text. Bug: a one-rung ladder that publishes the copy or crashes, or a rung whose fixed words let 'Fair Hills Farm black tea' and 'Fair Hills Farm chamomile tea' repeat 8 words."""
+        first = resolve_default(self.t, "food", "pantry", "sea salt tortilla chips", [])
+        second = resolve_default(self.t, "food", "pantry", "montana de oro sea salt tortilla chips", [first[1]])
+        self.assertEqual((first[0], second[0]), ("desc-food-default", "desc-default-short"))
+        self.assertTrue(shared_span(render(self.by_id["desc-food-default"]["text"], {"item": "montana de oro sea salt tortilla chips"}, {}), first[1]), "rung a really would have copied")
+        self.assertFalse(shared_span(first[1], second[1]))
+        tea = resolve_default(self.t, "drink", "drinks", "fair hills farm chamomile tea", [])
+        mate = resolve_default(self.t, "drink", "drinks", "fair hills farm black tea", [tea[1]])
+        self.assertEqual((tea[0], mate[0]), ("desc-drink-default", "desc-default-short"), "3 shared prefix words + 1 shared suffix word + the 4 fixed words of rung a is 8: rung a would copy")
+        again = resolve_default(self.t, "drink", "drinks", "fair hills farm cinnamon black tea", [tea[1], mate[1]])
+        self.assertEqual(again[0], "desc-default-short")
+        self.assertFalse(any(shared_span(again[1], other) for other in (tea[1], mate[1])))
+
+    def test_story_default_phrase_is_unique(self):
+        """Contract: the one remaining default phrase (story_close) resolves to exactly one phrase for every kind. Bug: two defaults for one bank, so the story close would depend on file order."""
+        for kind in KINDS:
+            tpl = self.by_id["story-founded"]
+            got = default_phrases(self.p, tpl, kind, "pantry")
+            self.assertTrue(all(got.values()), kind)
 
     def test_alt_templates_never_write_illustration_or_a_price(self):
         """Contract: design 1.7: alt is plain words, no (illustration) added by Hass. Bug: an alt template that adds the suffix the site already adds, giving it twice."""
@@ -431,13 +546,13 @@ class CopyTemplatesTest(unittest.TestCase):
             self.assertNotIn("text", schema["properties"][key]["properties"] if "properties" in schema["properties"][key] else {})
 
     def test_rendered_defaults_equal_the_strings_the_cases_expect(self):
-        """Contract: cases 30 and 36 expect the reviewed default description, cases 30 and 31 the story; they must equal what the templates render. Bug: a template edit that silently changes the default while the cases still pass on a stale string."""
-        food = self.by_id[self.t["defaults"]["description"]["food"]]
-        default = render(food["text"], {}, default_phrases(self.t, self.p, food, "food", "pantry"))
+        """Contract: cases 30 and 36 expect the reviewed default description (rung a, anchored on the case's item), cases 30 and 31 the story; they must equal what the templates render. Bug: a template edit that silently changes the default while the cases still pass on a stale string."""
+        food = self.by_id[self.t["defaults"]["description"]["food"][0]]
         seen = 0
         for case in all_cases():
             for unit in units(case):
                 if "description_equals" in unit["expect"]:
+                    default = render(food["text"], {"item": unit["inputs"]["item"]}, {})
                     self.assertEqual(unit["expect"]["description_equals"], default, case["id"])
                     seen += 1
         self.assertEqual(seen, 2)
@@ -623,6 +738,38 @@ class CaseInputsTest(unittest.TestCase):
             self.assertEqual(by[i], "question" if i in question else "contract" if i in contract else "listing", i)
         self.assertEqual({c["id"]: c["terminal"] for c in self.cases if c["id"] in (18, 20, 22, 28, 33, 34, 35)},
                          {18: "asking", 20: "expired", 22: "asking", 28: "retake", 33: "asking", 34: "card_out", 35: "card_out"})
+
+    def test_listing_cases_run_v1_edit_v2_tagged_yes_then_undo(self):
+        """Contract: design 3.1 listing path: delivered card v1, an edit, delivered card v2, `yes <code>-2`, one commit, then `undo` drafts the hide; only the two spec rows that fix a restart or sole-delivered control (23, 24) skip the edit and keep their v1 approval. Bug: a fixture that ends at `yes <code>-1`, so the replay can never test the edit, the re-approval of the new tag or the undo."""
+        controls = {23, 24}
+        edit = re.compile(r"^(make it \$\d+(\.\d{2})?( per lb)?|shorter)$")
+        for case in self.cases:
+            if case["path"] != "listing":
+                continue
+            self.assertEqual("control" in case, case["id"] in controls, case["id"])
+            for unit in units(case):
+                turns, exp = unit["turns"], unit["expect"]
+                texts = [t["text"] for t in turns]
+                self.assertEqual([t["at_s"] for t in turns], sorted({t["at_s"] for t in turns}), case["id"])
+                self.assertEqual(texts[-1], "undo", case["id"])
+                self.assertEqual(exp["undo"], {"draft": "hide", "commits": 1}, case["id"])
+                self.assertEqual(exp["commits"], 1, case["id"])
+                self.assertTrue({"reply", "delivery_approval"} <= set(exp["checks"]), case["id"])
+                if case["id"] in controls:
+                    self.assertNotIn("yes {code}-2", texts, case["id"])
+                    self.assertEqual(exp["versions"], [{"n": 1, "delivered": True, "approved": True}], case["id"])
+                    self.assertEqual([r["kind"] for r in exp["replies"]][-2:], ["posted", "undo_draft"], case["id"])
+                    continue
+                self.assertEqual(texts[-2], "yes {code}-2", case["id"])
+                self.assertRegex(texts[-3], edit, case["id"])
+                self.assertEqual(exp["versions"], [{"n": 1, "delivered": True}, {"n": 2, "delivered": True, "approved": True}], case["id"])
+                tail = [r for r in exp["replies"] if r["turn"] >= len(turns) - 3]
+                self.assertEqual([(r["turn"] - len(turns), r["kind"]) for r in tail], [(-3, "card"), (-2, "posted"), (-1, "undo_draft")], case["id"])
+                self.assertIn("Post this? Reply yes <code>-2, or tell me what to change.", tail[0]["has_all"], case["id"])
+                self.assertIn("picture_bytes", exp["edit_keeps"], case["id"])
+                self.assertEqual("description" in exp["edit_keeps"], texts[-3] != "shorter", case["id"])
+                if "image_edit" in exp.get("calls", {}):
+                    self.assertIn(exp["calls"]["image_edit"], (0, 1), "an edit never starts a second picture edit")
 
     def test_expect_keys_and_checks_are_in_the_documented_vocabulary(self):
         """Contract: expectation keys are a documented vocabulary, so a typo cannot make an assertion vanish. Bug: 'comits: 1' silently never checked."""

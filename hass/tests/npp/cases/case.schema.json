@@ -21,7 +21,8 @@
                                 "inputs": {"type": "object"}, "expect": {"type": "object"}}}},
     "inputs": {"type": "object"},
     "expect": {"type": "object"},
-    "settle_until_s": {"type": "number", "minimum": 0}
+    "settle_until_s": {"type": "number", "minimum": 0},
+    "control": {"type": "string", "minLength": 20}
   },
   "turn": {
     "type": "object",
@@ -39,7 +40,7 @@
   },
   "x-expect-keys": [
     "alt_lacks", "approval_rows", "approval_rows_before_turn_6", "approved_draft_hash", "approved_version", "bytes_equal", "calls", "card_alt_lacks",
-    "cards_sent", "checks", "cloud_bodies_lack_digits_from", "commits", "commits_before_turn_6", "description_equals", "description_lacks", "draft_rows",
+    "cards_sent", "checks", "cloud_bodies_lack_digits_from", "commits", "commits_before_turn_6", "description_equals", "description_lacks", "draft_rows", "edit_keeps", "undo",
     "frozen_sha_equals_committed_file", "install_path_re", "label_words_from", "listing", "listings", "messages_on_polish_late", "picture_line",
     "picture_source", "polish_decision", "polish_late_logged", "polish_settled_before_answer", "preview_description_equals_applied",
     "preview_sha_equals_frozen_equals_committed", "private_in_public", "private_intake_saved", "public_has", "public_lacks", "replies", "research",
@@ -50,5 +51,5 @@
     "fields_present", "length", "no_private_values", "source_provenance", "template_conformance", "no_owner_chatter", "no_copying", "picture",
     "render", "reply", "delivery_approval", "no_draft", "existing_gates"
   ],
-  "x-reply-kinds": ["question", "card", "guard", "retake", "expired", "posted", "none"]
+  "x-reply-kinds": ["question", "card", "guard", "retake", "expired", "posted", "undo_draft", "none"]
 }

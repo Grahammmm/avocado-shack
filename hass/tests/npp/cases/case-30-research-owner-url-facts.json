@@ -26,7 +26,19 @@
     {
       "at_s": 80,
       "from": "mike",
-      "text": "yes {code}-1",
+      "text": "make it $8",
+      "photos": []
+    },
+    {
+      "at_s": 140,
+      "from": "mike",
+      "text": "yes {code}-2",
+      "photos": []
+    },
+    {
+      "at_s": 200,
+      "from": "mike",
+      "text": "undo",
       "photos": []
     }
   ],
@@ -80,7 +92,9 @@
         "description": "A third-generation family orchard's figs, hand-picked at dawn.",
         "story": "Miners is a third-generation family orchard that has hand-picked every fig at dawn since 1952."
       }
-    }
+    },
+    "item": "dried figs",
+    "item_note": "the S2 item slot the default description is anchored on (copy-templates.json defaults.description, rung a, kind food)"
   },
   "expect": {
     "replies": [
@@ -92,7 +106,22 @@
       {
         "turn": 1,
         "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-2, or tell me what to change."
+        ],
+        "note": "the edit builds v2; every other field is copied from v1"
+      },
+      {
+        "turn": 2,
+        "count": 1,
         "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft",
+        "note": "undo drafts the hide of the posted listing; nothing is hidden until its own yes"
       }
     ],
     "state": "published",
@@ -127,7 +156,7 @@
       ]
     },
     "story_equals": "Miners is an orchard in Paso Robles, and it makes dried figs.",
-    "description_equals": "Something good for the kitchen. Bring it out with bread and something simple. Nobody needs a more complicated plan.",
+    "description_equals": "Pick up dried figs for the kitchen. Set dried figs out on the table.",
     "listing": {
       "maker_panel": true,
       "maker_url": "https://minersfigs.example/about"
@@ -144,7 +173,35 @@
     "checks": [
       "template_conformance",
       "source_provenance",
-      "existing_gates"
+      "existing_gates",
+      "reply",
+      "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    },
+    "edit_keeps": [
+      "name",
+      "brand",
+      "origin",
+      "category",
+      "imageAlt",
+      "picture_bytes",
+      "description",
+      "maker_panel",
+      "story"
     ]
   }
 }
