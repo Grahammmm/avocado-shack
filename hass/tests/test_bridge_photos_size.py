@@ -26,9 +26,6 @@ class SizeMismatchTests(unittest.TestCase):
             self.assertNotIn(PASSWORD, text)
             self.assertNotIn("password=", text)
 
-    def test_long_download_is_size_mismatch(self):
-        self.mismatch([{"guid": "att-1", "totalBytes": len(JPG)}], {"att-1": (200, JPG + b"x")})
-
     def test_one_byte_short_or_long_is_size_mismatch(self):
         for body in (JPG[:-1], JPG + b"\x00"):
             with self.subTest(size=len(body)):

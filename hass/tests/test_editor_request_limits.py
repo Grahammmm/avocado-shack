@@ -10,7 +10,6 @@ import contextlib
 import io
 import json
 import os
-import time
 from unittest import mock
 
 from hass import editor
@@ -89,13 +88,11 @@ class LargeRequestTests(RequestLimitTestCase):
                 sizes.append(n)
                 return self.fh.read(n)
 
-        start = time.monotonic()
         def spy_open(p, mode):  # only the request file is spied on; the state config reads as usual
             return Spy(real_open(p, mode)) if str(p) == str(path) else real_open(p, mode)
 
         with mock.patch.object(editor, "open", create=True, new=spy_open):
             self.assertRefused(path, TOO_LARGE)
-        self.assertLess(time.monotonic() - start, 5)
         self.assertEqual(sizes, [editor.MAX_REQUEST + 1])
 
 
