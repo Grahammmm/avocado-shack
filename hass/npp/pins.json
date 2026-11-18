@@ -1,0 +1,120 @@
+{
+  "schema": 1,
+  "about": "Pins for the new-product pipeline (design 2.1, 4d). Changed only by a card that passes the asset-change gates (offline replay, private-host strict run and re-record within caps, judge). assets is generated: python3 scripts/hass/npp_limits.py pins. At start-up the job refuses an asset whose hash differs and falls back to today's item.add flow with an alert.",
+  "steps": {
+    "identify": {
+      "model": "gpt-6.2-sol",
+      "effort": "low",
+      "timeout_s": 12,
+      "fallback": "local Qwen inside cloud_codex BUDGET (28 s)",
+      "route": "cloud_codex label_reader"
+    },
+    "research_extract": {
+      "model": "gpt-6.2-sol",
+      "effort": "low",
+      "timeout_s": 20,
+      "stage_budget_s": 40
+    },
+    "research_verify": {
+      "model": "gpt-6.2-sol",
+      "effort": "low",
+      "timeout_s": 12,
+      "separate_call": true
+    },
+    "copy_select": {
+      "model": "gpt-6.2-sol",
+      "effort": "low",
+      "timeout_s": 16,
+      "target_s": 4
+    },
+    "edit_map": {
+      "model": "gpt-6.2-sol",
+      "effort": "low",
+      "timeout_s": 8,
+      "target_s": 4
+    },
+    "picture": {
+      "model": "openai-codex:gpt-image-2-high",
+      "target_s": 30,
+      "hard_s": 75,
+      "note": "photo_polish.MODEL; the call's own timeout stays photo_polish.TIMEOUT_S"
+    },
+    "judge": {
+      "model": "gpt-6.2-sol",
+      "effort": "medium",
+      "offline": true
+    }
+  },
+  "segment": {
+    "cap_s": 100,
+    "owner_wait_counts": false,
+    "targets_s": {
+      "p50_no_research": 40,
+      "p50_research": 60,
+      "p90": 75
+    }
+  },
+  "reply": {
+    "one_reply_per_segment": true,
+    "approval_code_form": "yes <code>-<n>"
+  },
+  "research": {
+    "locate_official_site": true,
+    "search_only_to_locate": true,
+    "allowlist_in": "hass-maker-research/sources.json",
+    "decision": "G 2026-11-18 14:00"
+  },
+  "renderer": {
+    "commit": null,
+    "set_by": "NPP-H when the tapes are recorded",
+    "files": [
+      "storefront-mockup/shop.js",
+      "hass/screenshot.cjs"
+    ]
+  },
+  "assets": {
+    "README.md": "7a84fa7d2150cb45cab8dcff8aff17a6af2ead7906ac53d75af6986470ea265f",
+    "hass-gallery-style/SKILL.md": "14d9b8fbad355e04c1df9c70464a16cc6abdc4a3935d2248502a17b3dc8930fe",
+    "hass-gallery-style/card.schema.json": "c6eeacc7c0d5605e153c68ab1b5509a90c6208c06e3df8c6f7aed3d5d7c421fb",
+    "hass-gallery-style/gallery-fields.tsv": "b2cc1bebc710201932d14c86471c49f991042eaa14d90bf8262ff3c4e522c51b",
+    "hass-gallery-style/golden/photo-product-002.json": "7d247acaf3fae8255a6faa26b458e92760319c304eb8aa527f9c8fa99563ff42",
+    "hass-gallery-style/golden/photo-product-006.json": "18d3402576cb373e0b65cd384351df265e66810e399945fbc3f51b3d5b5eea29",
+    "hass-gallery-style/golden/photo-product-007.json": "f43253309e2192e9caf7121d44e26c3b7fbe8f5fc67733547c088cda20ba317e",
+    "hass-gallery-style/golden/photo-product-015.json": "96040539f37963a699237f5ae12542402f0937755ee3cce41203dd08d4f58df1",
+    "hass-gallery-style/golden/photo-product-018.json": "5c8af9bf530dfe48e3d78fdb34baf6f6946d849ba322128a7925f8c6c07aca72",
+    "hass-gallery-style/golden/photo-product-021.json": "64a84cdd0ff34ef85f5c39d3abee3bfd62a95ebf3ae51c732afe83252ec51d10",
+    "hass-gallery-style/golden/photo-product-024.json": "ee24045cab9804584a8b908601eedfe4b626bbd16ef76fa5f5fc5765051ed18a",
+    "hass-gallery-style/golden/photo-product-025.json": "ae14ee8f1de56173c2ccf0f65d534bf17ccf3ceecabc60ba13b83416834d2697",
+    "hass-gallery-style/golden/photo-product-042.json": "a3ce9ec90697a39418f860888df64a89e6695e1a870d5c6b38e1deda3c8494e5",
+    "hass-gallery-style/golden/photo-product-044.json": "3daecdd21e6f3746c993c96c268b875e3a89e3f621f97a9dea39eee964fd8501",
+    "hass-gallery-style/golden/photo-product-052.json": "240b0401b2ece4967492585038401196d08e82bc09004e943fbfbb7be1934680",
+    "hass-gallery-style/golden/photo-product-138.json": "688245b7b3683872495d93d9ea7a3d8e9b52aae2dcfdfbe98cf8e4d5775c2c8c",
+    "hass-gallery-style/limits.json": "d3eb786e558a7f1e64c6c9dc3aec9b6545cf07b387a2b94ffba1fe5dc7348466",
+    "hass-listing-copy/SKILL.md": "4a718f19ff9fac5fb1c24568dfdc4267d78a24420b1c44451de52b9ac95f7b60",
+    "hass-listing-copy/copy-templates.json": "ce9a05e8ac2462e253ddf58de758990b88b6bbb1f45dcab9da743ecea321d17c",
+    "hass-listing-copy/listing.schema.json": "0ab93435085aace275bc8734dd2ab5ce70ab3f870d5adfa037f1868d38920749",
+    "hass-listing-copy/voice-phrases.json": "0f064b70e069c74748f14bed6953f3fdba76fbd003fecdfd150931c0e75a7af6",
+    "hass-listing-edit/SKILL.md": "25d31fd80eb08acaba5938ceccdb1f015a27f0efa8e4356f82e5206f810ed970",
+    "hass-listing-edit/edit-grammar.json": "f96289d25a1d02ef76e1830fe026c5a0d6f0b7567b8f7322cb409c08ca3d3b4a",
+    "hass-listing-edit/edit.schema.json": "44f03b8edc6ac144868fb2a2c87ca166b04943aebe1d9ec140150288d0f681b1",
+    "hass-maker-research/SKILL.md": "39f6a9aada9ab14a2c7d3dd55eebc43031c9cc0b87d10d6d981be0dacf6626e5",
+    "hass-maker-research/facts.schema.json": "d5523784cbc65eb2cb06f399c90c221d1870243c328a7d99a43bbee74cd964e5",
+    "hass-maker-research/sources.json": "605d07078f8b241793561bdd73c27811f9141017d7f37d51ed786d5f6942a74a",
+    "hass-maker-research/verify.md": "66b270b3b016c35d04ebdfa452b2099f70c701bed86a08389ef98726d435dcf5",
+    "hass-missing-info/SKILL.md": "04a500fae1b3be20432dda4106c6c03fb46bb02c0c7147af1fe4ea28185ece97",
+    "hass-missing-info/missing-info.json": "1728e3286643deb7a8b3a860bd5b5b317c59f1f31dd80319e47cb6ff56ebb00c",
+    "hass-npp-reply/reply-templates.json": "02058e827b3e771901c692839c502a679fbc1ff8082def5c3cd1f12e99192a17",
+    "hass-product-identify/SKILL.md": "d74c2c6046c151e6bdb49e56b5f718ff29a8c9f3116115378fe2108caf7f023b",
+    "hass-product-identify/examples.json": "725079eae275055459a482358ca91dc39a08c13a0b09775b7057c22e325c6d1c",
+    "hass-product-identify/identify.schema.json": "728cb30032f56fa7ccef582e19da502f60cb92a91c8c502ac91cc2ee3d87e209",
+    "hass-product-photo/SKILL.md": "9615c98962fce92bf9155dd998b8da30162951f3205f10fce4ddb210ca8d1656",
+    "hass-product-photo/photo.json": "73d2aca5adcf7238c408a6a98cafdea6939d11694221f42ffc2919c85c589bd7",
+    "hass-style-judge/SKILL.md": "b9c32aadf117ae1e6ebf708e89831039b80bf11872b20de2fc89685257908bf9",
+    "hass-style-judge/calibration/bad/bad-invented-story.json": "b9965ea95e854840eac88fc361b1e3cb155dc0325390fca476798c05728373e7",
+    "hass-style-judge/calibration/bad/bad-serving-on-nonfood.json": "31e64005460d9f59ce98af3b4ecf5ae2daa44767856f43ad7830da8c9ace4003",
+    "hass-style-judge/calibration/bad/bad-spec-list.json": "30f0b016560efe13d5cf5103a3276181d1c87e4d475f30948c29b975b82158c4",
+    "hass-style-judge/calibration/bad/bad-superlatives.json": "8f4f36b23fab2c2c968397da8c730b7cdaf45decdb551471d57afc843cb844bd",
+    "hass-style-judge/calibration/manifest.json": "c651e6358793b5529380e90100ee46ee58a7958ef10a2ef0b8d879ffd7b70231",
+    "hass-style-judge/rubric.json": "2fc68ab26fb16967fdcb73cea27d4ff37c8dd735a47ee6593defea2dee13c4d8"
+  }
+}

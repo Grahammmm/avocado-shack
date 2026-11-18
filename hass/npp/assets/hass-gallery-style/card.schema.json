@@ -1,0 +1,35 @@
+{
+  "$comment": "Shape of a card record: the twelve golden cards and the synthetic bad calibration cards. Keywords limited to the subset the repo test validator supports.",
+  "title": "hass gallery card record",
+  "type": "object",
+  "required": ["product_id", "category", "card"],
+  "properties": {
+    "product_id": {"type": "string", "minLength": 3},
+    "category": {"type": "string", "enum": ["fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers", "general"]},
+    "card": {
+      "type": "object",
+      "required": ["photo_alt", "brand", "name", "price", "origin", "badges", "availability", "description", "meet_the_maker"],
+      "properties": {
+        "photo_alt": {"type": "string", "minLength": 1, "maxLength": 200},
+        "brand": {"type": "string", "minLength": 1, "maxLength": 60},
+        "name": {"type": "string", "minLength": 1, "maxLength": 80},
+        "price": {"type": ["string", "number", "null"]},
+        "origin": {"type": "string", "minLength": 1, "maxLength": 80},
+        "badges": {"type": "array", "maxItems": 3, "items": {"type": "string"}},
+        "availability": {"type": ["string", "null"]},
+        "description": {"type": "string", "minLength": 1, "maxLength": 600},
+        "meet_the_maker": {
+          "type": ["object", "null"],
+          "required": ["name", "place", "story"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1, "maxLength": 80},
+            "place": {"type": "string", "minLength": 1, "maxLength": 60},
+            "story": {"type": "string", "minLength": 1, "maxLength": 600},
+            "visit_url": {"type": ["string", "null"]},
+            "see_all_count": {"type": ["integer", "null"]}
+          }
+        }
+      }
+    }
+  }
+}

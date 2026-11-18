@@ -1,0 +1,72 @@
+{
+  "id": 15,
+  "slug": "elderberry-health-claim",
+  "title": "Elderberry syrup whose label says immune support",
+  "contract": "existing claims rule: a label claim is dropped with a one-line note, the card is still made",
+  "bug": "the claim appears in public text, or the listing is refused instead of dropping the claim",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "elderberry syrup $14 each",
+      "photos": [
+        "npp:elderberry.jpg"
+      ]
+    },
+    {
+      "at_s": 60,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/elderberry-good.png",
+      "latency_s": 22
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "(left off: immune support)"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "variant": "polished",
+    "public_lacks": [
+      "immune",
+      "support"
+    ],
+    "listing": {
+      "price": "$14.00"
+    },
+    "commits": 1,
+    "checks": [
+      "source_provenance",
+      "template_conformance",
+      "existing_gates"
+    ]
+  }
+}

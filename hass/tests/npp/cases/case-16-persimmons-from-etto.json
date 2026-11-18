@@ -1,0 +1,71 @@
+{
+  "id": 16,
+  "slug": "persimmons-from-etto",
+  "title": "Loose fuyu persimmons with no label, from Etto",
+  "contract": "supplier line without a maker: From Etto, per lb price, no maker panel and no research",
+  "bug": "the supplier becomes a maker with a panel or a web lookup runs for a supplier",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "from Etto $3.50 a lb",
+      "photos": [
+        "chaos:persimmons.jpg"
+      ]
+    },
+    {
+      "at_s": 60,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "record",
+      "latency_s": 22,
+      "note": "the real gpt-image-2 edit of this photo, taped by NPP-H on the private host (run_npp.py --record); no stand-in bytes are committed"
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card"
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "listing": {
+      "category": "fruit",
+      "origin": "From Etto",
+      "price": "$3.50 per lb",
+      "maker_panel": false
+    },
+    "commits": 1,
+    "calls": {
+      "search": 0,
+      "fetch": 0,
+      "extract": 0
+    },
+    "checks": [
+      "fields_present",
+      "source_provenance"
+    ]
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "id": 32,
+  "slug": "equal-values",
+  "title": "Equal values: cost equal to the price, quantity equal to the label size, spoken and digit forms",
+  "contract": "section 1.9: an equal value is allowed only with independent provenance (the price span, the label size); a private value never reaches prose, picture or card DOM",
+  "bug": "a private number leaks into prose because it equals a public one, or the equal public price/size is wrongly dropped",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "variants": [
+    {
+      "id": "a",
+      "title": "digits",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "ridge roast dark coffee, cost 14, selling 14 each, got 12 bags",
+          "photos": [
+            "npp:coffee.jpg"
+          ]
+        },
+        {
+          "at_s": 60,
+          "from": "mike",
+          "text": "yes {code}-1",
+          "photos": []
+        }
+      ]
+    },
+    {
+      "id": "b",
+      "title": "spoken",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "ridge roast dark coffee, cost fourteen, selling fourteen each, got twelve bags",
+          "photos": [
+            "npp:coffee.jpg"
+          ]
+        },
+        {
+          "at_s": 60,
+          "from": "mike",
+          "text": "yes {code}-1",
+          "photos": []
+        }
+      ]
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/coffee-good.png",
+      "latency_s": 22
+    },
+    "private": {
+      "cost": "14",
+      "quantity": "12"
+    }
+  },
+  "expect": {
+    "state": "published",
+    "listing": {
+      "price": "$14.00",
+      "label_size_kept": "12 oz"
+    },
+    "private_in_public": "none",
+    "same_result_for_spoken_and_digit_forms": true,
+    "commits": 1,
+    "cloud_bodies_lack_digits_from": [
+      "14",
+      "12"
+    ],
+    "checks": [
+      "no_private_values",
+      "template_conformance",
+      "picture",
+      "render"
+    ]
+  }
+}

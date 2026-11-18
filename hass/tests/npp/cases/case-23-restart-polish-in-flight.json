@@ -1,0 +1,77 @@
+{
+  "id": 23,
+  "slug": "restart-polish-in-flight",
+  "title": "Restart while the image edit is in flight",
+  "contract": "R1.2 restart: no second image edit; the not-run decision is written once and the variant is raw",
+  "bug": "a restart starts a second image edit or leaves the job without a decision",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "new honey $9 each",
+      "photos": [
+        "npp:honey.jpg"
+      ]
+    },
+    {
+      "at_s": 10,
+      "from": "mike",
+      "text": null,
+      "photos": [],
+      "restart": true
+    },
+    {
+      "at_s": 120,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/honey-good.png",
+      "latency_s": 40
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card"
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "calls": {
+      "image_edit": 1,
+      "image_edit_after_restart": 0
+    },
+    "polish_decision": {
+      "use": "house",
+      "code": "not-run"
+    },
+    "variant": "raw",
+    "cards_sent": 1,
+    "commits": 1,
+    "checks": [
+      "picture",
+      "reply"
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "about": "Calibration set for the style judge (design 3.3). good: the twelve live golden cards. bad: synthetic cards built to break one rubric dimension each (no real owner message, no private value). Bad cards use the golden card shape. G's own glue reply screenshot and the chaos chat cards are private images and stay in the private report folder; the private-host run adds them there.",
+  "good": [
+    "photo-product-002", "photo-product-006", "photo-product-007", "photo-product-015", "photo-product-018", "photo-product-021",
+    "photo-product-024", "photo-product-025", "photo-product-042", "photo-product-044", "photo-product-052", "photo-product-138"
+  ],
+  "good_dir": "hass-gallery-style/golden",
+  "bad": ["bad-spec-list", "bad-superlatives", "bad-serving-on-nonfood", "bad-invented-story"],
+  "bad_dir": "hass-style-judge/calibration/bad",
+  "private_host_extras": ["g-examples/hass-reply-today.jpg (private)", "chaos chatter cards (private)"]
+}

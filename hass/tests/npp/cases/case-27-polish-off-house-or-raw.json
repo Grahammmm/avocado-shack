@@ -1,0 +1,105 @@
+{
+  "id": 27,
+  "slug": "polish-off-house-or-raw",
+  "title": "Polish off, itemIntake on: a clean photo gives the house render, a busy one the raw photo",
+  "contract": "R1.1: with the polish off, the variant is exactly what install would choose: house when the render passes, raw when it is refused",
+  "bug": "a busy photo is published as a house render, or a clean photo is published raw",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": false,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "variants": [
+    {
+      "id": "a",
+      "title": "clean photo, house render",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "plum preserves $8 each",
+          "photos": [
+            "npp:clean-jar-plain.jpg"
+          ]
+        },
+        {
+          "at_s": 60,
+          "from": "mike",
+          "text": "yes {code}-1",
+          "photos": []
+        }
+      ],
+      "expect": {
+        "variant": "house",
+        "picture_line": "picture: house style",
+        "replies": [
+          {
+            "turn": 0,
+            "count": 1,
+            "kind": "card",
+            "has_all": [
+              "(picture: house style)"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "b",
+      "title": "busy photo, raw conditions hold",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "plum preserves $8 each",
+          "photos": [
+            "npp:clean-jar-busy.jpg"
+          ]
+        },
+        {
+          "at_s": 60,
+          "from": "mike",
+          "text": "yes {code}-1",
+          "photos": []
+        }
+      ],
+      "expect": {
+        "variant": "raw",
+        "picture_line": "picture: your own photo",
+        "replies": [
+          {
+            "turn": 0,
+            "count": 1,
+            "kind": "card",
+            "has_all": [
+              "(picture: your own photo)"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "none",
+      "note": "photo_polish is off: any image-edit call is a failure"
+    }
+  },
+  "expect": {
+    "state": "published",
+    "commits": 1,
+    "preview_sha_equals_frozen_equals_committed": true,
+    "calls": {
+      "image_edit": 0
+    },
+    "checks": [
+      "picture",
+      "render"
+    ]
+  }
+}

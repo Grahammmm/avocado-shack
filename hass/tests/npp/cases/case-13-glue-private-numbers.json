@@ -1,0 +1,101 @@
+{
+  "id": 13,
+  "slug": "glue-private-numbers",
+  "title": "G's wood glue with a cost, a quantity and a selling price in one caption",
+  "contract": "section 1.9 private numbers: the public card carries the selling price only; cost and quantity stay private in prose, picture read and card DOM",
+  "bug": "the card, alt text or picture read carries 1 or 50, or food words appear in glue copy",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "Just bought 50 of these for $1. I will sell at $2",
+      "photos": [
+        "chaos:glue.jpg"
+      ]
+    },
+    {
+      "at_s": 60,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "record",
+      "latency_s": 22,
+      "note": "the real gpt-image-2 edit of this photo, taped by NPP-H on the private host (run_npp.py --record); no stand-in bytes are committed"
+    },
+    "private": {
+      "cost": "1",
+      "quantity": "50"
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "lacks": [
+          "cost",
+          "50",
+          "quantity"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "variant": "polished",
+    "listing": {
+      "category": "general",
+      "price": "$2.00",
+      "maker_panel": false,
+      "brand": "From the market"
+    },
+    "public_lacks": [
+      "$1.00",
+      "50 ",
+      " fifty",
+      "serving",
+      "taste",
+      "eat",
+      "recipe"
+    ],
+    "private_intake_saved": {
+      "cost": "1.00",
+      "quantity": "50"
+    },
+    "commits": 1,
+    "calls": {
+      "search": 0,
+      "fetch": 0
+    },
+    "cloud_bodies_lack_digits_from": [
+      "1",
+      "50"
+    ],
+    "checks": [
+      "no_private_values",
+      "template_conformance",
+      "fields_present",
+      "picture",
+      "render",
+      "existing_gates"
+    ]
+  }
+}

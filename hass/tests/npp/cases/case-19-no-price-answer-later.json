@@ -1,0 +1,80 @@
+{
+  "id": 19,
+  "slug": "no-price-answer-later",
+  "title": "No price: photo and 'new honey', the answer comes 40 minutes later",
+  "contract": "S3 plus async: one question, the job waits with its clock paused, the answer opens a new segment and gets the card",
+  "bug": "a second question, a card built without a price, or the segment cap counted from the first photo",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "new honey",
+      "photos": [
+        "npp:honey.jpg"
+      ]
+    },
+    {
+      "at_s": 2400,
+      "from": "mike",
+      "text": "$9 each",
+      "photos": []
+    },
+    {
+      "at_s": 2460,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/honey-good.png",
+      "latency_s": 22
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "question",
+        "has_all": [
+          "What's the selling price, and is that each or per lb?"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "card",
+        "lacks": [
+          "?"
+        ]
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "polish_settled_before_answer": true,
+    "segment2_started_at_s": 2400,
+    "segment_cap_measured_from": "answer",
+    "commits": 1,
+    "checks": [
+      "reply",
+      "delivery_approval"
+    ]
+  }
+}

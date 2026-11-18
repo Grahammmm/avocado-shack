@@ -1,0 +1,172 @@
+{
+  "id": 35,
+  "slug": "delayed-old-yes",
+  "title": "Delayed old yes after v1 and v2 were both delivered",
+  "contract": "R2.1: an old tag or an old reply-to publishes nothing and says the card was replaced; a bare coded yes with two delivered versions is re-asked",
+  "bug": "a late yes for an old card publishes it, or a bare yes picks one of two versions",
+  "path": "contract",
+  "terminal": "card_out",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "variants": [
+    {
+      "id": "a",
+      "title": "old tag",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "new honey $9 each",
+          "photos": [
+            "npp:honey.jpg"
+          ]
+        },
+        {
+          "at_s": 70,
+          "from": "mike",
+          "text": "make it $10",
+          "photos": []
+        },
+        {
+          "at_s": 3200,
+          "from": "mike",
+          "text": "yes {code}-1",
+          "photos": []
+        }
+      ],
+      "expect": {
+        "replies": [
+          {
+            "turn": 2,
+            "count": 1,
+            "kind": "guard",
+            "has_all": [
+              "That card was replaced."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "b",
+      "title": "old reply-to",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "new honey $9 each",
+          "photos": [
+            "npp:honey.jpg"
+          ]
+        },
+        {
+          "at_s": 70,
+          "from": "mike",
+          "text": "make it $10",
+          "photos": []
+        },
+        {
+          "at_s": 3200,
+          "from": "mike",
+          "text": "yes {code}",
+          "photos": [],
+          "reply_to": "v1"
+        }
+      ],
+      "expect": {
+        "replies": [
+          {
+            "turn": 2,
+            "count": 1,
+            "kind": "guard",
+            "has_all": [
+              "That card was replaced."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "c",
+      "title": "bare coded yes",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "new honey $9 each",
+          "photos": [
+            "npp:honey.jpg"
+          ]
+        },
+        {
+          "at_s": 70,
+          "from": "mike",
+          "text": "make it $10",
+          "photos": []
+        },
+        {
+          "at_s": 3200,
+          "from": "mike",
+          "text": "yes {code}",
+          "photos": []
+        }
+      ],
+      "expect": {
+        "replies": [
+          {
+            "turn": 2,
+            "count": 1,
+            "kind": "guard",
+            "has_all": [
+              "Which card did you mean—please use the code on the latest card."
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/honey-good.png",
+      "latency_s": 22
+    },
+    "outbox": {
+      "v1": {
+        "sends": [
+          "ok"
+        ]
+      },
+      "v2": {
+        "sends": [
+          "ok"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "approval_rows": 0,
+    "commits": 0,
+    "state": "card_out",
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true
+      }
+    ],
+    "checks": [
+      "delivery_approval",
+      "reply"
+    ]
+  }
+}

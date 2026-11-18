@@ -1,0 +1,108 @@
+{
+  "id": 2,
+  "slug": "golden-eggs",
+  "title": "Golden product 2: Cal Poly eggs",
+  "contract": "R1.1 polished variant and gallery fidelity: a known maker is reused with no web, public fields match the live golden card, every section 3.2 check holds",
+  "bug": "pipeline invents a maker for a no-maker listing, researches a known maker, or drifts from the golden card fields (origin, category, panel)",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "photos_note": "gallery product picture cut out and pasted on a cluttered counter by make_npp_photos.py",
+  "golden": "hass-gallery-style/golden/photo-product-024.json",
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "made by Cal Poly, Cal Poly eggs, $6 each",
+      "photos": [
+        "npp:golden-024.jpg"
+      ]
+    },
+    {
+      "at_s": 60,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "record",
+      "latency_s": 22,
+      "note": "the real gpt-image-2 edit of this photo, taped by NPP-H on the private host (run_npp.py --record); no stand-in bytes are committed",
+      "reference": "gallery:024"
+    },
+    "known_maker": "Cal Poly",
+    "note": "stand-in probe: the gallery picture used as the edit passes the real gate for 015, 002, 044, 021 only; replay needs the recorded tape"
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-1, or tell me what to change."
+        ],
+        "lacks": [
+          "picture: your own photo",
+          "picture: house style"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "variant": "polished",
+    "picture_line": null,
+    "listing": {
+      "name_close_to": "Cal Poly eggs",
+      "name_tolerance_words": 1,
+      "brand": "Cal Poly",
+      "origin": "Based in San Luis Obispo, California",
+      "category": "eggs",
+      "price": "$6.00",
+      "maker_panel": true,
+      "description_sentences": [
+        2,
+        3
+      ],
+      "description_max_chars": 200,
+      "maker_name": "Cal Poly",
+      "maker_place": "San Luis Obispo, California"
+    },
+    "commits": 1,
+    "calls": {
+      "image_edit": 1,
+      "search": 0,
+      "fetch": 0,
+      "extract": 0,
+      "verify": 0
+    },
+    "checks": [
+      "fields_present",
+      "length",
+      "no_private_values",
+      "source_provenance",
+      "template_conformance",
+      "no_owner_chatter",
+      "no_copying",
+      "picture",
+      "render",
+      "reply",
+      "delivery_approval",
+      "existing_gates"
+    ],
+    "frozen_sha_equals_committed_file": true
+  }
+}

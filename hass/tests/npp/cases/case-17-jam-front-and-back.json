@@ -1,0 +1,70 @@
+{
+  "id": 17,
+  "slug": "jam-front-and-back",
+  "title": "Front and back of one jam in one message",
+  "contract": "two photos of one product make one listing and one reply; the front is the picture and the back is for label words only",
+  "bug": "two listings or two replies, or the back label becomes the published picture",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "raspberry jam $7 each",
+      "photos": [
+        "chaos:jam.jpg",
+        "npp:jam-back.jpg"
+      ]
+    },
+    {
+      "at_s": 60,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "record",
+      "latency_s": 22,
+      "note": "the real gpt-image-2 edit of this photo, taped by NPP-H on the private host (run_npp.py --record); no stand-in bytes are committed"
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card"
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "listings": 1,
+    "picture_source": "chaos:jam.jpg",
+    "label_words_from": [
+      "chaos:jam.jpg",
+      "npp:jam-back.jpg"
+    ],
+    "commits": 1,
+    "calls": {
+      "image_edit": 1
+    },
+    "checks": [
+      "reply",
+      "picture"
+    ]
+  }
+}

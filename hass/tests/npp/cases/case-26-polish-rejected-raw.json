@@ -1,0 +1,111 @@
+{
+  "id": 26,
+  "slug": "polish-rejected-raw",
+  "title": "The polish is rejected by the fidelity gate (HASS-IMAGE-1 T3 deliberate bad edits)",
+  "contract": "R1.1 picture contract: a rejected polish gives the raw owner photo exactly as install publishes it today, labelled, same bytes in preview and commit",
+  "bug": "a rejected edit is published, the fallback differs from install's, or the alt gains (illustration)",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "variants": [
+    {
+      "id": "a",
+      "title": "painted relabel",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "new honey $9 each",
+          "photos": [
+            "npp:honey.jpg"
+          ]
+        },
+        {
+          "at_s": 60,
+          "from": "mike",
+          "text": "yes {code}-1",
+          "photos": []
+        }
+      ],
+      "inputs": {
+        "polish": {
+          "source": "file",
+          "file": "npp:edits/honey-bad-relabel.png",
+          "latency_s": 22
+        },
+        "gate_expect": {
+          "ok": false,
+          "code": "text"
+        }
+      }
+    },
+    {
+      "id": "b",
+      "title": "product recolour",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "new honey $9 each",
+          "photos": [
+            "npp:honey.jpg"
+          ]
+        },
+        {
+          "at_s": 60,
+          "from": "mike",
+          "text": "yes {code}-1",
+          "photos": []
+        }
+      ],
+      "inputs": {
+        "polish": {
+          "source": "file",
+          "file": "npp:edits/honey-bad-recolour.png",
+          "latency_s": 22
+        },
+        "gate_expect": {
+          "ok": false,
+          "code": "colour"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "variant": "raw",
+    "picture_line": "picture: your own photo",
+    "install_path_re": "assets/products/photo-[0-9a-f]{16}\\.(jpg|png)",
+    "bytes_equal": "media.web_copy of the owner photo",
+    "alt_lacks": [
+      "(illustration)"
+    ],
+    "card_alt_lacks": [
+      "(illustration)"
+    ],
+    "preview_sha_equals_frozen_equals_committed": true,
+    "state": "published",
+    "commits": 1,
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "(picture: your own photo)"
+        ]
+      }
+    ],
+    "checks": [
+      "picture",
+      "render",
+      "reply"
+    ]
+  }
+}

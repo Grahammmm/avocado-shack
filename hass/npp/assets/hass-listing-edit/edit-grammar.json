@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "about": "S10 deterministic edit forms. Tried first, in order; a text that matches no form goes to the model mapping (edit.schema.json) or to one question. An owner message is never pasted into public text (F1): a matched value is a field value he set, and public copy still comes from reviewed templates. Patterns are Python regular expressions matched with re.fullmatch and re.IGNORECASE on the trimmed message.",
+  "forms": [
+    {
+      "id": "price", "field": "sellingPrice",
+      "pattern": "(?:make it|change it to|change the price to|price is|price to|now)\\s+\\$?(?P<value>\\d+(?:\\.\\d{1,2})?)(?:\\s*(?P<unit>each|per lb|a lb|per pound|a pound|/lb))?",
+      "examples": [
+        {"text": "make it $4", "captures": {"value": "4", "unit": null}},
+        {"text": "change the price to 3.50 per lb", "captures": {"value": "3.50", "unit": "per lb"}}
+      ],
+      "negatives": ["make it shorter", "make it a gift"]
+    },
+    {
+      "id": "supplier", "field": "supplier",
+      "pattern": "from\\s+(?P<value>[A-Za-z][A-Za-z' .&-]{1,40})",
+      "examples": [
+        {"text": "from Etto", "captures": {"value": "Etto"}},
+        {"text": "From Miners", "captures": {"value": "Miners"}}
+      ],
+      "negatives": ["from 3 to 4 dollars"]
+    },
+    {
+      "id": "maker", "field": "maker",
+      "pattern": "made by\\s+(?P<value>[A-Za-z][A-Za-z' .&-]{1,40})(?:,\\s*(?P<town>[A-Za-z][A-Za-z .'-]{1,30}))?",
+      "examples": [
+        {"text": "made by Miners", "captures": {"value": "Miners", "town": null}},
+        {"text": "made by Miners, Paso Robles", "captures": {"value": "Miners", "town": "Paso Robles"}}
+      ],
+      "negatives": ["made it yesterday"]
+    },
+    {
+      "id": "name", "field": "name",
+      "pattern": "(?:call it|name it|name:)\\s*(?P<value>[A-Za-z][A-Za-z0-9' &-]{1,60})",
+      "examples": [
+        {"text": "call it Wildflower honey", "captures": {"value": "Wildflower honey"}},
+        {"text": "name: Dry-farmed beans", "captures": {"value": "Dry-farmed beans"}}
+      ],
+      "negatives": ["call me later"]
+    },
+    {
+      "id": "category", "field": "category",
+      "pattern": "(?:put it in|shelf:|category:)\\s*(?P<value>fruit|vegetables|dairy|eggs|meat|pantry|drinks|bread|flowers|general)",
+      "examples": [
+        {"text": "put it in pantry", "captures": {"value": "pantry"}},
+        {"text": "shelf: general", "captures": {"value": "general"}}
+      ],
+      "negatives": ["put it in the fridge"]
+    },
+    {
+      "id": "add", "field": "add_note",
+      "pattern": "add:\\s*(?P<value>.{2,120})",
+      "public": false,
+      "examples": [
+        {"text": "add: sold in a glass jar", "captures": {"value": "sold in a glass jar"}}
+      ],
+      "negatives": ["add this"],
+      "note": "The text is never pasted. It is mapped to a typed slot a template can use, or answered with ask_edit_unclear."
+    },
+    {
+      "id": "picture", "field": "picture_request",
+      "pattern": "(?:use my photo|use my own photo|try the picture again|redo the picture|different picture|change the picture|new picture)",
+      "reply": "edits.picture_request",
+      "examples": [
+        {"text": "use my photo", "captures": {}},
+        {"text": "try the picture again", "captures": {}}
+      ],
+      "negatives": ["picture of a jar"],
+      "note": "Never starts a second image edit: a new photo is a new sha with its own S6."
+    },
+    {
+      "id": "wording", "field": "description_wording",
+      "pattern": "(?:make it |a little |bit )?(?P<value>shorter|simpler|plainer|less fancy|more fun|warmer)",
+      "action": "rerun S5 for the description only",
+      "examples": [
+        {"text": "shorter", "captures": {"value": "shorter"}},
+        {"text": "make it simpler", "captures": {"value": "simpler"}}
+      ],
+      "negatives": ["make it $4"]
+    }
+  ],
+  "model_mapping": {
+    "used_when": "no form matches",
+    "output": "edit.schema.json",
+    "fields_allowed": ["sellingPrice", "priceUnit", "supplier", "maker", "name", "category", "description_wording", "picture_request", "add_note"],
+    "ask": "A first-class answer: one question from reply-templates.json, card unchanged."
+  }
+}

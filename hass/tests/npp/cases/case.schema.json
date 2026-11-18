@@ -1,0 +1,54 @@
+{
+  "$comment": "Structure of one NPP eval case file (hass/tests/npp/cases/case-NN-slug.json). Keywords limited to the subset the repo test validator supports. expect keys are checked against x-expect-keys by the test: a new key must be added here and documented in FORMAT.md.",
+  "title": "hass npp case",
+  "type": "object",
+  "required": ["id", "slug", "title", "contract", "bug", "path", "terminal", "settings", "expect"],
+  "properties": {
+    "id": {"type": "integer", "minimum": 1, "maximum": 999},
+    "slug": {"type": "string", "minLength": 3, "maxLength": 60},
+    "title": {"type": "string", "minLength": 5},
+    "contract": {"type": "string", "minLength": 20},
+    "bug": {"type": "string", "minLength": 15},
+    "path": {"type": "string", "enum": ["listing", "question", "contract"]},
+    "terminal": {"type": "string", "enum": ["published", "asking", "retake", "expired", "card_out"]},
+    "settings": {"type": "object", "required": ["npp", "houseRender", "photo_polish", "itemIntake", "liveSite", "approvalTtlSeconds"],
+                 "properties": {"npp": {"type": "boolean"}, "houseRender": {"type": "boolean"}, "photo_polish": {"type": "boolean"},
+                                "itemIntake": {"type": "boolean"}, "liveSite": {"type": "boolean"}, "approvalTtlSeconds": {"type": "integer", "minimum": 60}}},
+    "turns": {"type": "array", "minItems": 1, "items": {"$ref": "turn"}},
+    "variants": {"type": "array", "minItems": 2, "items": {"type": "object", "required": ["id", "title"],
+                 "properties": {"id": {"type": "string", "minLength": 1, "maxLength": 2}, "title": {"type": "string", "minLength": 3},
+                                "turns": {"type": "array", "minItems": 1, "items": {"$ref": "turn"}},
+                                "inputs": {"type": "object"}, "expect": {"type": "object"}}}},
+    "inputs": {"type": "object"},
+    "expect": {"type": "object"},
+    "settle_until_s": {"type": "number", "minimum": 0}
+  },
+  "turn": {
+    "type": "object",
+    "required": ["at_s", "from", "text", "photos"],
+    "properties": {
+      "at_s": {"type": "number", "minimum": 0},
+      "from": {"type": "string", "enum": ["mike", "g"]},
+      "text": {"type": ["string", "null"], "maxLength": 300},
+      "photos": {"type": "array", "maxItems": 3, "items": {"type": "string", "pattern": "^(npp|chaos):[a-z0-9-]+\\.jpg$"}},
+      "reply_to": {"type": "string", "enum": ["v1", "v2", "v3"]},
+      "alt_reply_to": {"type": "string", "enum": ["v1", "v2", "v3"]},
+      "restart": {"type": "boolean"},
+      "retry_send": {"type": "boolean"}
+    }
+  },
+  "x-expect-keys": [
+    "alt_lacks", "approval_rows", "approval_rows_before_turn_6", "approved_draft_hash", "approved_version", "bytes_equal", "calls", "card_alt_lacks",
+    "cards_sent", "checks", "cloud_bodies_lack_digits_from", "commits", "commits_before_turn_6", "description_equals", "description_lacks", "draft_rows",
+    "frozen_sha_equals_committed_file", "install_path_re", "label_words_from", "listing", "listings", "messages_on_polish_late", "picture_line",
+    "picture_source", "polish_decision", "polish_late_logged", "polish_settled_before_answer", "preview_description_equals_applied",
+    "preview_sha_equals_frozen_equals_committed", "private_in_public", "private_intake_saved", "public_has", "public_lacks", "replies", "research",
+    "same_result_for_spoken_and_digit_forms", "segment2_started_at_s", "segment_cap_measured_from", "sent_at_null_until_s", "state", "story",
+    "story_equals", "total_replies", "v1_delivered_after_retry", "v1_needs_fresh_yes", "v2_bytes_equal_v1", "variant", "versions"
+  ],
+  "x-check-ids": [
+    "fields_present", "length", "no_private_values", "source_provenance", "template_conformance", "no_owner_chatter", "no_copying", "picture",
+    "render", "reply", "delivery_approval", "no_draft", "existing_gates"
+  ],
+  "x-reply-kinds": ["question", "card", "guard", "retake", "expired", "posted", "none"]
+}

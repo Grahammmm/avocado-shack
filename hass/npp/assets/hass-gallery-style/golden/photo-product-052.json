@@ -1,0 +1,25 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-052",
+  "photo_path": "assets/products/photo-product-052.webp",
+  "category": "pantry",
+  "card": {
+    "photo_alt": "Maple Valley dark and robust maple syrup (illustration)",
+    "brand": "Maple Valley",
+    "name": "Maple Valley dark and robust maple syrup",
+    "price": null,
+    "origin": "Based in Cashton, Wisconsin",
+    "badges": [],
+    "availability": null,
+    "description": "Organic dark and robust maple syrup from a Wisconsin cooperative. This is a place for pancakes, yes, but also oatmeal and a warm slice of cornbread.",
+    "meet_the_maker": {
+      "name": "Maple Valley",
+      "place": "Cashton, Wisconsin",
+      "story": "Not everything good has to come from down the road. Maple Valley is a cooperative with its bottling operation in Wisconsin, bringing organic maple syrup from its producers to the table. Dark and robust means a proper maple presence—on breakfast, in baking, or alongside something savory.",
+      "visit_url": "https://www.maplevalleysyrup.coop/about-maple-valley-cooperative/",
+      "see_all_count": null
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-052#market"
+  }
+}

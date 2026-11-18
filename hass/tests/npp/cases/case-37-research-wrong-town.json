@@ -1,0 +1,186 @@
+{
+  "id": 37,
+  "slug": "research-wrong-town",
+  "title": "Same-name maker, wrong town, and two sites that both pass",
+  "contract": "G 2026-11-18 14:00: identity must match the maker and town, and exactly one site may pass; otherwise no story",
+  "bug": "a same-name site in the wrong town supplies facts, or an ambiguous pair is resolved by guessing",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "variants": [
+    {
+      "id": "a",
+      "title": "only candidate is the Fresno Miners",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "made by Miners, Paso Robles. dried figs $7 each",
+          "photos": [
+            "npp:figs.jpg"
+          ]
+        },
+        {
+          "at_s": 80,
+          "from": "mike",
+          "text": "yes {code}-1",
+          "photos": []
+        }
+      ],
+      "inputs": {
+        "web": {
+          "search": {
+            "Miners Paso Robles official site": [
+              {
+                "url": "https://miners-dried-fruit.example/",
+                "title": "Miners Dried Fruit | Fresno, California"
+              }
+            ],
+            "Miners official site": []
+          },
+          "pages": {
+            "https://miners-dried-fruit.example/": {
+              "file": "pages/miners-fresno.html",
+              "retrieved": "2026-11-18",
+              "content_type": "text/html"
+            }
+          },
+          "forbid_fetch": [],
+          "robots": "allow all unless stated"
+        }
+      },
+      "expect": {
+        "research": {
+          "identity": [
+            {
+              "url": "https://miners-dried-fruit.example/",
+              "passed": false,
+              "reason": "different-base-town"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b",
+      "title": "two sites both pass",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "made by Miners, Paso Robles. dried figs $7 each",
+          "photos": [
+            "npp:figs.jpg"
+          ]
+        },
+        {
+          "at_s": 80,
+          "from": "mike",
+          "text": "yes {code}-1",
+          "photos": []
+        }
+      ],
+      "inputs": {
+        "web": {
+          "search": {
+            "Miners Paso Robles official site": [
+              {
+                "url": "https://minersfigs.example/",
+                "title": "Miners Dried Figs | Paso Robles, California"
+              },
+              {
+                "url": "https://minersorchards.example/",
+                "title": "Miners Orchards | Paso Robles"
+              }
+            ],
+            "Miners official site": []
+          },
+          "pages": {
+            "https://minersfigs.example/": {
+              "file": "pages/miners-home-clean.html",
+              "retrieved": "2026-11-18",
+              "content_type": "text/html"
+            },
+            "https://minersorchards.example/": {
+              "file": "pages/miners-orchards-pr.html",
+              "retrieved": "2026-11-18",
+              "content_type": "text/html"
+            }
+          },
+          "forbid_fetch": [],
+          "robots": "allow all unless stated"
+        }
+      },
+      "expect": {
+        "research": {
+          "identity": [
+            {
+              "url": "https://minersfigs.example/",
+              "passed": true
+            },
+            {
+              "url": "https://minersorchards.example/",
+              "passed": true
+            }
+          ],
+          "not_confident": "two-passing-domains"
+        }
+      }
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/figs-good.png",
+      "latency_s": 22
+    },
+    "stubs": {
+      "extract": [],
+      "note": "extraction must never be called"
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "(maker story not found)"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "calls": {
+      "extract": 0,
+      "verify": 0,
+      "fetch": [
+        1,
+        3
+      ]
+    },
+    "story": null,
+    "listing": {
+      "maker_panel": false
+    },
+    "commits": 1,
+    "checks": [
+      "source_provenance",
+      "template_conformance",
+      "no_private_values",
+      "existing_gates"
+    ]
+  }
+}

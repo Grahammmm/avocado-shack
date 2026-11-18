@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "about": "Closed set of reviewed sentences for every public copy field a model can influence (design 1.8, R2.2). The model picks template and phrase IDs only. Code binds typed slot values, renders the template, and compares the WHOLE final field to the rendering: anything else is rejected and the field takes its deterministic default (section defaults). A story with no supported text is omitted. Template text holds no digit, no number word, no currency and no factual assertion beyond the slots it declares.",
+  "grammar": {
+    "slot": "{slot_name} or {slot_name|cap} (cap = first letter upper-case, nothing else changed); {slot|a} puts a or an before the value (an before a vowel letter), nothing else changed",
+    "phrase": "{phrase:<bank>} takes one phrase from voice-phrases.json bank <bank> by ID, kind and category allowed",
+    "sentence_rule": "sentences = count of [.!?] followed by space or end of the rendered text",
+    "literal": "everything else is literal text"
+  },
+  "slot_types": {
+    "item": {"sources": ["S2.item"], "note": "plain product name from S2, code-normalised (single spaces); keeps the product kind"},
+    "brand": {"sources": ["owner_words", "official_site"], "note": "public only from his words or a verified official-site fact; else the field uses the no-brand template"},
+    "size_text": {"sources": ["S2.size_text"], "note": "label size as printed, OCR-confirmed on the source photo; never from his typed words"},
+    "name": {"sources": ["rendered name field"], "note": "the already validated public product name"},
+    "maker_name": {"sources": ["owner_words", "official_site"], "note": "same provenance rule as brand"},
+    "town": {"sources": ["owner_words", "official_site"], "note": "the place the maker is based in; same provenance rule as brand"},
+    "nature": {"sources": ["official_site"], "fact_slot": "nature", "enum_from": "hass-maker-research/facts.schema.json nature_enum"},
+    "makes": {"sources": ["official_site"], "fact_slot": "makes"},
+    "founded": {"sources": ["official_site"], "fact_slot": "founded", "note": "four digit year; the only digits copy may carry besides size_text"}
+  },
+  "templates": [
+    {"id": "name-brand-item", "field": "name", "text": "{brand} {item}", "slots": {"brand": "brand", "item": "item"}, "kinds": ["food", "drink", "fresh", "non-food"], "asserts": ["identity"], "sentences": 0},
+    {"id": "name-brand-item-size", "field": "name", "text": "{brand} {item} {size_text}", "slots": {"brand": "brand", "item": "item", "size_text": "size_text"}, "kinds": ["food", "drink", "fresh", "non-food"], "asserts": ["identity", "label_size"], "sentences": 0},
+    {"id": "name-item", "field": "name", "text": "{item|cap}", "slots": {"item": "item"}, "kinds": ["food", "drink", "fresh", "non-food"], "asserts": ["identity"], "sentences": 0},
+    {"id": "name-item-size", "field": "name", "text": "{item|cap} {size_text}", "slots": {"item": "item", "size_text": "size_text"}, "kinds": ["food", "drink", "fresh", "non-food"], "asserts": ["identity", "label_size"], "sentences": 0},
+
+    {"id": "alt-plain-bg", "field": "imageAlt", "text": "{name} on a plain light background", "slots": {"name": "name"}, "kinds": ["food", "drink", "fresh", "non-food"], "variants": ["polished", "house"], "asserts": ["picture"], "sentences": 0},
+    {"id": "alt-photo", "field": "imageAlt", "text": "Photo of {name}", "slots": {"name": "name"}, "kinds": ["food", "drink", "fresh", "non-food"], "variants": ["raw"], "asserts": ["picture"], "sentences": 0},
+    {"id": "alt-name", "field": "imageAlt", "text": "{name}", "slots": {"name": "name"}, "kinds": ["food", "drink", "fresh", "non-food"], "variants": ["polished", "house", "raw"], "asserts": ["picture"], "sentences": 0},
+
+    {"id": "desc-food-maker-town", "field": "description", "text": "{item|cap} from {maker_name} in {town}. {phrase:use} {phrase:close}", "slots": {"item": "item", "maker_name": "maker_name", "town": "town"}, "phrases": {"use": "use", "close": "close"}, "kinds": ["food", "drink"], "asserts": ["identity", "maker", "base_town"], "sentences": 3},
+    {"id": "desc-food-maker", "field": "description", "text": "{item|cap} from {maker_name}. {phrase:use} {phrase:close}", "slots": {"item": "item", "maker_name": "maker_name"}, "phrases": {"use": "use", "close": "close"}, "kinds": ["food", "drink"], "asserts": ["identity", "maker"], "sentences": 3},
+    {"id": "desc-food-plain", "field": "description", "text": "{phrase:open} {phrase:use} {phrase:close}", "slots": {}, "phrases": {"open": "open", "use": "use", "close": "close"}, "kinds": ["food", "drink"], "asserts": [], "sentences": 3},
+    {"id": "desc-fresh-plain", "field": "description", "text": "{phrase:open} {phrase:use}", "slots": {}, "phrases": {"open": "open", "use": "use"}, "kinds": ["fresh"], "asserts": [], "sentences": 2},
+    {"id": "desc-fresh-maker", "field": "description", "text": "{item|cap} from {maker_name}. {phrase:open} {phrase:use}", "slots": {"item": "item", "maker_name": "maker_name"}, "phrases": {"open": "open", "use": "use"}, "kinds": ["fresh"], "asserts": ["identity", "maker"], "sentences": 3},
+    {"id": "desc-nonfood-plain", "field": "description", "text": "{phrase:open} {phrase:use} {phrase:close}", "slots": {}, "phrases": {"open": "open", "use": "use", "close": "close"}, "kinds": ["non-food"], "asserts": [], "sentences": 3},
+    {"id": "desc-nonfood-maker", "field": "description", "text": "{item|cap} from {maker_name}. {phrase:use} {phrase:close}", "slots": {"item": "item", "maker_name": "maker_name"}, "phrases": {"use": "use", "close": "close"}, "kinds": ["non-food"], "asserts": ["identity", "maker"], "sentences": 3},
+
+    {"id": "story-nature-town", "field": "story", "text": "{maker_name} is {nature|a} in {town}.", "slots": {"maker_name": "maker_name", "nature": "nature", "town": "town"}, "kinds": ["food", "drink", "fresh", "non-food"], "requires_facts_any": ["nature"], "asserts": ["maker", "nature", "base_town"], "sentences": 1},
+    {"id": "story-makes-town", "field": "story", "text": "{maker_name} makes {makes} in {town}.", "slots": {"maker_name": "maker_name", "makes": "makes", "town": "town"}, "kinds": ["food", "drink", "fresh", "non-food"], "requires_facts_any": ["makes"], "asserts": ["maker", "makes", "base_town"], "sentences": 1},
+    {"id": "story-nature-makes-town", "field": "story", "text": "{maker_name} is {nature|a} in {town}, and it makes {makes}.", "slots": {"maker_name": "maker_name", "nature": "nature", "town": "town", "makes": "makes"}, "kinds": ["food", "drink", "fresh", "non-food"], "requires_facts_any": ["nature", "makes"], "requires_facts_all": ["nature", "makes"], "asserts": ["maker", "nature", "base_town", "makes"], "sentences": 1},
+    {"id": "story-makes-founded", "field": "story", "text": "{maker_name} makes {makes}. The business was founded in {founded}.", "slots": {"maker_name": "maker_name", "makes": "makes", "founded": "founded"}, "kinds": ["food", "drink", "fresh", "non-food"], "requires_facts_any": ["makes", "founded"], "requires_facts_all": ["makes", "founded"], "asserts": ["maker", "makes", "founded"], "sentences": 2},
+    {"id": "story-full", "field": "story", "text": "{maker_name} is {nature|a} in {town}, and it makes {makes}. It was founded in {founded}.", "slots": {"maker_name": "maker_name", "nature": "nature", "town": "town", "makes": "makes", "founded": "founded"}, "kinds": ["food", "drink", "fresh", "non-food"], "requires_facts_any": ["nature", "makes", "founded"], "requires_facts_all": ["nature", "makes", "founded"], "asserts": ["maker", "nature", "base_town", "makes", "founded"], "sentences": 2},
+    {"id": "story-founded", "field": "story", "text": "{maker_name} was founded in {founded}. {phrase:story_close}", "slots": {"maker_name": "maker_name", "founded": "founded"}, "phrases": {"story_close": "story_close"}, "kinds": ["food", "drink", "fresh", "non-food"], "requires_facts_any": ["founded"], "asserts": ["maker", "founded"], "sentences": 2}
+  ],
+  "defaults": {
+    "name": "name-item",
+    "imageAlt": "alt-name",
+    "description": {"food": "desc-food-plain", "drink": "desc-food-plain", "fresh": "desc-fresh-plain", "non-food": "desc-nonfood-plain"},
+    "description_phrase_rule": "each phrase bank has exactly one default phrase per kind (and per category where a bank is category-specific); the default description is rendered with the default phrases",
+    "story": {"select": "first template in order whose required facts are all kept and whose slots can all be bound; none qualifies means the story is omitted", "order": ["story-full", "story-nature-makes-town", "story-makes-founded", "story-nature-town", "story-makes-town", "story-founded"], "phrase": "the default story_close phrase where the template has one"}
+  }
+}

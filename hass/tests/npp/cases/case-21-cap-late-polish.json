@@ -1,0 +1,80 @@
+{
+  "id": 21,
+  "slug": "cap-late-polish",
+  "title": "Cap: the image edit takes 95 s, essentials are complete",
+  "contract": "R1.2 segment cap: the card goes out at the deadline with the raw owner photo; the late polish is dropped without a message",
+  "bug": "the card waits for the polish, the late edit replaces the picture or sends a message, or v2 changes the frozen bytes",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "new honey $9 each",
+      "photos": [
+        "npp:honey.jpg"
+      ]
+    },
+    {
+      "at_s": 200,
+      "from": "mike",
+      "text": "make it $10",
+      "photos": []
+    },
+    {
+      "at_s": 260,
+      "from": "mike",
+      "text": "yes {code}-2",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/honey-good.png",
+      "latency_s": 95
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "sent_by_s": 100,
+        "has_all": [
+          "(picture: your own photo)"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "card"
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "variant": "raw",
+    "polish_late_logged": true,
+    "messages_on_polish_late": 0,
+    "v2_bytes_equal_v1": true,
+    "commits": 1,
+    "checks": [
+      "picture",
+      "reply",
+      "delivery_approval"
+    ]
+  }
+}

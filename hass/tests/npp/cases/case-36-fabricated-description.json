@@ -1,0 +1,74 @@
+{
+  "id": 36,
+  "slug": "fabricated-description",
+  "title": "A model stub writes 'The beans are roasted in copper pans.'",
+  "contract": "R2.2: the whole-field template conformance gate rejects prose with no keyword hit and the field takes the reviewed default",
+  "bug": "a lexicon-only check lets an unsupported production claim through",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "ridge roast dark coffee beans $14 each",
+      "photos": [
+        "npp:coffee.jpg"
+      ]
+    },
+    {
+      "at_s": 60,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/coffee-good.png",
+      "latency_s": 22
+    },
+    "stubs": {
+      "copy": {
+        "description": "The beans are roasted in copper pans."
+      }
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "(basic wording)"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "description_equals": "Something good for the kitchen. Bring it out with bread and something simple. Nobody needs a more complicated plan.",
+    "preview_description_equals_applied": true,
+    "public_lacks": [
+      "copper",
+      "roasted in"
+    ],
+    "commits": 1,
+    "checks": [
+      "template_conformance",
+      "existing_gates"
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "id": 24,
+  "slug": "restart-sole-delivered",
+  "title": "Restart after v1 is the only delivered version",
+  "contract": "R2.1: a receipted card is never re-sent and a bare coded yes publishes the sole delivered version",
+  "bug": "the card is sent again after a restart, or a bare yes is refused for a sole delivered version",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "new honey $9 each",
+      "photos": [
+        "npp:honey.jpg"
+      ]
+    },
+    {
+      "at_s": 80,
+      "from": "mike",
+      "text": null,
+      "photos": [],
+      "restart": true
+    },
+    {
+      "at_s": 90,
+      "from": "mike",
+      "text": "yes {code}",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/honey-good.png",
+      "latency_s": 22
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card"
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      }
+    ],
+    "state": "published",
+    "cards_sent": 1,
+    "approved_version": 1,
+    "approved_draft_hash": "v1",
+    "commits": 1,
+    "checks": [
+      "delivery_approval"
+    ]
+  }
+}
