@@ -29,7 +29,7 @@ from hass.chat.shared import (  # noqa: E402,F401
     LOCAL_TZ, q, FIND_TEXT_MAX, ALIAS_NAME_MAX, STATUS_PLAIN, COST_USAGE, CONTROL, NOTHING, CANT_READ, SHELF_ASK,
     _iso, _is_undo)
 from hass.chat.commands import (  # noqa: E402,F401
-    APPROVE, REJECT, UNDO_PHRASES, CANCEL_PHRASES, KEYWORD_RE, NEAR_RE, COMMAND_RE, HELP_TEXT, MEMORY_RE, parse_keyword, COURTESY, parse_phone,
+    APPROVE, REJECT, UNDO_PHRASES, CANCEL_PHRASES, KEYWORD_RE, NEAR_RE, COMMAND_RE, HELP_TEXT, help_detail, MEMORY_RE, parse_keyword, COURTESY, parse_phone,
     parse_unknown_code, parse_near, parse_command, _note_key, parse_memory, READ_ONLY, _asked, read_command, read_memory)
 from hass.chat.wording import (  # noqa: E402,F401
     PHOTO_PATH_RE, VALUE_CUT, _value, _full, _changes, COLLECTION_WORDS, WHOLE_WORDS, _name, _subject, _summary,
@@ -2302,6 +2302,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         except Exception: return None  # noqa: BLE001,E701
 
     def _command(self, msg, now, verb, code) -> str:
+        if verb == "help" and code is not None:  # AV1052-12: help <command>: that command's lines; nothing else happens
+            self._reply(help_detail(code))
+            return "help"
         if verb == "help":
             registry = self.dispatch.registry if self.dispatch else None
             self._reply(HELP_TEXT + "\n\n" + capabilities.help_section(registry) + ("\n\n" + self.till.HELP if self.till is not None and self.till.engine is not None else ""), long_ok=True)  # HASS-CLOVER-4: till words when it can change the till
