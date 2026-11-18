@@ -6,6 +6,8 @@ from unittest.mock import Mock, patch
 
 from hass.skills.item_intake import caption_answers
 from hass.tests import test_item_add_dispatch as base
+from hass.tests.test_label_reader import reader as label_reader, recorded
+from hass.tests.test_photo_detail_read import GLUE
 
 VOICE = ("okay so um hey hass we got the uh kiwis in today from etto farms "
          "they're like three bucks a basket comma sell them at three dollars period "
@@ -51,7 +53,12 @@ class PricedTextConversation(unittest.TestCase):
         for text, source, name, price in (
             ("add persimmins fuyu $3.50 a lb", "add persimmins fuyu", "Persimmins fuyu", "3.50 per lb"),
             ("ADD BLOOD ORANGES $2.50 LB", "ADD BLOOD ORANGES", "Blood oranges", "2.50 per lb"),
-            ("add organic local tayberries best ever $6 each", "add tayberries", "Tayberries", "6.00 each"),
+            # Strawberries already exist in the seed catalog; use a new fruit
+            # to prove the basket price can draft without inventing a unit.
+            ("add organic local tayberries best ever $6 a basket", "add tayberries", "Tayberries", "6.00"),
+            (VOICE.replace("kiwis", "tayberries"),
+             "okay so um hey hass we got the uh tayberries in today from etto farms; they look really good um yeah",
+             "Tayberries", "3.00"),
         ):
             with self.subTest(text=text):
                 chat = self.chat()
@@ -102,4 +109,24 @@ class PricedTextConversation(unittest.TestCase):
         request = chat.live()
         assert request is not None
         self.assertEqual(request["slots"]["intake"]["price"], "2.75")
+        self.assertEqual(chat.asked, [])
+
+    def test_priced_photo_while_a_draft_waits_keeps_the_label_and_preview_path(self):
+        chat = self.chat()
+        chat.conv.labels, labels = label_reader(recorded({k: v for k, v in GLUE.items() if k != "brand"}))
+        disposition, said = chat.say("bought 100 at $1, sell for $2", base.JAR)
+        self.assertEqual(disposition, "proposed", said)
+        waiting, = chat.drafts()
+        self.assertEqual(waiting["state"], "proposed")
+
+        text = "raspberry jam $7"
+        labels.answer = recorded({"name": "Raspberry Jam", "brand": "Hillside Kitchen", "category": "pantry"})
+        finance = Mock()
+        finance.fields.return_value = {"price_cents": 700, "cost_cents": None, "quantity": None}
+        with patch.object(chat.conv, "answer_reader", finance):
+            disposition, said = chat.say(text, base.BAG)
+        self.assertEqual(disposition, "proposed", said)  # not a claim question from the general interpreter
+        self.assertIn("$7.00", "\n".join(said))
+        finance.fields.assert_called_once_with(text)
+        self.assertEqual(len(labels.calls), 2)
         self.assertEqual(chat.asked, [])

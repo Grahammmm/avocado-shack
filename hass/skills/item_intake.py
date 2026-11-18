@@ -119,23 +119,31 @@ def caption_answers(caption, extracted=None):
     Ambiguous clauses stay untouched for the existing refusal/question path, not guessed.
     Repeated conflicting answers are not seeded.
     """
-    if re.match(r"\s*(?:(?:add|description)\s*:|say\s+it['’]s\b|(?:rename|change the name)\b)", caption, re.I):
+    # _read_intake tags photo turns in the existing per-turn handoff. Their
+    # caption must keep the original routing into the label/preview path.
+    photo = False
+    if isinstance(extracted, dict) and extracted.keys() == {"photo_fields"}:
+        extracted, photo = extracted["photo_fields"], True
+    if not photo and re.match(r"\s*(?:(?:add|description)\s*:|say\s+it['’]s\b|(?:rename|change the name)\b)", caption, re.I):
         return caption, {}  # literal copy edits are not instructions to change the price
     # The slash between two amounts is a separator, not the /lb or /each suffix.
     caption = re.sub(r"^\s*(\$\d+(?:\.\d{1,2})?)\s*/\s*(?=sell(?:ing)?\b)", r"cost \1; ", caption, flags=re.I)
     will_sell = r"(?:I['’]?ll\s+|(?:I\s+)?(?:will\s+)?)sell(?:ing)?\b"
     basis = r"(?:(?:\s*/\s*|\s+(?:(?:per|a)\s+)?)(?:lbs?|pounds?|each|items?|baskets?))"
     cash = r"(?P<amount>\$\s*[0-9]{1,6}(?:\.(?:[0-9]{1,2}|[0-9]O))?)"
-    stock = r"(?P<count>[0-9]{1,6})\s+(?P<unit>lbs?|pounds?|items?|each)\s+in\s+stock"
+    stock = (r"(?P<count>\d+)\s+(?P<unit>lb|pounds?|items?|each)\s+in\s+stock" if photo else
+             r"(?P<count>[0-9]{1,6})\s+(?P<unit>lbs?|pounds?|items?|each)\s+in\s+stock")
     word = "(?:" + "|".join(ONES) + ")"
     tens = "(?:" + "|".join(TENS) + ")"
     spoken_cash = r"(?P<amount>\b(?:[0-9]{1,6}|" + tens + r"(?:[- ]" + word + r")?|" + word + r")\s+(?:dollars?|bucks?))"
     uncertain = r"\b(?:minus|negative|or|maybe|about|around)\s*$"
     # Voice dictation sometimes spells the punctuation between a spoken price and the next clause.
-    caption = re.sub(r"(?<=\w)\s+(?:comma|period)\s+(?=" + will_sell + r"|they\b)", "; ", caption, flags=re.I)
+    if not photo:
+        caption = re.sub(r"(?<=\w)\s+(?:comma|period)\s+(?=" + will_sell + r"|they\b)", "; ", caption, flags=re.I)
     public, answers, conflicts = [], {}, set()
     model = commerce_answers(extracted)
-    for part in re.split(r"[;\n]+|(?<!\d),|,(?!\d)|\s+and\s+(?=" + will_sell + r"|(?:I\s+)?(?:bought|paid|\d)\b)"
+    split = r"[,;\n]+" if photo else r"[;\n]+|(?<!\d),|,(?!\d)"
+    for part in re.split(split + r"|\s+and\s+(?=" + will_sell + r"|(?:I\s+)?(?:bought|paid|\d)\b)"
                          r"|(?<=\w)[.!]\s+(?=" + will_sell + r")", caption, flags=re.I):
         text = re.sub(r"^(?:I['’]?ll\s+(?=sell\b)|(?:I\s+)?(?:will\s+)?(?:just\s+(?=bought\b))?)",
                       "", part.strip().rstrip(".!"), flags=re.I)
@@ -153,6 +161,9 @@ def caption_answers(caption, extracted=None):
             if parsed: got.update(qty=parsed[0], qty_unit=parsed[1])
             elif unit in UNIT_WORDS and _parse_count(qty[2]) == 0:
                 got.update(qty=0, qty_unit=UNIT_WORDS[unit])
+        elif photo and re.fullmatch(r"\$\d+(?:\.\d{1,2})?(?:/(?:lb|each)|\s+(?:each|per\s+(?:lb|pound|item|each)))?", text, re.I):
+            value = _parse_money(text)
+            if value is not None: got["price"] = value
         elif match := re.fullmatch(stock, text, re.I):
             got.update(qty=int(match["count"]), qty_unit=UNIT_WORDS[match["unit"].lower()])
         elif money:
@@ -160,7 +171,7 @@ def caption_answers(caption, extracted=None):
             value = _parse_money(money[1])
             if value is not None: got[key] = value
         remaining = part.strip()
-        if not got and not (purchase or qty or money):
+        if not photo and not got and not (purchase or qty or money):
             # Retain the owner words before a finance tail, without accepting a
             # prefix of a malformed amount or guessing between two values.
             if match := re.search(r"(?:^|\s+)(?:and\s+)?" + stock + r"$", text, re.I):
@@ -195,7 +206,7 @@ def caption_answers(caption, extracted=None):
                         if re.fullmatch(r"add|new(?: item)?", remaining.strip(), re.I):
                             remaining = ""
         if not got:
-            if remaining and not (model and re.match(r"(?:\$|(?:I\s+)?(?:bought|paid|cost|sell|selling|price|retail|have|stock|qty|quantity|purchased)\b)", text, re.I)):
+            if remaining and not (model and re.search(r"\b(?:bought|paid|cost|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$", text, re.I)):
                 public.append(part.strip())
             continue
         if "qty" in got and (type(got["qty"]) is not int or not 0 <= got["qty"] <= 100000):
