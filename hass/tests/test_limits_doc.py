@@ -84,6 +84,29 @@ def private_text(doc: str) -> list:
     return [m.group(0).strip() for m in re.finditer(pattern, doc, re.M)]
 
 
+SHELF_MARK = "content_model.SHELF_LABELS"
+SHELF_RE = re.compile(r"- A product is on exactly one shelf: (.+)\. Hass cannot add a shelf\. <!-- content_model\.SHELF_LABELS -->")
+SHELVES = ["Fruit", "Vegetables", "Dairy & cheese", "Eggs", "Meat", "Pantry", "Drinks & coffee", "Bread", "Flowers", "General"]  # AV0222-12: the site's filter buttons
+
+
+def shelf_problems(doc: str) -> list:
+    """AV0222-12: the one shelf bullet names every shelf in code order, says one shelf and no new shelf, and the old category size claim is gone."""
+    out, lines = [], [ln for ln in doc.splitlines() if SHELF_MARK in ln]
+    if len(lines) != 1:
+        out.append(f"{len(lines)} lines cite {SHELF_MARK}, not 1")
+    elif not (m := SHELF_RE.fullmatch(lines[0].strip())):
+        out.append(f"shelf line lacks the exactly-one-shelf and no-new-shelf wording: {lines[0].strip()}")
+    else:
+        labels = m[1].split(", ")
+        if labels != list(content_model.SHELF_LABELS.values()):
+            out.append(f"shelves {labels} are not the code's {list(content_model.SHELF_LABELS.values())}")
+    if tuple(content_model.SHELF_LABELS) != content_model.CATEGORIES:
+        out.append("SHELF_LABELS keys are not CATEGORIES")
+    if re.search(r"category \*\*\d+ characters\*\*|TEXT_LIMITS\[product\]\[category\]", doc):
+        out.append("old category size claim is still there")
+    return out
+
+
 class LimitsDocTest(unittest.TestCase):
     def setUp(self):
         self.doc = DOC.read_text("utf-8")
@@ -265,3 +288,32 @@ class LimitsDocTest(unittest.TestCase):
             self.assertEqual(store["notice"]["from"], first or "2026-11-17")
         late, _ = run("2026-11-17", "2026-11-17", hour=23)  # still the Pacific 17th late in the evening
         self.assertNotIsInstance(late, Refused)
+
+    def test_shelves_follow_code_and_reject_old_category_size(self):  # AV0222-12
+        self.assertEqual(shelf_problems(self.doc), [])
+        self.assertEqual(SHELVES, list(content_model.SHELF_LABELS.values()))  # independent literal list against the code table
+        bullet = next(ln for ln in self.doc.splitlines() if SHELF_MARK in ln)
+        for bad in (self.doc.replace(bullet, ""), self.doc.replace(bullet, bullet + "\n" + bullet),
+                    self.doc.replace(" Flowers,", ""), self.doc.replace("General.", "General, Snacking."),
+                    self.doc.replace("Eggs, Meat", "Meat, Eggs"), self.doc.replace("Flowers, General", "Flowers, Flowers, General"),
+                    self.doc.replace("Hass cannot add a shelf.", ""), self.doc.replace("exactly one shelf", "a shelf"),
+                    self.doc.replace("description **600", "category **40 characters** <!-- content_model.TEXT_LIMITS[product][category] -->, description **600", 1)):
+            self.assertNotEqual(shelf_problems(bad), [])
+        self.assertIn("old category size claim", shelf_problems(self.doc.replace("description **600", "category **40 characters** <!-- x -->, description **600", 1))[0])
+        self.assertEqual(uncited_keys(self.doc), [])  # dropping the product category cite leaves the group covered by its other fields
+        with mock.patch.dict(content_model.SHELF_LABELS, {"general": "Misc"}):
+            self.assertIn("are not the code's", shelf_problems(self.doc)[0])
+        with mock.patch.object(content_model, "CATEGORIES", content_model.CATEGORIES[::-1]):
+            self.assertIn("SHELF_LABELS keys are not CATEGORIES", shelf_problems(self.doc))
+
+    def test_alias_list_cap_is_required_and_code_bound(self):  # AV0222-12
+        from hass import conversation
+        line = next(ln for ln in self.doc.splitlines() if "conversation.ALIAS_LIST_MAX" in ln)
+        self.assertIn("aliases apart from the notes and says how many more", line)
+        self.assertIn("conversation.ALIAS_LIST_MAX", REQUIRED)
+        self.assertFalse(REQUIRED <= {f"{c[3]}.{c[4]}" for c in claims(self.doc.replace(line, ""))})
+        swapped = self.doc.replace("conversation.ALIAS_LIST_MAX", "conversation.MAX_INTERPRETER_ALIASES")  # the 50-hint cap is a different limit
+        self.assertEqual(problems(swapped), [f"line {claims(swapped)[[c[4] for c in claims(swapped)].index('MAX_INTERPRETER_ALIASES')][0]}: doc says 20, conversation.MAX_INTERPRETER_ALIASES is {conversation.MAX_INTERPRETER_ALIASES}"])
+        self.assertFalse(REQUIRED <= {f"{c[3]}.{c[4]}" for c in claims(swapped)})
+        self.assertTrue(any("conversation.MEMORY_LIST_MAX" in ln and "saved notes" in ln for ln in self.doc.splitlines()))  # notes stay separate
+        self.assertIn("conversation.ALIAS_NAME_MAX", self.doc)
