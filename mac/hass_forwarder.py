@@ -14,6 +14,7 @@ from hass.conversation import parse_command, read_command, sender_key  # noqa: E
 MAX_BODY = 256 * 1024
 MAX_REPLY, PIC_RETRY = 2621440, (10, 30)  # HASS-ATTACH-1: picture reply cap (2.5 MiB); waits after the 1st and 2nd failure
 GAVE_UP = "The picture for that message didn't come through. What the message says is still right."
+CARD_GAVE_UP = "I couldn't send the card. Please don't approve it yet."
 # HASS-TAPBACK-1 (replaces the HASS-FAST-1 text 👀, which G rejected: "mark my message, don't send me a message"). The ack is ONE
 # real iMessage tapback on the owner's message, through BlueBubbles' react endpoint (Private API). It is never a text: there is
 # no text-ack code path left. BlueBubbles documents exactly six tapbacks (server source `possibleReactions`) and no emoji
@@ -154,6 +155,7 @@ class Spool:
             "CREATE TABLE IF NOT EXISTS meta(name TEXT PRIMARY KEY,value REAL);"
             "CREATE TABLE IF NOT EXISTS sent(reply_id INTEGER PRIMARY KEY,sent_at REAL);"
             "CREATE TABLE IF NOT EXISTS sent_pics(reply_id INTEGER,idx INTEGER,sent_at REAL,PRIMARY KEY(reply_id,idx));"
+            "CREATE TABLE IF NOT EXISTS card_result(reply_id INTEGER PRIMARY KEY,outcome TEXT NOT NULL,sha256 TEXT,provider_guid TEXT);"
             "CREATE TABLE IF NOT EXISTS pic_tries(reply_id INTEGER,idx INTEGER,tries INTEGER,next_try_at REAL,PRIMARY KEY(reply_id,idx));"
             "CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY,seen_at REAL);"
             "CREATE TABLE IF NOT EXISTS drops(reason TEXT PRIMARY KEY,count INTEGER);"
@@ -221,6 +223,38 @@ class Spool:
         return counts
 
 
+class CardAttachmentSender(bridge_attach.BlueBubblesAttachmentSender):
+    """Reuse the validated multipart sender, but read the bounded provider result for tracked cards."""
+    def __init__(self, base_url, password_file, owners):
+        super().__init__(base_url, password_file, owners, self._result_transport)
+
+    def send_png(self, chat, data, name):
+        self.guid = None
+        super().send_png(chat, data, name)
+        return self.guid
+
+    def _result_transport(self, url, body, headers, timeout):
+        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        try:
+            with bridge._OPENER.open(request, timeout=timeout) as response:
+                if not 200 <= response.status < 300: return response.status
+                raw = response.read(MAX_BODY + 1)
+                if len(raw) > MAX_BODY: raise ValueError("attachment-result-limit")
+                if raw:
+                    result = json.loads(raw)
+                    if type(result) is not dict: raise ValueError("attachment-result-shape")
+                    status = result.get("status", response.status)
+                    if type(status) is not int: raise ValueError("attachment-result-status")
+                    if not 200 <= status < 300: return status
+                    data = result.get("data")
+                    guid = data.get("guid") if type(data) is dict else None
+                    if relay.valid_receipt_guid(guid): self.guid = guid
+                return response.status
+        except urllib.error.HTTPError as exc:
+            exc.close()
+            return exc.code
+
+
 class Forwarder:
     def __init__(self, cfg, spool, clock=time.time, transport=request_json, sender=None, attach=None, stage=None, reactor=None):
         self.cfg, self.spool, self.clock, self.transport = cfg, spool, clock, transport
@@ -232,6 +266,8 @@ class Forwarder:
         self.reactor = reactor or BlueBubblesReactor(f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"])
         self.probe_cache, self.probe_lock = None, threading.Lock()  # (valid until, blocker reason or None)
         self.attach = attach or bridge_attach.BlueBubblesAttachmentSender(
+            f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"], owner_chats(cfg))
+        self.card_attach = attach or CardAttachmentSender(
             f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"], owner_chats(cfg))
         self.big = functools.partial(request_json, limit=MAX_REPLY) if transport is request_json else transport
         self.quick = functools.partial(request_json, timeout=ACK_STATE_TIMEOUT) if transport is request_json else transport
@@ -474,10 +510,43 @@ class Forwarder:
             db.execute("INSERT INTO sent_pics VALUES (?,?,?)", (*key, self.clock()))
         return True
 
+    def card_result(self, item):
+        """None while retrying. Persist the exact outcome before making an ACK or sending the prompt."""
+        db, rid = self.spool.db, item["id"]
+        row = db.execute("SELECT outcome,sha256,provider_guid FROM card_result WHERE reply_id=?", (rid,)).fetchone()
+        if row is None:
+            outcome, digest, guid = "missing-file", None, None
+            if item.get("shots"):
+                key = (rid, 0)
+                tries, retry_at = db.execute("SELECT tries,next_try_at FROM pic_tries WHERE reply_id=? AND idx=?", key).fetchone() or (0, 0)
+                if retry_at > self.clock(): return None
+                try:
+                    data = self.fetch_picture(rid, item["shots"][0])
+                    if data is not None:
+                        guid = self.card_attach.send_png(item["chat"], data, f"hass-{rid}-0.png")
+                        outcome, digest = "sent", hashlib.sha256(data).hexdigest()
+                except (bridge.BridgeError, ValueError, KeyError, TypeError):
+                    if tries + 1 < 3:
+                        db.execute("INSERT OR REPLACE INTO pic_tries VALUES (?,?,?,?)", (*key, tries + 1, self.clock() + PIC_RETRY[tries]))
+                        return None
+                    outcome = "failed"
+            if not relay.valid_receipt_guid(guid): guid = None
+            row = (outcome, digest, guid)
+            db.execute("INSERT INTO card_result VALUES (?,?,?,?)", (rid, *row))
+        outcome, digest, guid = row
+        return ({"outcome": outcome, "png_sha256": digest, "provider_guid": guid}
+                if outcome == "sent" else {"outcome": outcome})
+
     def pull(self):
-        ids = []
+        ids, receipts = [], []
         try:
-            for item in self.control({"op": "pull", "max": 5}, "replies")["items"]:
+            for item in self.control({"op": "pull", "max": 5, "card_receipts": True}, "replies")["items"]:
+                receipt = None
+                if item.get("card"):
+                    if item["chat"] not in owner_chats(self.cfg): continue
+                    receipt = self.card_result(item)
+                    if receipt is None: continue
+                    if receipt["outcome"] != "sent": item = {**item, "text": CARD_GAVE_UP}
                 if item["chat"] not in owner_chats(self.cfg) and not (item["chat"] == self.cfg.get("gChat") and item["pictures"] == 0): continue  # G's chat: text only
                 if not self.spool.db.execute("SELECT 1 FROM sent WHERE reply_id=?", (item["id"],)).fetchone():
                     self.stage("reply-pulled", item["id"])
@@ -494,9 +563,11 @@ class Forwarder:
                         continue
                     self.stage("bb-send-end", item["id"])
                     self.spool.db.execute("INSERT INTO sent VALUES (?,?)", (item["id"], self.clock()))
-                if self.deliver_shots(item): ids.append(item["id"])
+                if receipt is not None: receipts.append({"op": "ack", "ids": [item["id"]], "receipt": receipt})
+                elif self.deliver_shots(item): ids.append(item["id"])
         finally:
             if ids: self.control({"op": "ack", "ids": ids}, "acked")
+            for ack in receipts: self.control(ack, "acked")
 
     # -- HASS-FAST-1 / HASS-TAPBACK-1: the ack (a real tapback). It runs on its own thread with its own SQLite connection, so nothing slow in the main loop
     # (a reply pull, a picture, a catch-up query, a post to the receiver) can delay it and a slow or failing react can
