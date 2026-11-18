@@ -68,6 +68,22 @@ class IsolationTests(unittest.TestCase):
             with self.subTest(listing=listing):
                 self.assert_unknown(listing)
 
+    def test_malformed_header_with_command_and_name_is_unknown(self):
+        good = row("127.0.0.1:1234")
+        for header in (
+            "COMMAND wrong wrong wrong wrong wrong wrong wrong NAME\n",
+            "COMMAND PID USER FD TYPE DEVICE SIZE/OFF WRONG NAME\n",
+            "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME EXTRA\n",
+        ):
+            with self.subTest(header=header):
+                self.assert_unknown(header + good)
+
+    def test_mismatched_port_is_unknown(self):
+        for names in (("127.0.0.1:9999",),
+                      ("127.0.0.1:1234", "[::1]:9999")):
+            with self.subTest(names=names):
+                self.assert_unknown(HEADER + "".join(row(name) for name in names))
+
     def test_supported_loopback_rows_remain_pass(self):
         names = ("127.0.0.1:1234", "[::1]:1234", "localhost:1234")
         combos = [(n,) for n in names] + [names]
