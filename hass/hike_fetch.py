@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import http.client
+import math
 import threading
 import time
 import urllib.error
@@ -40,6 +41,17 @@ def _close(resp):
         resp.close()
     except Exception:
         pass
+
+
+def _refuse_number(_text):  # NaN / Infinity / -Infinity are not JSON; the caller maps this ValueError to ``bad``
+    raise ValueError("non-finite number")
+
+
+def _finite_float(text):  # an exponent like 1e999 overflows to infinity
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("non-finite number")
+    return value
 
 
 class LiveFetch:
@@ -105,7 +117,7 @@ class LiveFetch:
             raw = box["raw"]
             if len(raw) > MAX_BODY_BYTES:
                 raise hl.TransportError("bad", "answer too large")
-            return json.loads(raw)
+            return json.loads(raw, parse_constant=_refuse_number, parse_float=_finite_float)
         except urllib.error.HTTPError as exc:
             raise hl.TransportError("busy" if exc.code in (429, 503, 504) else "network", str(exc.code))
         except TimeoutError:
