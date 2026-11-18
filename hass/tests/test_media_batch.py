@@ -189,7 +189,7 @@ class StoreOriginalsTests(unittest.TestCase):
         moved, = self.root.rglob(".*.jpg.unwind-*")
         self.assertEqual(moved.read_bytes(), pic(1))
         self.assertCountEqual(getattr(error, "__notes__", ()),
-                              [f"Batch unwind kept: {path}" for path in (sidecar, moved)])
+                              [f"Batch unwind kept: {path.resolve()}" for path in (sidecar, moved)])  # _open_root resolves the root (symlinked TMPDIR)
 
     def test_the_many_reply_is_built_from_the_constant(self):
         self.assertEqual(media.MAX_PHOTOS_PER_MESSAGE, 4)
