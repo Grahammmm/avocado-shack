@@ -64,7 +64,7 @@ class ApplyEngine:
             try:
                 if item_id:
                     fresh = parse_item(client.get_item(item_id))
-                    if d.is_stale(draft, fresh):
+                    if fresh.id != item_id or d.is_stale(draft, fresh):
                         raise d.DraftRefused("The till changed; ask for a fresh draft and approve its new code.")
                 sku = entry["after"].get("sku")
                 if sku and (draft.kind == "set_sku" or not item_id):
@@ -79,7 +79,8 @@ class ApplyEngine:
                         item_id = result["id"]
                 raw = client.get_item(item_id)
                 status = "applied" if self._matches(entry, raw) else "failed"
-                self.journal.settle(db, row["code"], status, self._result(entry, raw))
+                wrong_item = bool(entry["item_id"]) and raw.get("id") != entry["item_id"]
+                self.journal.settle(db, row["code"], status, None if wrong_item else self._result(entry, raw))
                 return status
             except d.DraftRefused:
                 self.journal.settle(db, row["code"], "failed")
@@ -89,6 +90,8 @@ class ApplyEngine:
 
     @staticmethod
     def _matches(entry, raw):
+        if entry["item_id"] and raw.get("id") != entry["item_id"]:
+            return False  # an existing-item change is bound to the approved item id
         item = parse_item(raw)
         values = {"price": item.price_cents, "stock": None if item.stock is None else format_quantity(item.stock),
                   "sku": item.sku, "hidden": item.hidden, "name": item.name}
