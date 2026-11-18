@@ -131,6 +131,26 @@ class PricedTextConversation(unittest.TestCase):
                 self.assertNotIn("wholesale", str(chat.asked).lower())
                 self.doCleanups()
 
+    def test_ambiguous_quantity_stays_private_even_if_reader_fails(self):
+        text = "add plums $3 each; 12 jars or 24 jars"
+        for result in ({"price_cents": None, "cost_cents": None, "quantity": 12},
+                       {"price_cents": None, "cost_cents": None, "quantity": None}, RuntimeError("offline")):
+            with self.subTest(result=result):
+                chat = self.chat()
+                reader = Mock()
+                if isinstance(result, Exception):
+                    reader.fields.side_effect = result
+                else:
+                    reader.fields.return_value = result
+                chat.script("add plums", base.reply(name="Plums", shelf="fruit"))
+                with patch.object(chat.conv, "answer_reader", reader):
+                    chat.say(text)
+                reader.fields.assert_called_once_with(text)
+                self.assertTrue(chat.asked)
+                self.assertNotIn("12", str(chat.asked))
+                self.assertNotIn("24", str(chat.asked))
+                self.doCleanups()
+
     def test_priced_photo_while_a_draft_waits_keeps_the_label_and_preview_path(self):
         chat = self.chat()
         chat.conv.labels, labels = label_reader(recorded({k: v for k, v in GLUE.items() if k != "brand"}))

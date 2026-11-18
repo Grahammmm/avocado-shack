@@ -114,7 +114,8 @@ def commerce_answers(value):
 
 
 _FINANCE_CUE = re.compile(
-    r"\b(?:bought|paid|cost|costs|wholesale|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$",
+    r"\b(?:bought|paid|cost|costs|wholesale|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$|\d"
+    r"|\b(?:" + "|".join(NUMBER_WORDS) + r")\s+(?:" + "|".join(UNIT_WORDS) + r")\b",
     re.I,
 )
 
