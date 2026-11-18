@@ -43,7 +43,7 @@ class UndoTwiceTests(StoreTestCase):
         self.assertEqual((self.reverted_by(self.a), self.reverted_by(self.u)), (self.u, None))
 
     def test_undo_of_an_undo_is_refused(self):
-        self.assert_refused(self.u, f"{self.u} is an undo; to bring the change back, ask for it again")
+        self.assert_refused(self.u, f"{self.u} is an undo; to bring the change back, use again <code> with the original draft code")
 
     def test_original_still_reports_already_undone(self):
         self.assert_refused(self.a, f"{self.a} was already undone by {self.u}")
@@ -52,7 +52,7 @@ class UndoTwiceTests(StoreTestCase):
         path = self.draft(self.u)
         draft = json.loads(path.read_text("utf-8"))
         path.write_text(json.dumps({**draft, "ops": [{"op": "store.set_hours", "args": {}}, *draft["ops"]]}), "utf-8")
-        self.assert_refused(self.u, f"{self.u} is an undo; to bring the change back, ask for it again")
+        self.assert_refused(self.u, f"{self.u} is an undo; to bring the change back, use again <code> with the original draft code")
 
     def test_unreadable_draft_is_refused(self):
         cases = {"truncated": b'{"ops": [', "empty": b"", "not utf-8": b"\xff\xfe{", "top list": b"[]",
