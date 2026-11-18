@@ -7,6 +7,10 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## HASS-LIVE-FIX-2 — one finished listing and a separate source line (November 17, 2026)
+
+Photo intake waits for its label before replying, and uses the faithful catalog edit when product-photo styling is enabled. The exact supplier correction updates the source line without changing public description, price, or picture. Ambiguous changes get one question. Private real-browser replay exercised the glue photo, its supplier correction, and text-only persimmons. See [the install note](docs/hass/INSTALL-LIVE-FIX-2.md) for the operator-only switches and timing evidence. No live configuration or publication.
+
 ## HASS-SITE-PRICE-1 — owner selling price on product cards (November 17, 2026)
 
 The real card and its private draft preview can show the optional owner-entered USD selling price, including per-lb or each when supplied. The same card serves item links. Cost and quantity remain private, and existing unpriced catalog files are unchanged. No live publication or runtime changes.

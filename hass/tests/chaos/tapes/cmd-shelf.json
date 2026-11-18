@@ -1,0 +1,22 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": "gpt-6.2-sol",
+    "last_primary_error": null,
+    "last_seconds": 3.006
+   },
+   "method": "interpret",
+   "result": {
+    "question": "Which shelf would you like to update, and what should it say?"
+   },
+   "route": "codex",
+   "seconds": 3.006,
+   "turn": 1
+  }
+ ],
+ "case": "cmd-shelf"
+}

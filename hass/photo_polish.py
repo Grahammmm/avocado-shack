@@ -480,7 +480,10 @@ def match(original, framed):
         tms = [_template(Image, c, mask, tw, th) for c in tchans]
         return tms, [ImageStat.Stat(t, m) for t, m in tms]
     best = (-2.0, None)
-    for i in range(16):
+    # On a portrait/landscape phone frame the product can occupy most of the
+    # long axis. Keep the same small candidates but search up to the full frame.
+    steps = max(16, math.ceil(math.log(max(w, h) / (min(w, h) * 0.22), 1.11)))
+    for i in range(steps + 1):
         size = round(min(w, h) * 0.22 * 1.11 ** i)
         for stretch in STRETCH:
             tw = round(size * rgb.width / max(rgb.size) * stretch)

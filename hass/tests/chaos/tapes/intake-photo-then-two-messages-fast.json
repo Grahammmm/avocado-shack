@@ -1,0 +1,45 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": 4.513
+   },
+   "method": "label",
+   "result": {
+    "category": "fruit",
+    "colour": "Orange with green tops",
+    "description": "The illustration shows three oranges with green tops against a plain beige background.",
+    "name": "Oranges",
+    "product_type": "Oranges"
+   },
+   "route": "codex",
+   "seconds": 4.513,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": 350,
+    "quantity": null
+   },
+   "route": "codex-sub",
+   "seconds": 2.791,
+   "turn": 2
+  }
+ ],
+ "case": "intake-photo-then-two-messages-fast"
+}

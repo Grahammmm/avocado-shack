@@ -1,0 +1,22 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "openai",
+    "last_error": null,
+    "last_fallback": true,
+    "last_model": "qwen3.8:27b-thinkingcap-q6",
+    "last_primary_error": "codex-local",
+    "last_seconds": 3.037
+   },
+   "method": "interpret",
+   "result": {
+    "unsupported": "I don't know how many Hass avocados are left. I'd need a current count from the shop."
+   },
+   "route": "codex-sub",
+   "seconds": 3.037,
+   "turn": 1
+  }
+ ],
+ "case": "stock-typo"
+}

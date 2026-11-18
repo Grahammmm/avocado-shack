@@ -1,0 +1,41 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": 900,
+    "quantity": null
+   },
+   "route": "qwen",
+   "seconds": 1.958,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "openai",
+    "last_error": null,
+    "last_fallback": true,
+    "last_model": "qwen3.8:27b-thinkingcap-q6",
+    "last_primary_error": "codex-local",
+    "last_seconds": 8.836
+   },
+   "method": "interpret",
+   "result": {
+    "question": "I can add the walnuts as a new item, but I need a couple of details first. What should I call them on the site, and who is the maker (the name and place you'd like shown)?"
+   },
+   "route": "qwen",
+   "seconds": 8.836,
+   "turn": 1
+  }
+ ],
+ "case": "intake-long-ramble"
+}

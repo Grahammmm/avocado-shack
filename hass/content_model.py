@@ -34,7 +34,7 @@ SHELF_LABELS = {"fruit": "Fruit", "vegetables": "Vegetables", "dairy": "Dairy & 
 # key order (the migrated records use three historical orders; the generator
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
-PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn", "sellingPrice")  # public when present; never required (any status)
+PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn", "sellingPrice", "supplier")  # public when present
 # Canonical intake USD decimal, up to $999999.99, with the basis only if supplied.
 SELLING_PRICE_RE = re.compile(r"(?:0|[1-9][0-9]{0,5})\.[0-9]{2}(?: per lb| each)?")
 SELLING_PRICE_ERROR = "must be 0.00 to 999999.99 in USD, optionally followed by ' per lb' or ' each'"
@@ -250,6 +250,11 @@ def valid_selling_price(value):
     return isinstance(value, str) and SELLING_PRICE_RE.fullmatch(value) is not None
 
 
+def valid_supplier(value):
+    return (isinstance(value, str) and len(value) <= 60
+            and re.fullmatch(r"[^\W\d_][^\W_]*(?:[ &'’\-][^\W_]+){0,4}", value) is not None)
+
+
 def validate_products(problems, products, makers, site_dir: Path | None, checked: date | None = None):
     if not isinstance(products, list):
         problems.append("products: must be a list")
@@ -277,6 +282,8 @@ def validate_products(problems, products, makers, site_dir: Path | None, checked
         category = rec.get("category")
         if "sellingPrice" in rec and not valid_selling_price(rec["sellingPrice"]):
             problems.append(f"{where}.sellingPrice: {SELLING_PRICE_ERROR}")
+        if "supplier" in rec and not valid_supplier(rec["supplier"]):
+            problems.append(f"{where}.supplier: must be a short supplier name")
         if "labelSource" in rec:
             from hass.product_claims import valid_source
             if not valid_source(rec["labelSource"]):

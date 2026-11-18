@@ -1,0 +1,22 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": "gpt-6.2-sol",
+    "last_primary_error": null,
+    "last_seconds": 5.995
+   },
+   "method": "interpret",
+   "result": {
+    "unsupported": "I don't know what's running low right now. I'd need a current shelf check."
+   },
+   "route": "codex",
+   "seconds": 5.995,
+   "turn": 1
+  }
+ ],
+ "case": "stock-low"
+}
