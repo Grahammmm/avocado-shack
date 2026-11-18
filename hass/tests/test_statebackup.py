@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from hass import conversation, editor, statebackup
+from hass import conversation, editor, media, statebackup
 from hass.content_model import REPO_ROOT
 from hass.ops import load_registry
 from hass.tests import fixture_ops
@@ -107,6 +107,25 @@ class DrillTests(BackupTestCase):
         self.assertEqual(self.replies(), [text])
 
 class CreateRefusalTests(BackupTestCase):
+    def test_fallback_jpeg_names_content_and_size_are_bounded(self):
+        state = self.repo.state
+        folder = state / 'screenshots'
+        data = b'\xff\xd8\xffnot the named picture'
+        oversized = data.ljust(media.MAX_BYTES + 1, b'\x00')
+        for name, payload, reason in (
+            ('other.jpg', data, 'unknown entry'),
+            ('0' * 64 + '.jpg', data, 'invalid fallback picture'),
+            (hashlib.sha256(oversized).hexdigest() + '.jpg', oversized, 'invalid fallback picture'),
+        ):
+            with self.subTest(reason=reason, name=name):
+                path = folder / name
+                folder.mkdir(mode=0o700, exist_ok=True)
+                path.write_bytes(payload)
+                got = statebackup.create(state, self.bk)
+                self.assertEqual(got, {'result': 'refused', 'problems': [f'{reason}: screenshots/{name}']})
+                self.assertEqual(list(self.bk.iterdir()), [])
+                path.unlink()
+
     def test_correspondence_directory_is_skipped_not_copied(self):
         from hass import corrlog
         self.assertTrue(self.conv.log.record("error", "save-failed"))
