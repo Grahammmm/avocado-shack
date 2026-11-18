@@ -30,7 +30,7 @@ class ShelfParseTests(unittest.TestCase):
     def test_parse_whole_message_only(self):
         self.assertEqual(conversation.parse_command("  Shelf Dairy & Cheese! "), ("shelf", "dairy & cheese"))
         self.assertEqual(conversation.parse_command("shelf"), ("shelf", ""))
-        for text in ("shelf chek done. milk in, cheese out", "shelf report then specials", "shelf dairy and cheese", "shelf Hass avocado", "please shelf eggs", "shelf eggs\nshelf fruit", "shelves", "shelfeggs"):
+        for text in ("shelf chek done. milk in, cheese out", "shelf report then specials", "please shelf eggs", "shelf eggs\nshelf fruit", "shelves", "shelfeggs"):
             self.assertIsNone(conversation.parse_command(text), text)
 
 
@@ -68,7 +68,7 @@ class ShelfTests(StoreMixin, ConversationTestCase):
             for text in (f"shelf {key}", f"SHELF  {label.upper()}.", f"shelf {label}!"):
                 with self.subTest(text=text):
                     self.assertEqual(self.shelf(text)[0], f"Shelf: {label}")
-        for text in ("shelf", "shelf veg", "shelf <b>x</b>"):
+        for text in ("shelf", "shelf dairy and cheese", "shelf Hass avocado", "shelf veg", "shelf <b>x</b>"):
             with self.subTest(text=text):
                 self.assertEqual(self.shelf(text), [CHOOSE])  # never echoes what was typed
         self.assertEqual(self.drafts(), [])

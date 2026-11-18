@@ -31,6 +31,8 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(again)(?:\s+((?s:.*)))?"  # AV2152-03 (H05/H16): groups 22/23; the code is checked by _again, never guessed
                         r"|(shelf)(?:\s+(.*))?")  # AV1052-05 (H17): groups 24/25; one line, the shelf is checked by _shelf
 
+SHELF_NOT_A_NAME = frozenset("report specials special check chek checked done finished in out then stock sold".split())  # AV1052-05: words that make "shelf ..." a stock update or report
+
 HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: " + q('"Stop showing the eggs as sold out"') + ".",  # AV1537-03, test_help
     "Other things you can say:",
     q("yes") + " - go ahead with the change waiting for you",
@@ -153,12 +155,10 @@ def parse_command(text: str, *, listing_names=False):
     if norm in UNDO_PHRASES: return "undo", None  # AV0222-07: the same as a bare undo
     match = COMMAND_RE.fullmatch(norm)
     if not match: return None
-    if match[24]:  # AV1052-05: bare, one word or a known shelf name only; longer text ("shelf chek done. milk in") stays a stock update or report
+    if match[24]:  # AV1052-05: a shelf name or an unknown shelf gets the read-only chooser; a stock update or report ("shelf chek done. milk in, cheese out", "shelf report then specials") stays with the interpreter
         rest = (match[25] or "").strip()
-        known = {w.lower() for w in SHELF_LABELS.values()} | set(SHELF_LABELS)
-        norm_rest = " ".join(re.sub(r"[^\w&]+", " ", rest).split())
-        if len(rest.split()) <= 1 or norm_rest in known: return "shelf", rest  # _shelf resolves it
-        return None
+        if re.search(r"[,.;:?!]", rest) or set(rest.split()) & SHELF_NOT_A_NAME: return None
+        return "shelf", rest  # _shelf resolves it
     if match[22]: return "again", (match[23] or "").strip()  # AV2152-03: the rest as sent (lower-cased); _again accepts only a code
     if match[21]: return "backlog", None  # SKILLS-FW-3
     if match[20]: return "photos", None  # AV0222-04
