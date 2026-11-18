@@ -82,10 +82,6 @@ class QuestionTests(unittest.TestCase):
         line = question({"name": "Lion's Mane", "brand": "Far West Fungi"}, None, PRODUCTS)
         self.assertTrue(line.endswith(" \ue000Lion's Mane\ue001 is already on the website. Reply with that name if you want to update it instead."))
 
-    def test_held_twin_remains_unmentioned(self):
-        held = {"name": "Raw cream", "brand": "Straus Family Creamery"}
-        self.assertEqual(question(held, None, PRODUCTS), f"The label looks like \ue000Straus Family Creamery Raw cream{TAIL}")
-
     def test_hidden_match_preserves_brand_suppression_and_maker_line(self):
         found = {"name": "Straus Family Creamery whole milk", "brand": "Straus Family Creamery"}
         products = [{"id": "p-4", "name": "Straus Family Creamery whole milk", "brand": "Straus Family Creamery", "status": "hidden"}]

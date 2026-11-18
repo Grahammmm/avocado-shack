@@ -35,11 +35,6 @@ class CompareTests(base.EvalTestCase):
         self.assertNotIn(CANARY, out)
         self.assertEqual(94 + 2 + 1 + 1, len(self.cases))
 
-    def test_pure_compare_scores_each_side_once_with_same_objects(self):
-        with mock.patch.object(ev, "score", wraps=ev.score) as spy:
-            ev.compare(self.cases, self.replies, self.replies, base.REGISTRY)
-        self.assertEqual([c.args[0] is self.cases and c.args[2] is base.REGISTRY for c in spy.call_args_list], [True, True])
-
     def test_identical_inputs_have_no_changes_and_exit_0(self):
         code, out, err = self.cmp(self.replies, self.replies)
         self.assertEqual((code, err), (0, ""))

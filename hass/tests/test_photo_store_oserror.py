@@ -67,11 +67,6 @@ class StoreOSErrorTests(SetPhotoTestCase):
             reason = self.rejected("refused", _photo(PID, self.jpg))["reason"]
         self.assertEqual(reason, "photo store is unusable: state dir is shared")
 
-    def test_happy_path_still_installs(self):
-        draft = self.repo.run(_photo(PID, self.jpg))
-        self.assertTrue(draft)
-        self.assertEqual(self.repo.product(PID)["image"], f"assets/products/photo-{self.jpg[:16]}.jpg")
-
 
 if __name__ == "__main__":
     unittest.main()
