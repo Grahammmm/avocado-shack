@@ -39,7 +39,7 @@ HELP_ENTRIES = (
     ("no", "Drafts", ("cancel", "reject"), (q("no") + " - cancel the change waiting for you", q("no a1b2") + " - cancel the one with that code")),
     ("undo", "Drafts", (), (q("undo") + " - take back the last change", q("undo a1b2") + " - take back that one")),
     ("show", "Drafts", (), (q("show a1b2") + " - repeat a waiting change (its code or a word from it)",)),
-    ("again", "Drafts", (), (q("again a1b2") + " - re-draft an expired change (within 7 days)",)),  # AV2152-03
+    ("again", "Drafts", (), (q("again a1b2") + " - re-draft an expired or undone change (within 7 days)",)),  # AV2152-03
     ("find", "Look up", (), (q("find lion's mane") + " - look something up",)),
     ("listing", "Look up", (), (q("listing Etto") + " - what's shown for one thing",)),
     ("hidden", "Look up", (), (q("hidden") + " - lists what's hidden",)),

@@ -2335,6 +2335,12 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             else: self._reply("Nothing has been saved yet. " + note if note else "There's nothing to undo.", long_ok=True)
             return "no-target"
         target = done[-1]
+        if _is_undo(target) or self._has_revert(target):  # AV2137-01: an undo of an undo is never drafted; say how to bring the change back
+            link = [r for r in self._drafts("state = 'reverted'") if self._mine(r) and r["change_id"] and any(
+                c.get("op") == "history.revert" and (c.get("args") or {}).get("changeId") == r["change_id"] for c in json.loads(target["ops_json"]))]
+            self._reply("That code is for an undo. To bring the change back, send " + q("again " + link[0]["code"]) + "." if len(link) == 1
+                        else "That code is for an undo. To bring the change back, send " + q("again") + " with the original change's code.")
+            return "no-target"
         theirs = self._shared and not self._mine(target)  # HASS-OWNERS-2: the site's last change was another owner's
         if theirs and code is None:  # a bare `undo` never reaches another owner's work: it says whose it is, and how to ask for it
             self._reply(f"The last change on the website was {self._whose(target['chat'], False)}: {q(target['summary'])}. I haven't undone anything. "
