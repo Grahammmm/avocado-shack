@@ -21,11 +21,24 @@ def _skill(plan, name="t.skill"):
 def _op(args=None): return {"op": "store.set_hours", "args": args or {"hours": ["Closed"]}}
 
 
+def plan_row_ids(path):
+    """Ids of the plan rows of one cases file, so run_file executes only those (case rows belong to test_skills_cases).
+
+    Returns None (run every row, as before) when the file has a row this filter cannot name exactly - a non-object
+    row or a plan row without an id - so a malformed file is still reported here as it always was."""
+    rows = load_rows(path)
+    if not all(isinstance(r, dict) for r in rows) or any(r.get("plan") and "id" not in r for r in rows):
+        return None
+    return [r["id"] for r in rows if r.get("plan")]
+
+
 class RealSkillPlans(unittest.TestCase):
     def test_every_plan_row_of_every_skill_passes(self):
         skills, rows = registry_skills(), 0
         for path in discover():
-            for result in run_file(path, skills):
+            ids = plan_row_ids(path)
+            if ids == []: continue  # no plan rows: nothing for this test to check
+            for result in run_file(path, skills, only=ids):
                 if not result.plan: continue
                 rows += 1
                 with self.subTest(file=path.name, row=result.id):
@@ -35,7 +48,8 @@ class RealSkillPlans(unittest.TestCase):
 
 class KitPlanRows(unittest.TestCase):
     def test_toy_plan_rows_do_what_they_say(self):
-        results = [r for r in run_file(FIXTURES / "_selftest" / "toy.jsonl", load_skill_module(TOY), selftest=True) if r.plan]
+        toy = FIXTURES / "_selftest" / "toy.jsonl"
+        results = [r for r in run_file(toy, load_skill_module(TOY), selftest=True, only=plan_row_ids(toy)) if r.plan]
         self.assertGreaterEqual(len(results), 4)
         for result, ok, want in judge_selftest(results):
             with self.subTest(row=result.id):

@@ -507,6 +507,8 @@ class Dispatcher:
         if not self.simple_intake(req): return msg, req
         public, answers = item_intake.caption_answers(msg.text, getattr(self.conv, "_intake_fields", None))
         if not answers: return msg, req
+        if not msg.attachments:
+            public = item_intake.without_unresolved_finance(public)
         slots = dict(req["slots"]) if req else {}
         slots["intake"] = {**slots.get("intake", {}), **answers,
                            "simple": bool(slots.get("intake", {}).get("simple") or not public)}
