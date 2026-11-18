@@ -59,7 +59,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 Longer text is refused and nothing is changed; shorten it and send it again.
 
-- Product: name **80 characters** <!-- content_model.TEXT_LIMITS[product][name] -->, brand **60 characters** <!-- content_model.TEXT_LIMITS[product][brand] -->, category **40 characters** <!-- content_model.TEXT_LIMITS[product][category] -->, description **600 characters** <!-- content_model.TEXT_LIMITS[product][description] -->, photo description **200 characters** <!-- content_model.TEXT_LIMITS[product][imageAlt] -->.
+- Product: name **80 characters** <!-- content_model.TEXT_LIMITS[product][name] -->, brand **60 characters** <!-- content_model.TEXT_LIMITS[product][brand] -->, description **600 characters** <!-- content_model.TEXT_LIMITS[product][description] -->, photo description **200 characters** <!-- content_model.TEXT_LIMITS[product][imageAlt] -->.
+- A product is on exactly one shelf: Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread, Flowers, General. Hass cannot add a shelf. <!-- content_model.SHELF_LABELS -->
 - Maker: name **80 characters** <!-- content_model.TEXT_LIMITS[maker][name] -->, place **60 characters** <!-- content_model.TEXT_LIMITS[maker][place] -->, story **600 characters** <!-- content_model.TEXT_LIMITS[maker][story] -->.
 - Hike: title **80 characters** <!-- content_model.TEXT_LIMITS[event][title] -->, description **800 characters** <!-- content_model.TEXT_LIMITS[event][description] -->, meeting point **160 characters** <!-- content_model.TEXT_LIMITS[event][meetingPoint] -->, recap **2000 characters** <!-- content_model.TEXT_LIMITS[event][recap] -->, other details such as what to bring **400 characters** <!-- content_model.TEXT_LIMITS[event][bring] -->.
 - Route idea: each text field **600 characters** <!-- content_model.TEXT_LIMITS[routeIdea][description] -->.
