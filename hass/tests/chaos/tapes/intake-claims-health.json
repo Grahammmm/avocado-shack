@@ -1,0 +1,41 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": 1400,
+    "quantity": null
+   },
+   "route": "qwen",
+   "seconds": 2.306,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": "gpt-6.2-sol",
+    "last_primary_error": null,
+    "last_seconds": 3.169
+   },
+   "method": "interpret",
+   "result": {
+    "unsupported": "I can’t say a shop product cures colds. Send me what you’d like to say about its taste or how you use it instead."
+   },
+   "route": "codex",
+   "seconds": 3.169,
+   "turn": 1
+  }
+ ],
+ "case": "intake-claims-health"
+}

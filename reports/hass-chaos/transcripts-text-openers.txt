@@ -1,0 +1,810 @@
+====================================================================================================
+edit-price-plain | edit | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.165s model=2.986s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.986}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'actually make it 4 bucks' photos=[] -> not-drafted local=0.082s model=0s err=None
+   [reply 1, att=0] Give the selling price separately, not in the website wording. The listing is unchanged.
+   CHECK FAIL t2.has_any - wanted one of ["$4.00"] 
+====================================================================================================
+edit-source-miners | edit | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.15s model=2.97s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.97}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'Nice. Just change one thing "ask us about the source in the store". You should get that info here. This is from "miners".' photos=[] -> not-drafted local=0.105s model=0s err=None
+   [reply 1, att=0] I can't use that wording. The listing is unchanged; send the change in plain words.
+   CHECK FAIL t2.has_any - wanted one of ["miners"] 
+====================================================================================================
+edit-wrong-field | edit | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.636s model=2.463s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.463}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'change the name to $5' photos=[] -> not-drafted local=2.851s model=2.754s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.754}
+   [reply 1, att=0] I can't use that wording. The listing is unchanged; send the change in plain words.
+====================================================================================================
+edit-contradiction | edit | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.489s model=2.354s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.354}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'make it $4' photos=[] -> not-drafted local=2.598s model=2.498s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.498}
+   [reply 1, att=0] I can't use that wording. The listing is unchanged; send the change in plain words.
+--- T3 owner: 'no $3' photos=[] -> not-drafted local=0.096s model=0s err=None
+   [reply 1, att=0] I can't use that wording. The listing is unchanged; send the change in plain words.
+--- T4 owner: 'wait $4.50' photos=[] -> not-drafted local=2.914s model=2.832s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.832}
+   [reply 1, att=0] I can't use that wording. The listing is unchanged; send the change in plain words.
+   CHECK FAIL t4.has_any - wanted one of ["$4.50"] 
+====================================================================================================
+edit-no-wait | edit | commits 0 | misses 0 | drafts [('f73e', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.989s model=2.805s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.805}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'no wait' photos=[] -> proposed local=2.191s model=1.962s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 1.962}
+   [reply 1, att=1] Here's the listing:
+      Name: no wait
+      Brand: Producer not identified
+      Description: no wait.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes f73e to publish, or tell me what to change.
+      Website description: no wait.
+      Source line: Ask us about the source in store.
+      Picture description: no wait (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      no wait
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      no wait.
+      
+      Link to this
+      Nothing changes until your yes.
+====================================================================================================
+edit-undo-draft | undo | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.765s model=2.623s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.623}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'undo' photos=[] -> no-target local=0.075s model=0s err=None
+   [reply 1, att=0] There's nothing to undo.
+====================================================================================================
+edit-description-add | edit | commits 0 | misses 0 | drafts [('dc61', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.307s model=2.173s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.173}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'add: sweet and crunchy, eat them firm' photos=[] -> proposed local=2.303s model=1.999s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 1.999}
+   [reply 1, att=1] Here's the listing:
+      Name: sweet and crunchy; eat them firm
+      Brand: Producer not identified
+      Description: sweet and crunchy; eat them firm.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes dc61 to publish, or tell me what to change.
+      Website description: sweet and crunchy; eat them firm.
+      Source line: Ask us about the source in store.
+      Picture description: sweet and crunchy; eat them firm (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      sweet and crunchy; eat them firm
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      sweet and crunchy; eat them firm.
+      
+      Link to this
+      Nothing changes until your yes.
+====================================================================================================
+edit-rename | edit | commits 0 | misses 0 | drafts [('7dd3', 'proposed')]
+--- T1 owner: 'add persimmons $3.50/lb' photos=[] -> question local=2.952s model=2.766s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.766}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'call it Fuyu Persimmons' photos=[] -> proposed local=2.248s model=1.992s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 1.992}
+   [reply 1, att=1] Here's the listing:
+      Name: Fuyu Persimmons
+      Brand: Producer not identified
+      Description: Fuyu Persimmons.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes 7dd3 to publish, or tell me what to change.
+      Website description: Fuyu Persimmons.
+      Source line: Ask us about the source in store.
+      Picture description: Fuyu Persimmons (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      Fuyu Persimmons
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      Fuyu Persimmons.
+      
+      Link to this
+      Nothing changes until your yes.
+====================================================================================================
+edit-cost-qty-private | privacy | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.081s model=2.949s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.949}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'i paid 1.75 a lb and have 40 lbs' photos=[] -> question local=2.792s model=2.721s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.721}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Private (not shown on the website): cost $1.75, quantity 40
+      Tell me what to change, or send the missing name.
+====================================================================================================
+edit-unrelated-question-mid-draft | edit | commits 0 | misses 0 | drafts [('566e', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.603s model=2.491s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.491}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'what time do we close sunday' photos=[] -> proposed local=2.243s model=1.99s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 1.99}
+   [reply 1, att=1] Here's the listing:
+      Name: what time do we close sunday
+      Brand: Producer not identified
+      Description: what time do we close sunday.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes 566e to publish, or tell me what to change.
+      Website description: what time do we close sunday.
+      Source line: Ask us about the source in store.
+      Picture description: what time do we close sunday (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      what time do we close sunday
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      what time do we close sunday.
+      
+      Link to this
+      Nothing changes until your yes.
+--- T3 owner: 'ok make it $4' photos=[] -> not-drafted local=2.667s model=2.431s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.431}
+   [reply 1, att=0] I can't use that wording. The listing is unchanged; send the change in plain words.
+   CHECK FAIL t3.has_any - wanted one of ["$4.00"] 
+====================================================================================================
+edit-question-mark | edit | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.496s model=2.338s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.338}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: '?' photos=[] -> question local=0.079s model=0s err=None
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Tell me what to change, or send the missing name.
+====================================================================================================
+approve-right-code | approve | commits 0 | misses 0 | drafts [('d48c', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.701s model=2.506s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.506}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'yes zzzz' photos=[] -> proposed local=2.45s model=2.18s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 2.18}
+   [reply 1, att=1] Here's the listing:
+      Name: yes zzzz
+      Brand: Producer not identified
+      Description: yes zzzz.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes d48c to publish, or tell me what to change.
+      Website description: yes zzzz.
+      Source line: Ask us about the source in store.
+      Picture description: yes zzzz (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      yes zzzz
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      yes zzzz.
+      
+      Link to this
+      Nothing changes until your yes.
+   CHECK FAIL t2.disposition - proposed not in ['approved'] 
+   CHECK FAIL published - 0 publishes (want 1) 
+   CHECK FAIL public_has:Persimmon - public catalog must hold "Persimmon" 
+====================================================================================================
+approve-bare-yes | approve | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.876s model=2.744s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.744}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'yes' photos=[] -> no-target local=0.086s model=0s err=None
+   [reply 1, att=0] To put a change on the website, reply yes and its code, like yes a1b2.
+====================================================================================================
+approve-wrong-code | approve | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.55s model=3.315s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 3.315}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'yes 9999' photos=[] -> no-target local=0.114s model=0s err=None
+   [reply 1, att=0] I don't have a change with that code.
+====================================================================================================
+approve-typo-code | approve | commits 0 | misses 0 | drafts [('ae2e', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=4.747s model=4.632s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 4.632}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'yes zzzzx' photos=[] -> proposed local=2.125s model=1.919s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 1.919}
+   [reply 1, att=1] Here's the listing:
+      Name: yes zzzzx
+      Brand: Producer not identified
+      Description: yes zzzzx.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes ae2e to publish, or tell me what to change.
+      Website description: yes zzzzx.
+      Source line: Ask us about the source in store.
+      Picture description: yes zzzzx (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      yes zzzzx
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      yes zzzzx.
+      
+      Link to this
+      Nothing changes until your yes.
+====================================================================================================
+approve-caps-yes | approve | commits 0 | misses 0 | drafts [('795d', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.855s model=3.614s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 3.614}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'YES zzzz' photos=[] -> proposed local=2.402s model=2.118s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 2.118}
+   [reply 1, att=1] Here's the listing:
+      Name: YES zzzz
+      Brand: Producer not identified
+      Description: YES zzzz.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes 795d to publish, or tell me what to change.
+      Website description: YES zzzz.
+      Source line: Ask us about the source in store.
+      Picture description: YES zzzz (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      YES zzzz
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      YES zzzz.
+      
+      Link to this
+      Nothing changes until your yes.
+   CHECK FAIL published - 0 publishes (want 1) 
+====================================================================================================
+approve-yes-please | approve | commits 0 | misses 0 | drafts [('2034', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.273s model=3.075s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 3.075}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'looks good yes please!' photos=[] -> proposed local=2.198s model=1.927s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 1.927}
+   [reply 1, att=1] Here's the listing:
+      Name: looks good yes please!
+      Brand: Producer not identified
+      Description: looks good yes please!.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes 2034 to publish, or tell me what to change.
+      Website description: looks good yes please!.
+      Source line: Ask us about the source in store.
+      Picture description: looks good yes please! (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      looks good yes please!
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      looks good yes please!.
+      
+      Link to this
+      Nothing changes until your yes.
+====================================================================================================
+approve-old-draft-after-edit | approve | commits 0 | misses 0 | drafts [('62fa', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.952s model=2.818s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.818}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'make it $4' photos=[] -> question local=2.833s model=2.717s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.717}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $4.00 per lb
+      Category: General (say 'category X' to change)
+      Tell me what to change, or send the missing name.
+--- T3 owner: 'yes zzzz' photos=[] -> proposed local=2.611s model=2.341s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 2.341}
+   [reply 1, att=1] Here's the listing:
+      Name: yes zzzz
+      Brand: Producer not identified
+      Description: yes zzzz.
+      Price: $4.00 per lb
+      Category: General (say 'category X' to change)
+      Reply yes 62fa to publish, or tell me what to change.
+      Website description: yes zzzz.
+      Source line: Ask us about the source in store.
+      Picture description: yes zzzz (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      yes zzzz
+      
+      $4.00 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      yes zzzz.
+      
+      Link to this
+      Nothing changes until your yes.
+   CHECK FAIL published - 0 publishes (want 1) 
+====================================================================================================
+approve-two-drafts-old-code | approve | commits 0 | misses 0 | drafts [('a114', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.627s model=2.466s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.466}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'add pomegranates $2 each' photos=[] -> question local=2.724s model=2.621s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.621}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $2.00 per lb
+      Category: General (say 'category X' to change)
+      Tell me what to change, or send the missing name.
+--- T3 owner: 'yes zzzz' photos=[] -> proposed local=2.624s model=2.328s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 2.328}
+   [reply 1, att=1] Here's the listing:
+      Name: yes zzzz
+      Brand: Producer not identified
+      Description: yes zzzz.
+      Price: $2.00 per lb
+      Category: General (say 'category X' to change)
+      Reply yes a114 to publish, or tell me what to change.
+      Website description: yes zzzz.
+      Source line: Ask us about the source in store.
+      Picture description: yes zzzz (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      yes zzzz
+      
+      $2.00 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      yes zzzz.
+      
+      Link to this
+      Nothing changes until your yes.
+   CHECK FAIL published - 0 publishes (want 1) 
+====================================================================================================
+approve-after-expiry | approve | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.874s model=2.691s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.691}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'yes zzzz' photos=[] -> unsupported local=2.969s model=2.838s err=None
+     model: {'method': 'interpret', 'route': 'codex', 'backend': 'codex', 'fallback': False, 'error': None, 'seconds': 2.838}
+   [reply 1, att=0] There's nothing waiting for your approval. Send me what you'd like to change.
+   CHECK FAIL t2.has_any - wanted one of ["again", "expired", "too long"] 
+====================================================================================================
+approve-idle-hour-ok | approve | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.596s model=2.472s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.472}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'ok' photos=[] -> near-approval local=0.09s model=0s err=None
+   [reply 1, att=0] Nothing is waiting for your yes.
+====================================================================================================
+approve-no-code-cancel | approve | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.834s model=2.667s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.667}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'no' photos=[] -> cancelled local=0.094s model=0s err=None
+   [reply 1, att=0] Okay, I've dropped that question
+   CHECK FAIL t2.has_any - wanted one of ["cancel", "nothing"] 
+====================================================================================================
+approve-then-change-price | edit after publish | commits 0 | misses 0 | drafts [('d48c', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.03s model=2.881s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.881}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'yes zzzz' photos=[] -> proposed local=2.425s model=2.151s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 2.151}
+   [reply 1, att=1] Here's the listing:
+      Name: yes zzzz
+      Brand: Producer not identified
+      Description: yes zzzz.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes d48c to publish, or tell me what to change.
+      Website description: yes zzzz.
+      Source line: Ask us about the source in store.
+      Picture description: yes zzzz (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      yes zzzz
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      yes zzzz.
+      
+      Link to this
+      Nothing changes until your yes.
+--- T3 owner: 'make the persimmons $4' photos=[] -> proposed local=5.976s model=5.755s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 3.066}
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 2.689}
+   [reply 1, att=1] Here's the listing:
+      Name: yes zzzz
+      Brand: Producer not identified
+      Description: yes zzzz.
+      Price: $4.00 per lb
+      Category: General (say 'category X' to change)
+      Reply yes d48c to publish, or tell me what to change.
+      Website description: yes zzzz.
+      Source line: Ask us about the source in store.
+      Picture description: yes zzzz (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      yes zzzz
+      
+      $4.00 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      yes zzzz.
+      
+      Link to this
+      Nothing changes until your yes.
+   CHECK FAIL published - 0 publishes (want 1) 
+====================================================================================================
+approve-twice | approve | commits 1 | misses 0 | drafts [('d48c', 'verified')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.095s model=2.951s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.951}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'yes zzzz' photos=[] -> proposed local=2.519s model=2.254s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 2.254}
+   [reply 1, att=1] Here's the listing:
+      Name: yes zzzz
+      Brand: Producer not identified
+      Description: yes zzzz.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes d48c to publish, or tell me what to change.
+      Website description: yes zzzz.
+      Source line: Ask us about the source in store.
+      Picture description: yes zzzz (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      yes zzzz
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      yes zzzz.
+      
+      Link to this
+      Nothing changes until your yes.
+--- T3 owner: 'yes d48c' photos=[] -> approved local=2.384s model=2.009s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 2.009}
+   [reply 1, att=0] Saved: a new product: yes zzzz. I'll send a separate message about the website.
+====================================================================================================
+approve-undo-after-publish | undo | commits 0 | misses 0 | drafts [('d48c', 'proposed')]
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.46s model=2.314s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.314}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'yes zzzz' photos=[] -> proposed local=2.663s model=2.361s err=None
+     model: {'method': 'capture', 'route': 'browser', 'backend': None, 'fallback': None, 'error': None, 'seconds': 2.361}
+   [reply 1, att=1] Here's the listing:
+      Name: yes zzzz
+      Brand: Producer not identified
+      Description: yes zzzz.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Reply yes d48c to publish, or tell me what to change.
+      Website description: yes zzzz.
+      Source line: Ask us about the source in store.
+      Picture description: yes zzzz (illustration)
+      Badge: New (for the first two weeks).
+      Picture: generated illustration from your details.
+      All website card text:
+      From the market
+      
+      yes zzzz
+      
+      $3.50 per lb
+      
+      Ask us about the source in store.
+      
+      New
+      
+      yes zzzz.
+      
+      Link to this
+      Nothing changes until your yes.
+--- T3 owner: 'undo' photos=[] -> no-target local=0.12s model=0s err=None
+   [reply 1, att=0] Nothing has been saved yet. a new product: yes zzzz is still waiting for your yes. Reply no d48c to drop it.
+   CHECK FAIL published - 0 publishes (want 1) 
+====================================================================================================
+approve-edited-message | approve | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.113s model=2.916s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.916}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'yes zzzz' photos=[] -> not-read local=0.095s model=0s err=None
+   [reply 1, att=0] I only notice new messages, so I missed that tap or edit and nothing changed. Please send yes, no or the change as a new message.
+====================================================================================================
+cmd-status-mid-draft | status | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=3.173s model=3.054s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 3.054}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 owner: 'status' photos=[] -> status local=0.086s model=0s err=None
+   [reply 1, att=0] Everything is ready.
+      Nothing is waiting for your yes.
+      I still need your shelf check.
+      Open: add a new product, waiting for the intake:name
+   CHECK FAIL t2.has_any - wanted one of ["yes "] 
+====================================================================================================
+stranger-approves | security | commits 0 | misses 0 | drafts []
+--- T1 owner: 'add fuyu persimmons $3.50/lb' photos=[] -> question local=2.487s model=2.36s err=None
+     model: {'method': 'answer.fields', 'route': 'codex-sub', 'backend': None, 'fallback': False, 'error': None, 'seconds': 2.36}
+   [reply 1, att=0] Here's the listing:
+      Name: Not read yet
+      Brand: Producer not identified
+      Description: Not read yet.
+      Price: $3.50 per lb
+      Category: General (say 'category X' to change)
+      Send the product photo or its name.
+--- T2 STRANGER owner: 'yes zzzz' photos=[] -> ignored local=0.055s model=0s err=None
