@@ -460,10 +460,21 @@ def check(case, result, public, products, intake):
     if "drafts" in want:  # MAIN-RED: {state: [product names]} of the new-product drafts, and every draft has its own code
         out.append(("drafts_distinct", len({d["code"] for d in result["drafts"]}) == len(result["drafts"]),
                     "every draft must have its own code: " + json.dumps([d["code"] for d in result["drafts"]])))
+        # blocking shape, independent of product names: exactly one draft per wanted name in each state, no other drafts,
+        # and each draft is a single product.add
+        shape = sorted(d["state"] for d in result["drafts"])
+        wanted_shape = sorted(s for s, names in want["drafts"].items() for _ in names)
+        adds = [sum(1 for op in json.loads(d["ops_json"]) if op.get("op") == "product.add") for d in result["drafts"]]
+        out.append(("drafts_shape", shape == wanted_shape and all(n == 1 for n in adds),
+                    f"drafts must be exactly {json.dumps(wanted_shape)} with one product.add each, got {json.dumps(shape)} / adds {json.dumps(adds)}"))
         for state, names in want["drafts"].items():
             got = sorted(op["args"].get("name", "") for d in result["drafts"] if d["state"] == state
                          for op in json.loads(d["ops_json"]) if op.get("op") == "product.add")
             out.append(("draft_products:" + state, got == sorted(names), f"{state} drafts must add {json.dumps(sorted(names))}, got {json.dumps(got)}"))
+            seen = want.get("drafts_known_seen", {}).get(state)  # the one reproduced mismatch a known finding may excuse
+            if seen is not None:
+                out.append(("draft_products_known_shape:" + state, got in (sorted(names), sorted(seen)),
+                            f"{state} drafts may only show the wanted {json.dumps(sorted(names))} or the reproduced {json.dumps(sorted(seen))}, got {json.dumps(got)}"))
     if "draft_public_lacks" in want:
         replies = result["turns"][-1]["replies"]
         marker = "All website card text:\n"
