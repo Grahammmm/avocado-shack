@@ -1,0 +1,22 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": "gpt-6.2-sol",
+    "last_primary_error": null,
+    "last_seconds": 2.692
+   },
+   "method": "interpret",
+   "result": {
+    "unsupported": "There are no changes waiting to cancel. If you meant to take back the last change, say undo."
+   },
+   "route": "codex",
+   "seconds": 2.692,
+   "turn": 1
+  }
+ ],
+ "case": "cmd-stop-typo"
+}

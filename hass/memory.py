@@ -169,6 +169,20 @@ class Memory:
             self.db.execute("UPDATE memory SET forgotten_at = ? WHERE id = ?", (self._now(), old["id"]))
             self.db.execute("UPDATE memory SET value = '' WHERE key = ?", (key,))
 
+    def remember_design(self, text, source) -> str:
+        """AV1052-11: keep the first MAX_VALUE characters of an owner's design request as the fact design.<n> (n is one more than
+        any suffix ever used, forgotten rows included); inside the caller's transaction. ValueError if the text or source is invalid."""
+        value = text[:MAX_VALUE] if isinstance(text, str) else text
+        _check_value(value)
+        _check_source(source)
+        with self._tx():
+            used = [int(m[1]) for (k,) in self.db.execute("SELECT key FROM memory WHERE key LIKE 'design.%'")
+                    if (m := re.fullmatch(r"design\.([0-9]{1,9})", k))]
+            key = f"design.{max(used, default=0) + 1}"
+            _check_key(key)
+            self._insert(key, value, "fact", source, None)
+        return key
+
     def get(self, key):
         _check_key(key)
         row = self._active(key)

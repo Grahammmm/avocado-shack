@@ -12,6 +12,7 @@ from hass.chat.shared import CANT_READ, CONTROL, COST_USAGE, _iso, load_content,
 from hass.content_model import ContentError, load_and_validate, shop_today
 from hass.ops import catalog
 
+POST_ILLUSTRATION = "This picture is an illustration made from a shelf photo, not a photo of the product. Send a photo with the product name as its caption to post a real one."  # AV1352-03
 POST_USAGE = "Which product is the post for? Say it like " + q("post Hass avocado") + "."  # AV1322-07
 MAKER_USAGE = "Send " + q("post maker") + " and a maker key; " + q("find <words>") + " gives keys."  # AV1937-10
 MAKER_REFUSALS = {"no such maker": "No maker {id}; send " + q("find <words>") + " for keys.",
@@ -27,11 +28,24 @@ POST_REFUSALS = {"no such product": "I don't know a product called {id}. Try " +
                  "no photo on the site": "{id} has no photo on the website yet, so I can't make a post for it."}  # other reasons: POST_CANT
 POST_CANT = "I can't make a post for {id} right now. Nothing was posted."
 _NUM = r"[-+]?[0-9.][0-9.,_]*(?:e[-+]?[0-9]+)?"  # AV1102-12: looks like a number; margins.compute is the only validator
-MARGIN_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")
-MARGIN_ID_RE = re.compile(rf"(?!\$?{_NUM}\s+for\s)(\S.*?)\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")  # AV1222-10: saved cost
+_END = r"(?:\s+(?i:ending)\s+\.(49|99))?"  # AV1352-09: round the price up to the next .49 / .99 (margins.compute round_to)
+MARGIN_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?{_END}")
+MARGIN_ID_RE = re.compile(rf"(?!\$?{_NUM}\s+for\s)(\S.*?)\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?{_END}")  # AV1222-10: saved cost
+_PRICE = rf"\s+price\s+\$?({_NUM})(?:\s+shrink\s+({_NUM})\s*%)?"  # AV1352-08: the shelf price to check; margins.check is the only validator
+PRICE_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})" + _PRICE, re.IGNORECASE)
+PRICE_ID_RE = re.compile(rf"(?!\$?{_NUM}\s+for\s)(\S.*?)" + _PRICE, re.IGNORECASE)
 COST_RE = re.compile(r"\$?(\S+)\s+for\s+(\S+)", re.IGNORECASE)  # AV1222-10: margins.compute is the only number validator
 
-MARGIN_USAGE = "Tell me what you pay for a pack, how many are in it and the margin you want, like " + q("margin 24 for 12 at 35%") + "."
+MARGIN_USAGE = ("Tell me what you pay for a pack (or a product with a saved cost), how many are in it and the margin you want, like "
+                + q("margin 24 for 12 at 35%") + ", or the shelf price to check, like " + q("margin 24 for 12 price 3.49") + ". Add " + q("shrink 5%") + " if some is lost, or " + q("ending .99") + " (or " + q(".49") + ") to round the price up.")
+
+_STEP_WORDS = {"unit_cost": "Each one costs you", "sellable_cost": "Each one you can sell costs you", "price": "Shelf price", "margin_actual": "Your margin"}
+
+
+def _margin_steps(r) -> str:
+    """AV1352-08: margins.check's steps and below-cost line (same numbers as margins.render) in plain words for chat, which has no computer names."""
+    below = ["Below cost: this price does not cover the cost per sellable unit."] if r.get("below_cost") is True else []
+    return "\n".join([f"{_STEP_WORDS[x['name']]}: {x['expression']} = {x['value']}" for x in r["steps"]] + below + [r["note"]])
 
 
 class ReportsPack:
@@ -74,16 +88,20 @@ class ReportsPack:
         drafted, no interpreter call or usage count; works while paused."""
         found = MARGIN_RE.fullmatch(rest)
         by_id = None if found else MARGIN_ID_RE.fullmatch(rest.strip())  # AV1222-10: the saved cost of a product (by name or id)
+        priced = None if found or by_id else PRICE_RE.fullmatch(rest.strip())  # AV1352-08: the margin a shelf price gives
+        by_price = None if found or by_id or priced else PRICE_ID_RE.fullmatch(rest.strip())
         try:
-            text = margins.say(margins.compute(found[1], found[2], found[4] or "0", found[3])) if found else \
-                self._margin_saved(*by_id.groups()) if by_id else MARGIN_USAGE
+            text = margins.say(margins.compute(found[1], found[2], found[4] or "0", found[3], found[5] and "." + found[5])) if found else \
+                self._margin_saved(*by_id.groups()) if by_id else \
+                _margin_steps(margins.check(priced[1], priced[2], priced[4] or "0", priced[3])) if priced else \
+                self._margin_saved(by_price[1], None, by_price[3], price=by_price[2]) if by_price else MARGIN_USAGE
         except margins.InputError as exc:
             self._problem("did-not-understand", "margin-numbers")
             text = "I couldn't work that out. " + margins.plain_input_error(exc)
         self._reply(text)
         return "margin"
 
-    def _margin_saved(self, ident, margin, shrink) -> str:
+    def _margin_saved(self, ident, margin, shrink, ending=None, *, price=None) -> str:
         """AV1222-10: margins for the saved cost.<id> (read-only; the memory table is not created for a read)."""
         has_table = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
         if self.memory is None and has_table: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
@@ -91,8 +109,15 @@ class ReportsPack:
         row = next((r for r in self.memory.list() if r["key"] == f"cost.{ident}"), None) if has_table else None
         if row is None: return f"I don't have a cost saved for {q(typed)}. Tell me first, like " + q(f"cost {typed}: 24 for 12") + "."
         pack, _, units = row["value"].partition(" for ")
-        since = datetime.fromisoformat(row["created_at"]).astimezone(LOCAL_TZ)
-        return f"Using the cost you gave me {voice.natural(since, self._now())}.\n" + margins.say(margins.compute(pack, units, shrink or "0", margin))
+        calc = _margin_steps(margins.check(pack, units, shrink or "0", price)) if price is not None else \
+            margins.say(margins.compute(pack, units, shrink or "0", margin, ending and "." + ending))
+        try:  # RF1221-12: the saved date is only a label; an unreadable one never drops the calculation
+            saved = datetime.fromisoformat(row["created_at"])
+            if saved.utcoffset() is None: raise ValueError("naive")
+            when = f"Using the cost you gave me {voice.natural(saved.astimezone(LOCAL_TZ), self._now())}."
+        except (TypeError, ValueError, OverflowError, OSError):
+            when = "Using your saved cost; I can't read when you gave it to me."
+        return when + "\n" + calc
 
     def _post_names_something(self, text) -> bool:
         """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product
@@ -121,6 +146,7 @@ class ReportsPack:
             out = social_draft.build(content, self._pick("product", pid, content), wt / "storefront-mockup")
             if out["draft"] and stat.S_ISREG(os.lstat(photo := wt / "storefront-mockup" / out["image"]).st_mode):
                 text = f"Here's a post you can copy. I haven't posted anything.\n{q(out['caption'])}\nWhat the photo shows: {q(out['alt'])}"
+                if out.get("illustration"): text = POST_ILLUSTRATION + "\n" + text  # AV1352-03: only after the photo is eligible
             else:  # a refusal, or a photo that is itself a link: never attached
                 reason = out.get("reason", "no photo on the site")
                 text = POST_REFUSALS[reason].format(id=q(pid)) if reason in POST_REFUSALS else POST_CANT.format(id=q(pid))

@@ -4,7 +4,8 @@
 // /hike must render its sample invitation, trail map and journal from static files, and both signup forms must show
 // a plain sentence instead of a parser error.
 //   node storefront-mockup/static-site-qa.cjs DIR      (DIR outside the repo; QA_OUT_DIR as for the other checks)
-const {out}=require('./qa-env.cjs').qaEnv({preview:false});
+const {qaEnv,commerceAuditText}=require('./qa-env.cjs');
+const {out}=qaEnv({preview:false});
 const fs=require('fs'),path=require('path'),http=require('http'),util=require('util'),assert=require('assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const refuse=m=>{process.stderr.write('static-site QA refused: '+m+'\n');process.exit(2)};
@@ -64,7 +65,7 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.equal(await page.locator(COMMERCE_SELECTORS).count(),0,route+': commerce markup');
    await page.locator('[data-policy]').click();const policy=await page.locator('#dialog-content').innerText();await page.keyboard.press('Escape');
    const text=await page.locator('body').innerText();
-   assert.doesNotMatch(text,COMMERCE_TEXT,route+': commerce wording');
+   assert.doesNotMatch(await commerceAuditText(page),COMMERCE_TEXT,route+': commerce wording');
    assert.doesNotMatch(text+policy,PRELAUNCH,route+': pre-launch wording');
    assert.match(policy,/doesn’t use cookies/);
    const noAlt=await page.locator('img').evaluateAll(a=>a.filter(e=>!(e.getAttribute('alt')||'').trim()).length);

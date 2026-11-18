@@ -57,9 +57,10 @@ the same change wrote goes back with it. A later change keeps the check day it w
   the structured kind `stock_items`: a non-empty list of `{"product": <id>, "availability": <word>}` objects with exactly
   those two keys, which the dispatcher checks for shape only (repeats, the six-product cap and every stock rule stay in
   the plan). The `stock.checked` lists (`in`, `limited`, `out`) and `stock.clear`'s `items` stay `text_list` transport
-  strings and the plan resolves them locally (RF2135-10): a canonical id keeps the id path, any other line is a product
-  name or alias looked up with the existing `kinds.product_ref` (so it needs `ctx.content`; without it a non-id line is
-  the ordinary `BAD_ITEM` refusal). Only one active product is accepted. An ambiguous name refuses with the resolver's
+  strings and the plan resolves them locally (RF2135-10): an exact id of a catalog product keeps the id path, any other line,
+  including a lowercase one-word name or alias that merely looks like an id (`basil`, `herb`), is a product name or alias
+  looked up with the existing `kinds.product_ref` (so it needs `ctx.content`; without it only id syntax passes and any
+  other line is the ordinary `BAD_ITEM` refusal). An unknown id-shaped line is still passed on for the editor to judge. Only one active product is accepted. An ambiguous name refuses with the resolver's
   "Which one do you mean: …?" question (it lists candidates, never picks one, and the owner resends a specific name); an
   unknown, held or hidden name refuses the whole plan, with no partial ops, no dropped line and no automatic restore.
   Resolution comes first: `stock.clear` then drops a repeated product (any mix of name, alias and id) and applies its

@@ -6,14 +6,13 @@ the owner's `yes <code>` bound to the asker, like a site change (the conversatio
 the line that names the code). There is no delete call anywhere: removing an item is hiding it. Hass has no checkout, payment, refund,
 discount or order call at all, and this module has no way to build one.
 
-Rules the builders enforce (design question 4): a daily cap on changes (undo exempt), a price move above the configured percentage needs a
-second yes, prices are whole cents above zero and under the configured ceiling, counts are non-negative and bounded, a changed item must still
+Rules the builders enforce (design question 4): a daily cap on changes (undo exempt), every price move needs just one owner yes, prices are whole cents above zero and under the configured ceiling, counts are non-negative and bounded, a changed item must still
 be the one the draft was made from (`is_stale`), and an undo refuses to overwrite a value that changed after the draft.
 """
 import hashlib
 import json
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext
 
 from hass.clover import sku as skumod
 from hass.clover.mapper import (CATEGORIES, MapError, clean_name, create_payload, format_money, format_quantity, norm_name, pct_change,
@@ -62,8 +61,6 @@ class Draft:
     def render(self, code):
         """The owner-facing text: the change, any warnings, and the one line that names the code."""
         out = list(self.lines) + [f"Note: {w}" for w in self.warnings]
-        if self.second_confirmation:
-            out.append("This is a big change, so I will ask once more after your yes.")
         out.append(f"Reply yes {code} to do this, or no {code} to drop it. Nothing changes until you say yes.")
         return "\n".join(out)
 
@@ -104,7 +101,12 @@ def _qty(value, item, config):
     if not q.is_finite() or q < 0:
         raise DraftRefused("A count cannot be less than 0.")
     if q > config.max_stock:
-        raise DraftRefused(f"{format_quantity(q)} looks too high for one item. Check the number and send it again.")
+        try:
+            with localcontext():  # display must not change the caller's decimal flags
+                shown = f"{format_quantity(q)} "
+        except InvalidOperation:  # too large to display: refuse without echoing it
+            shown = "That count "
+        raise DraftRefused(f"{shown}looks too high for one item. Check the number and send it again.")
     if item.price_type != "PER_UNIT" and q != q.to_integral():
         raise DraftRefused(f"{item.name} is counted in whole items, so {format_quantity(q)} is not a count I can set.")
     if q != q.quantize(Decimal("0.001")):
@@ -165,7 +167,7 @@ def build_create_item(name, price_cents, category, items, config, *, categories=
 
 
 def build_set_price(item, new_cents, config, *, writes_today=0):
-    """'change price of X to 14.00'. Refuses a variable-price item, no change, a bad number; flags a big move for a second yes."""
+    """'change price of X to 14.00'. Refuses a variable-price item, no change or a bad number; one owner yes for any price move."""
     _gate(config, writes_today)
     if item.price_type == "VARIABLE" or item.price_cents is None:
         raise DraftRefused(f"{item.name} is priced at the register each time, so there is no price for me to change.")
@@ -182,7 +184,7 @@ def build_set_price(item, new_cents, config, *, writes_today=0):
              f"  Price: {format_money(item.price_cents)} -> {format_money(new_cents)}{_per(item)} ({'+' if pct > 0 else ''}{pct}%)")
     return Draft("set_price", item.id, item.name, lines, {"price": item.price_cents}, {"price": new_cents},
                  ({"method": "POST", "path": f"/items/{item.id}", "json": {"price": new_cents}},), _base(item),
-                 second_confirmation=big, warnings=tuple(warnings))
+                 warnings=tuple(warnings))
 
 
 CLEAR = "clear"   # _site_restore's answer for "the product had no word before": the undo takes the word off (product.clear_availability)
@@ -291,6 +293,8 @@ def build_undo(entry, current, config, *, site_product=None):
     """The draft that restores the values before `entry` (a journalled Draft.to_dict(), plus `result_item_id` for a create).
     `current` is the till item read right now. Undo is exempt from the daily cap and from the big-change second yes, because it only
     puts back what was there; it still needs its own yes. It refuses when the item changed after the draft: it never overwrites newer values."""
+    if entry.get("result_base") is not None and (current is None or _base(current) != entry["result_base"]):
+        raise DraftRefused("The item was changed again; I will not undo over a newer value.")
     kind, cid = entry["kind"], entry["change_id"]
     if current is None:
         raise DraftRefused("I can't find that item in the till any more, so I can't undo the change.")

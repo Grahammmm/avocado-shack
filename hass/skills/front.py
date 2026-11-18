@@ -15,6 +15,9 @@ PART_REPLY = "I can move these parts: the food, why we do it, visit us, newslett
 STYLE_REPLY = "I can't change colours, fonts or sizes yet. I wrote it down."  # the model's refusal sentence (refuse=)
 STYLE_STOP = "Colours, fonts, sizes and new kinds of parts can't be changed by message."  # dispatch adds the backlog line
 STYLE = re.compile(r"\b(?:colou?rs?|fonts?|sizes?|bigger|smaller|red|blue|new (?:part|section))\b", re.I)
+STYLE_TERMS = re.compile(r"\b(?:colou?rs?|fonts?|sizes?|bigger|smaller|new (?:part|section))\b", re.I)  # STYLE without the bare red/blue
+COLOUR_ASK = re.compile(r"\b(?:make|turn|paint|colou?r)\b[^.?!]{0,40}\b(?:red|blue)\b|\b(?:in|to)\s+(?:red|blue)\b"
+                        r"|\b(?:red|blue)\s+(?:background|text|letters|font|colou?r|banner|part|section|heading)s?\b", re.I)
 
 
 class _StyleStop(SkillStop):
@@ -39,7 +42,7 @@ def _parts(values):
 
 def plan_sections(slots, ctx):
     store = store_of(ctx) or {}
-    if any(STYLE.search(t) for t in texts_of(ctx)):
+    if any(STYLE_TERMS.search(t) or COLOUR_ASK.search(t) for t in texts_of(ctx)):
         raise _style_stop()
     if slots.get("reset"):
         if any(slots.get(k) for k in ("order", "hide", "show")):

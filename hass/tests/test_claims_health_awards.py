@@ -108,7 +108,9 @@ class HealthAwardTermTests(unittest.TestCase):
                     base = {"name": "Ranch Honey", "brand": "Acme", "category": "honey"}
                     found = keep({**base, field: f"{term} honey" if field != "category" else term}, CATS)
                     self.assertNotIn(field, found)
-                    self.assertEqual({k: found[k] for k in found}, {k: v for k, v in base.items() if k != field})
+                    claim = f"{term} honey" if field != "category" else term
+                    self.assertEqual(found, {**{k: v for k, v in base.items() if k != field},
+                                             "printed_claims": [claim]})
 
     def test_treat_and_best_labels_remain_allowed(self):
         self.assertEqual(keep({"name": "Best Treat Honey", "brand": "Acme"}, CATS),

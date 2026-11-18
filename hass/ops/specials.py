@@ -175,6 +175,10 @@ def _edit(content, args, ctx):
     start, end = iso_day(new["start"]), iso_day(new["end"])
     if refused := _dates_problem(start, end, today, content, own=sp["id"]):
         return refused
+    if "title" in changes and any(
+            s["id"] != sp["id"] and _spaced(s["title"]).casefold() == _spaced(changes["title"]).casefold()
+            and (iso_day(s["end"]) or today) >= today for s in _list(content)):
+        return Refused(f"there is already a special called {changes['title']}; edit it instead")
     if {k: _spaced(v) if isinstance(v, str) else v for k, v in new.items()} == \
             {k: _spaced(v) if isinstance(v, str) else v for k, v in sp.items()}:
         return Refused("that special already says that")

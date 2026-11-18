@@ -126,8 +126,6 @@ class RegionalFlagTests(unittest.TestCase):
         for code in sorted(UNICODE16_FLAGS):
             with self.subTest(code=code):
                 self.assertEqual(classify_social(pair(code)), "social")
-        for code in ("US", "GB", "EU", "UN", "XK", "AC"):
-            self.assertEqual(classify_social(pair(code)), "social")
 
     def test_all_other_regional_pairs_fall_through(self):
         others = [c for c in ALL_PAIRS if c not in UNICODE16_FLAGS]
@@ -135,8 +133,6 @@ class RegionalFlagTests(unittest.TestCase):
         for code in others:
             with self.subTest(code=code):
                 self.assertIsNone(classify_social(pair(code)))
-        for text in ("\U0001F1E6\U0001F1E6", "\U0001F1FF\U0001F1FF", "\U0001F1FA\U0001F1F0"):
-            self.assertIsNone(classify_social(text))
 
     def test_regional_flags_require_whole_input_and_fixed_pairing(self):
         us, gb, zz, aa = pair("US"), pair("GB"), pair("ZZ"), pair("AA")
@@ -175,10 +171,15 @@ class SocialConversationTests(H06TestCase):
     def advance_past_expiry(self):
         self.now += timedelta(seconds=601)  # SETTINGS approvalTtlSeconds is 600
 
-    def social(self, text, pid=None):
+    def social(self, text, pid=None, waiting=None):
         drafts, usage = self.drafts(), self.usage()
         self.assertEqual(self.say(text), "social")
-        self.assertEqual(self.replies(), [self.FIXED])
+        if waiting is None: self.assertEqual(self.replies(), [self.FIXED])
+        else:  # AV2007-02: a change still waiting is named, with its own no code, instead of the fixed reply
+            (reply,) = self.replies()
+            self.assertNotEqual(reply, self.FIXED)
+            self.assertIn(waiting["summary"], reply)
+            self.assertIn("no " + waiting["code"], reply)
         self.assertEqual((self.drafts(), self.approvals(), self.commits()), (drafts, 0, 0))
         self.assertEqual((self.interp.texts, self.usage()), ([], usage))
 
@@ -186,7 +187,7 @@ class SocialConversationTests(H06TestCase):
         draft = self.proposal()
         for text in ("thanks", "Thank you!", "hello", AVOCADO, HEART * 2, "good morning"):
             with self.subTest(text=text):
-                self.social(text)
+                self.social(text, waiting=draft)
         self.assertEqual(self.drafts()[-1]["state"], "proposed")
         self.assertEqual(self.say(f"yes {draft['code']}"), "approved")  # explicit approval still works
 

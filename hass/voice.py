@@ -68,6 +68,14 @@ def quote(text) -> str:
     return OPEN + text + CLOSE if text else text
 
 
+_TILL_RE = re.compile(r"(?<=SKU )[^\s),;]+|(?<=SKU: )[^\s),;]+|\b(?:yes|no|undo) [0-9a-f]{8}\b| -> ")
+
+
+def till(text) -> str:
+    """HASS-CLOVER-4, till replies only: the till's SKUs, a till line's `12 -> 24` and an 8-character till code are shown as they are."""
+    return _TILL_RE.sub(lambda m: quote(m.group(0)), str(text))
+
+
 def plain(text: str) -> str:
     """The text with the marks removed (what is actually sent)."""
     return text.replace(OPEN, "").replace(CLOSE, "")
@@ -205,6 +213,7 @@ def natural_iso(iso, now=None) -> str:
 
 GENERIC_REFUSAL = "I couldn't make that change, so nothing changed. Could you say it another way?"
 REASONS = (  # (regex on the lower-cased technical text, log code, plain sentence)
+    (r"^\s*there is no notice\s*$", "notice-absent", "There is no notice on the website now. Nothing changed."),  # AV2007-18
     (r"selection was not checked today", "shelf-check-needed",
      "I need today's shelf check first. Tell me what's on the shelves today, and then I can change that."),
     (r"out of date; check the selection", "shelf-check-old",

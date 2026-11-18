@@ -126,9 +126,34 @@ def _read(path, uid):
         return "unreadable", None
     if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != uid or folder.st_mode & 0o022:
         return "folder", None
+    # Anchor the folder: the leaf is opened relative to this descriptor, never by resolving the full pathname again.
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    # O_PATH anchors a searchable directory without requiring permission to list it (Linux service host).
+    # On platforms without O_PATH retain the previous directory-open behaviour.
+    dir_access = getattr(os, "O_PATH", os.O_RDONLY)
+    try:
+        dfd = os.open(os.path.dirname(os.path.abspath(path)), dir_access | os.O_DIRECTORY | os.O_NOFOLLOW | cloexec)
+    except FileNotFoundError:
+        return "missing", None
+    except (OSError, ValueError):
+        return "folder", None
+    try:
+        return _read_in(dfd, folder, os.path.basename(os.path.abspath(path)), uid, cloexec)
+    finally:
+        os.close(dfd)
+
+
+def _read_in(dfd, folder, name, uid, cloexec):
+    try:
+        anchored = os.fstat(dfd)
+    except OSError:
+        return "folder", None
+    if (not stat.S_ISDIR(anchored.st_mode) or anchored.st_uid != uid or anchored.st_mode & 0o022
+            or (anchored.st_dev, anchored.st_ino) != (folder.st_dev, folder.st_ino)):
+        return "folder", None
     try:
         # O_NONBLOCK: a FIFO with no writer must not hang the open; the descriptor check below then refuses it as not-regular
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | cloexec, dir_fd=dfd)
     except FileNotFoundError:
         return "missing", None
     except (OSError, ValueError):
@@ -158,3 +183,12 @@ def _read(path, uid):
     if not TOKEN_RE.fullmatch(text):
         return "format", None
     return None, text
+
+
+def load_write_token(config):
+    """Service-only: the separate write file obeys exactly the read file's private-file rules."""
+    if not config.writes_allowed or os.path.realpath(config.write_token_file) == os.path.realpath(config.token_file):
+        raise CredentialError("missing")
+    if os.path.exists(config.token_file) and os.path.exists(config.write_token_file) and os.path.samefile(config.token_file, config.write_token_file):
+        raise CredentialError("not-regular")
+    return load_token(config.write_token_file)

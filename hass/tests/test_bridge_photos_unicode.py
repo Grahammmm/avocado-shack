@@ -7,7 +7,8 @@ from unittest import mock
 from urllib.parse import unquote, urlsplit
 
 from hass import bridge_photos
-from hass.tests.test_bridge_photos import JPG, PASSWORD, FakeTransport, PhotosTests, _meta
+from hass.tests import test_bridge_photos as _bp
+from hass.tests.test_bridge_photos import JPG, PASSWORD, FakeTransport, _meta
 
 MSG_TEXT = ("guid must be a non-empty str of at most 200 chars without control characters "
             "or surrogate code points, and must not be '.' or '..'")
@@ -15,7 +16,7 @@ SURROGATES = ("\ud800", "\udbff", "\udc00", "\udfff")
 
 
 class UnicodeGuidTests(unittest.TestCase):
-    setUp, photos, fails = PhotosTests.setUp, PhotosTests.photos, PhotosTests.fails
+    setUp, photos, fails = _bp.PhotosTests.setUp, _bp.PhotosTests.photos, _bp.PhotosTests.fails
 
     def test_message_surrogates_refused_before_io(self):
         bad = [s + "x" for s in SURROGATES] + ["x" + s for s in SURROGATES] + ["ab" + s + "cd" for s in SURROGATES]

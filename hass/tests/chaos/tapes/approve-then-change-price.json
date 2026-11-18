@@ -1,0 +1,95 @@
+{
+ "case": "approve-then-change-price",
+ "calls": [
+  {
+   "turn": 1,
+   "method": "answer.fields",
+   "result": {
+    "price_cents": 200,
+    "cost_cents": null,
+    "quantity": null
+   },
+   "attrs": {
+    "last_backend": "cached"
+   },
+   "seconds": 0.0,
+   "route": "cached"
+  },
+  {
+   "turn": 1,
+   "method": "label",
+   "result": {
+    "name": "SUPERGRIP GLUE",
+    "brand": "SUPERGRIP",
+    "category": "general",
+    "product_type": "Glue",
+    "size": "2 fl oz",
+    "colour": "Off-white container with a yellow top and a black label with yellow lettering",
+    "description": "Supergrip Glue comes in a 2 fl oz rectangular container with a tapered yellow top.",
+    "printed_claims": [
+     "Made in USA",
+     "The strongest glue"
+    ]
+   },
+   "attrs": {
+    "last_backend": "cached"
+   },
+   "seconds": 0.0,
+   "route": "cached"
+  },
+  {
+   "turn": 1,
+   "method": "capture",
+   "result": {
+    "ok": true,
+    "checks": {
+     "productShown": true,
+     "description": true,
+     "priceShown": true,
+     "imageShown": true,
+     "noPageErrors": true,
+     "noPosts": true
+    },
+    "error": null,
+    "cardText": "SUPERGRIP\n\nSUPERGRIP GLUE\n\n$2.00\n\nAsk us about the source in store.\n\nNew\n\nSupergrip Glue comes in a rectangular container with a tapered yellow top. 2 fl oz. Off-white container with a yellow top and a black label with yellow lettering. Made in USA, The strongest glue.\n\nLink to this"
+   },
+   "attrs": {},
+   "seconds": 1.724,
+   "route": "browser"
+  },
+  {
+   "turn": 2,
+   "method": "capture",
+   "result": {
+    "ok": true,
+    "checks": {
+     "productShown": true,
+     "description": true,
+     "noPageErrors": true,
+     "noPosts": true
+    },
+    "error": null
+   },
+   "attrs": {},
+   "seconds": 1.66,
+   "route": "browser"
+  },
+  {
+   "turn": 3,
+   "method": "interpret",
+   "result": {
+    "question": "What would you like me to change on the shop website?"
+   },
+   "attrs": {
+    "last_error": null,
+    "last_backend": "codex",
+    "last_fallback": false,
+    "last_primary_error": null,
+    "last_seconds": 2.795,
+    "last_model": "gpt-6.2-sol"
+   },
+   "seconds": 2.795,
+   "route": "codex"
+  }
+ ]
+}

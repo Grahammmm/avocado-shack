@@ -1,0 +1,41 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": "gpt-6.2-sol",
+    "last_primary_error": null,
+    "last_seconds": 3.058
+   },
+   "method": "interpret",
+   "result": {
+    "question": "What would you like me to add to the website?"
+   },
+   "route": "codex",
+   "seconds": 3.058,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": 5.165
+   },
+   "method": "label",
+   "result": {
+    "category": "general",
+    "colour": "Orange, yellow and blue",
+    "description": "A minimalist illustration shows a yellow sun at the horizon, with an orange sky and dark blue water marked by thin horizontal lines."
+   },
+   "route": "codex",
+   "seconds": 5.165,
+   "turn": 1
+  }
+ ],
+ "case": "intake-irrelevant-photo"
+}

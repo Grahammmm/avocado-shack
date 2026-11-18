@@ -19,7 +19,8 @@ class BlueBubblesAttachmentSender(bridge.BlueBubblesSender):
 
     def send_png(self, chat, data, name):
         code, status = None, None
-        if chat not in self._owners or not NAME_RE.fullmatch(name) or not (1 <= len(data) <= relay.MAX_PNG) or not data.startswith(relay.PNG_SIG):
+        if (chat not in self._owners or not isinstance(name, str) or not isinstance(data, (bytes, bytearray))
+                or not NAME_RE.fullmatch(name) or not (1 <= len(data) <= relay.MAX_PNG) or not data.startswith(relay.PNG_SIG)):
             code = "refused"
         else:
             try: password = Path(bridge._private_file(self._password_file)).read_text("utf-8").strip()

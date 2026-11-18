@@ -219,8 +219,11 @@ class CloverClient:
     def _retry_wait(response, attempt):
         """Seconds to wait: Retry-After when Clover sent a whole number (1-30), else 1, 2, 4 ..."""
         raw = (response.headers.get("retry-after") if response is not None else None) or ""
-        if raw.strip().isdigit():
-            return max(1, min(30, int(raw.strip())))
+        text = raw.strip()
+        if text and text.isascii() and text.isdigit():  # ASCII digits only: int() refuses e.g. superscripts
+            digits = text.lstrip("0")
+            # clamp on length first so a huge digit string is never converted to an int
+            return 30 if len(digits) > 2 else max(1, min(30, int(digits or "0")))
         return min(30, 2 ** attempt)
 
     @staticmethod
@@ -248,3 +251,25 @@ class CloverClient:
         if status in RETRY_STATUS:
             raise CloverUnavailable(f"clover unavailable ({status})", status)
         raise CloverError(f"clover answered {status}", status)
+
+
+class CloverWriteClient(CloverClient):
+    """Separate service write client; the existing read-only client remains read-only."""
+
+    def write(self, method, path, payload):
+        """One attempt only: an ambiguous write must be recovered by read-back, never retried."""
+        allowed = (method == "POST" and re.fullmatch(rf"/items(?:/{ID})?|/category_items", path)
+                   or method == "PUT" and re.fullmatch(rf"/item_stocks/{ID}", path))
+        if not allowed:
+            raise CloverRefused("write path not allowed")
+        request = self.build("GET", "/items", {})
+        request.headers["Content-Type"] = "application/json"
+        request = Request(method, request.url.removesuffix("/items") + path, request.headers,
+                          json.dumps(payload, allow_nan=False).encode())
+        with self._lock:
+            self._pace()
+            failure, response = self._send(request)
+        status = failure or response.status
+        if failure is None and status in (200, 201, 204):
+            return self._json(response) if response.body else {}
+        self._raise(status, 1)

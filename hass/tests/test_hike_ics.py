@@ -30,12 +30,16 @@ def hike(id, startsAt, status="scheduled", **kw):
 
 @unittest.skipUnless(NODE, "node is required to run community.js")
 class HikeIcsTest(unittest.TestCase):
-    def render(self, *events, tz=None):
+    def raw(self, *events, tz=None):
         club = {"events": list(events), "routeIdeas": []}
         env = dict(os.environ, TZ=tz) if tz else None
         out = subprocess.run([NODE, "-e", HARNESS], input=json.dumps([str(SITE), NOW, club]),
                              capture_output=True, text=True, timeout=60, check=True, env=env).stdout
         self.assertNotIn("calendar isn’t available", out)  # render() completed
+        return out
+
+    def render(self, *events, tz=None):
+        out = self.raw(*events, tz=tz)
         cards = {}
         for art in out.split("<article ")[1:]:
             title = html.unescape(re.search(r"<h2>(.*?)</h2>", art).group(1))
@@ -159,6 +163,42 @@ class HikeIcsTest(unittest.TestCase):
         self.assertEqual(cards.get("Equal", []), [])
         self.assertEqual(cards.get("Past", []), [])
         self.assertEqual(len(cards["Future"]), 1)
+
+
+class NextHikeLabelTest(unittest.TestCase):
+    """AV1937-08 bridge: per-card label from the real community.js under node. Fails (never skips) without node."""
+
+    def labels(self, *events):
+        self.assertTrue(NODE, "node is required: a skipped run is not label evidence")
+        out = HikeIcsTest("test_upcoming_hike_utc_start_and_fields").raw(*events)
+        got = {}
+        for art in out.split("<article ")[1:]:
+            title = html.unescape(re.search(r"<h2>(.*?)</h2>", art).group(1))
+            got[title] = re.search(r'<p class="label">(.*?)</p>', art).group(1)
+        return got
+
+    def test_next_label_only_earliest_scheduled(self):
+        got = self.labels(hike("c", "2026-12-20T09:00:00-08:00", title="Late"),
+                          hike("x1", "2026-12-01T09:00:00-08:00", "cancelled", title="Gone1"),
+                          hike("a", "2026-12-05T09:00:00-08:00", title="Early"),
+                          hike("x2", "2026-12-10T09:00:00-08:00", "cancelled", title="Gone2"),
+                          hike("b", "2026-12-12T09:00:00-08:00", title="Middle"))
+        self.assertEqual(got, {"Early": "THE NEXT HIKE", "Middle": "COMING UP", "Late": "COMING UP",
+                               "Cancelled: Gone1": "CANCELLED", "Cancelled: Gone2": "CANCELLED"})
+
+    def test_one_scheduled_label_unchanged(self):
+        got = self.labels(hike("x", "2026-12-01T09:00:00-08:00", "cancelled", title="Gone"),
+                          hike("a", "2026-12-05T09:00:00-08:00", title="Only"))
+        self.assertEqual(got, {"Only": "THE NEXT HIKE", "Cancelled: Gone": "CANCELLED"})
+        self.assertEqual(self.labels(hike("a", "2026-12-05T09:00:00-08:00", title="Only")),
+                         {"Only": "THE NEXT HIKE"})
+
+    def test_no_scheduled_card_gets_next_label(self):
+        for evs in ((), (hike("d", "2026-12-07T09:00:00-08:00", "completed", title="Done"),),
+                    (hike("x", "2026-12-01T09:00:00-08:00", "cancelled", title="Gone"),)):
+            got = self.labels(*evs)
+            self.assertNotIn("THE NEXT HIKE", got.values())
+            self.assertNotIn("COMING UP", got.values())
 
 
 if __name__ == "__main__":

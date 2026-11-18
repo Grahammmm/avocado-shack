@@ -54,11 +54,12 @@ from hass.content_model import (AVAILABILITY, CATEGORIES, FORBIDDEN_TEXT, INVISI
 from hass.interpret_check import PLAIN_TEXT_REPLY, PRICE_REPLY
 from hass.ops import catalog
 from hass.ops.photos import _alt_problem
-from hass.skills import makers
+from hass.skills import item_intake as intake_mod, makers
 from hass.skills.model import Skill, Slot, Trigger, Undo
 
 LIMITS = TEXT_LIMITS["product"]
 UNKNOWN_BRAND = "Producer not identified"  # the house words for a product with no known maker
+UNKNOWN_SAID = "unknown"  # what the maker slot holds when he skipped the maker (DONT_KNOW reads it; no denial word, so it stays traceable)
 NOT_NEEDED = "not needed"  # what the town slot holds when there is no maker to place (unknown or already saved)
 FORMS = ("packaged", "fresh")
 DONT_KNOW = re.compile(r"^(?:i\s+)?(?:don'?t|do\s+not|dont)\s+know\b|^(?:dunno|not\s+sure|no\s+idea|unknown|nobody|no\s+one"
@@ -394,9 +395,37 @@ def saved_place(slots, ctx):
     return None
 
 
+def _note_problems(slots, ctx) -> list:
+    """HASS-INTAKE-2: why his one sentence for customers cannot be the description ([] when it can). It is his own words, so the
+    house checks that apply to any description of his apply to it."""
+    note = _clean(_intake(slots).get("customer_note"))
+    if not note:
+        return []
+    try:
+        why = description_problems(_text(note, "description", "description"), _message(ctx))
+    except Refusal:
+        return ["it has a price, a number or a character the website can't show"]
+    if _live(ctx) and _claim_kinds(note):
+        why.append("it says something I can't put on the website from chat")
+    return why
+
+
 def house_description(slots, ctx):
     """The description in the shop's own voice, from his words and the serving sentences already on the site. Machine-valid,
-    not accepted: Mike reads it and may change it."""
+    not accepted: Mike reads it and may change it. HASS-INTAKE-2: his one sentence for customers is used as it is when it passes."""
+    note = _clean(_intake(slots).get("customer_note"))
+    if note and not _note_problems(slots, ctx):
+        return note
+    photo_text = intake_mod.photo_description(_intake(slots))
+    if photo_text:
+        # Same content, house-style and live-claim checks as any other description.
+        # Never relax those gates for a photo or for the label's yes.
+        try:
+            if not description_problems(_text(photo_text, "description", "description"), _message(ctx)) and not (
+                    _live(ctx) and _claim_kinds(photo_text)):
+                return photo_text
+        except Refusal:
+            pass
     content, name = _content(ctx), clean_name(slots.get("name"))
     if content is None or not name:
         return None
@@ -428,8 +457,106 @@ def alt_text(slots, ctx):
     return newitem.alt_text({"name": name, "container": container(ctx, name)}) if name else None
 
 
+AVAILABILITY_WORDS = {"yes": "in stock", "limited": "low on stock", "no": "sold out"}
+
+
+def _intake(slots) -> dict:
+    """HASS-INTAKE-2: his private intake answers so far (quantity, price, dates ...); never a public word."""
+    got = slots.get("intake") if isinstance(slots, dict) else None
+    return got if isinstance(got, dict) else {}
+
+
+def stock_guess(slots, ctx):
+    """HASS-INTAKE-2: the stock word from the count he said he bought (and his low-stock number), else None (he is asked). Shown
+    as "I set", so he can change it before his yes."""
+    got = _intake(slots)
+    qty, low = got.get("qty"), got.get("low_stock")
+    if isinstance(qty, bool) or not isinstance(qty, (int, float)) or qty <= 0:
+        return None
+    return "limited" if isinstance(low, (int, float)) and not isinstance(low, bool) and qty <= low else "yes"
+
+
 DERIVERS = {"form_guess": form_guess, "same_kind_majority": same_kind_majority, "saved_place": saved_place,
-            "house_description": house_description, "alt_text": alt_text}
+            "house_description": house_description, "alt_text": alt_text, "stock_guess": stock_guess}
+
+
+# -- HASS-INTAKE-2: the full intake interview (hooks the dispatcher calls; setting ``itemIntake``) -------------------------
+def _new_maker(slots, ctx) -> bool:
+    choice = _soft_maker(slots.get("maker"), ctx) if _clean(slots.get("maker")) else None
+    return bool(choice and choice["mode"] == "new")
+
+
+def answer(req, text, ctx):
+    """HASS-INTAKE-2: with the interview on, a plain short answer to the name, maker or town question is read by fixed code (no
+    model call, so the questions come at once). Anything longer, with a number or a list in it, is left to the model.
+    ``skip`` and ``don't know`` mean the same here as at every other question and are never kept as a value: a name, shelf or
+    packaging he skips is asked once more (see ``intake_skip``); a maker he skips is listed as not identified; a town he skips
+    leaves the maker not identified too, and the name he gave stays in his private record only."""
+    slot = req.get("asked_slot")
+    if not intake_mod.enabled(ctx) or req.get("state") != "open" or slot not in ("name", "maker", "place", "shelf", "form"):
+        return None
+    words = _clean(text)
+    if words and intake_mod.SKIP.match(words):
+        if slot == "maker":
+            return {"maker": UNKNOWN_SAID, "place": NOT_NEEDED, "_text": UNKNOWN_SAID}
+        if slot == "place":
+            return {"maker": UNKNOWN_SAID, "place": NOT_NEEDED, "_text": UNKNOWN_SAID,
+                    "intake": {**_intake(req.get("slots")), "maker_named": _clean((req.get("slots") or {}).get("maker"))}}
+        return {"skipped": slot}
+    if slot not in ("name", "maker", "place"):
+        return None
+    if not words or len(words.split()) > 6 or re.search(r"[\d$@/]", words) or "\n" in text or len(words) > 60:
+        return None
+    if re.fullmatch(r"(?:yes|no|ok|okay|cancel|stop)[.!]*", words, re.IGNORECASE) or (slot == "name" and (TWO_IN_NAME.search(words) or "," in words)):
+        return None
+    return {slot: words}
+
+
+def intake_skip(req, slot, ctx) -> str:
+    """The one honest reply to a skipped name, shelf or packaging: nothing is invented, the same question comes once more."""
+    why = intake_mod.PUBLIC_NEEDED.get(slot, "I can't go on without that.")
+    ask = question(slot, req.get("slots") or {}, ctx)
+    return f"{why} {ask[:-1] if ask.endswith('?') else ask}, or say cancel?"
+
+
+def intake_next(slots, ctx):
+    """(asked-slot name, the one question) for the next intake question, or None when the interview is off or done. The
+    answers wait in ``slots["intake"]``; a skipped question is kept there as None, so it is never asked twice."""
+    if not intake_mod.enabled(ctx):
+        return None
+    got = _intake(slots)
+    key = intake_mod.next_key(got, _new_maker(slots, ctx))
+    if key is None:
+        return None
+    ask = intake_mod.question(key, clean_name(slots.get("name")), got)
+    return intake_mod.PREFIX + key, (f"{intake_mod.INTRO} {ask}" if not got else ask)
+
+
+def intake_read(req, text, ctx) -> dict:
+    """His answer to the open intake question: {"abort": True}, {"again": the question again} or {"slots": the slots it sets,
+    "public": whether the answer may join his texts (only a maker's website), "note": a sentence to say first or None}."""
+    key = (req.get("asked_slot") or "")[len(intake_mod.PREFIX):]
+    today = _today(ctx) or date.today()
+    got = intake_mod.read(key, text, _intake(req["slots"]), today=today, asks=req.get("asks") or 1,
+                          reader=(lambda k, words: ctx.intake_reader(k, words, today)) if getattr(ctx, "intake_reader", None) else None)
+    if got[0] == "abort":
+        return {"abort": True}
+    if got[0] == "again":  # what was wrong, then the same one question again
+        return {"again": f"{got[1]} {intake_mod.question(key, clean_name(req['slots'].get('name')), _intake(req['slots']))}"}
+    answers, extra, note = got[1], got[2], got[3]
+    return {"slots": {"intake": {**_intake(req["slots"]), **answers}, **extra}, "public": "maker_url" in extra, "note": note}
+
+
+def intake_record(skill_name, slots, ctx, code, now):
+    """The private record kept beside the draft ``code`` (None when he gave no intake answers)."""
+    got = _intake(slots)
+    if not got:
+        return None
+    content = _content(ctx)
+    maker = _clean(slots.get("maker"))
+    maker = None if not maker or maker == UNKNOWN_BRAND or DONT_KNOW.match(maker) else maker  # unknown is not a maker's name
+    return intake_mod.record(code, clean_name(slots.get("name")), maker, _clean(slots.get("shelf")) or None,
+                             _next_id(ctx, content), slots.get("photo"), got, now)
 
 
 def _filled(slots, ctx):
@@ -724,6 +851,12 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
 
     # 5. the description: drafted in the shop's voice, or his own words
     description = _clean(slots.get("description"))
+    photo_draft = intake_mod.photo_description(_intake(slots))
+    if photo_draft and description != photo_draft:
+        left.append("the photo's description or approved label wording, because the website's existing wording and claim checks still apply. "
+                    "The photo details stay in your private notes")
+    if _clean(_intake(slots).get("customer_note")) and (why := _note_problems(slots, ctx)):  # HASS-INTAKE-2: said once, never silently dropped
+        left.append(f"your sentence for customers, because {_join(why, 'and')}. I wrote the usual kind of description instead")
     if description and "description" not in filled and _live(ctx) and (kinds := _claim_kinds(description)):
         # live: his own description says something the website cannot carry from chat; it is rewritten without it, and he is told
         slots = dict(slots, description=house_description({**slots, "description": None}, ctx))
@@ -753,6 +886,8 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     word = slots.get("availability")
     if word not in AVAILABILITY:
         raise Refusal(question("availability", slots, ctx), "question")
+    if "availability" in filled:  # HASS-INTAKE-2: worked out from the count he gave
+        set_lines.append(f"the stock word to {AVAILABILITY_WORDS[word]}, from the count you gave")
 
     # 8. the photo
     sha = slots.get("photo")
@@ -765,6 +900,13 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     display = _clean(slots.get("display_brand"))
     if display:
         args["displayBrand"] = _text(display, "displayBrand", "maker line")
+    if _intake(slots).get("new_badge") is False:  # HASS-INTAKE-2: his "no" to the New label
+        if _live(ctx):  # the live table of allowed arguments is G's own list and has no such argument: said, never hidden
+            left.append("your no to the New label, because the live website adds it by itself for two weeks and I can't turn it off from "
+                        "chat. I wrote your no down for Graham")
+        else:  # added without its day: the shop shows no label for a product with no addedOn (shop.js isNew)
+            args["showNew"] = False
+            set_lines.append("no New label on it, as you asked")
     ops.append({"op": "product.add", "args": args})
 
     # 9. the inventory word and today's shelf check (D2): the check goes in the same change, on its own line
@@ -907,7 +1049,7 @@ def notes(name, slots, ctx) -> dict:
             done = describe_add(dict(slots), ctx)
         except Refusal:
             return {}
-    say = list(done.say) + [w for w in done.warn if w in (PICTURE_OK,)]
+    say = list(done.say) + [w for w in done.warn if w in (PICTURE_OK,)] + intake_mod.private_lines(_intake(slots))
     warn = [f"Left off: {line}." for line in done.left_off] + [w for w in done.warn if w != PICTURE_OK]
     return {"say": say, "set": [f"I set: {line}." for line in done.set_lines], "warn": warn}
 
@@ -932,7 +1074,7 @@ SKILL_SLOTS = (
     Slot("image_alt", "text", required=True, default="derive:alt_text", ask=ASK["image_alt"], owner_words=True,
          limit=("product", "imageAlt")),
     Slot("display_brand", "text", required=False, owner_words=True, limit=("product", "displayBrand")),
-    Slot("availability", "availability", required=True, ask=ASK["availability"]),
+    Slot("availability", "availability", required=True, default="derive:stock_guess", ask=ASK["availability"]),
     Slot("photo", "attachment", required=True, ask=ASK["photo"], from_attachment=True),
 )
 

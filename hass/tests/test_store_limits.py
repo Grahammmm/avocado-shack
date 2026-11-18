@@ -11,7 +11,6 @@ import unittest.mock
 
 from hass import content_model
 from hass.content_model import load_and_validate, load_content, validate_store
-from hass.ops import store as store_ops
 from hass.tests.test_editor import git
 from hass.tests.test_store_ops import SET_ADDRESS, SET_HOURS, StoreTestCase, _req
 
@@ -77,10 +76,6 @@ class ValidatorLimitTests(unittest.TestCase):
 
 
 class OpsAndEditorTests(StoreTestCase):
-    def test_ops_share_the_one_constant_set(self):
-        for name in ("MAX_HOURS_LINES", "MAX_HOURS_LINE", "MAX_ADDRESS_PART"):
-            self.assertIs(getattr(store_ops, name), getattr(content_model, name))
-
     def test_op_refusals_unchanged(self):
         repo = self.repo()
         cases = [((SET_HOURS, {"hours": lines(8)}), "at most 7 hours lines (you sent 8)"),

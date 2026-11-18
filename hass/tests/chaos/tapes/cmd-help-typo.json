@@ -1,0 +1,22 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": "gpt-6.2-sol",
+    "last_primary_error": null,
+    "last_seconds": 3.634
+   },
+   "method": "interpret",
+   "result": {
+    "unsupported": "I can help update shop hours, mark products sold out or back in stock, change photos or wording, and schedule hikes. Text me what you’d like to change, and I’ll show you for approval first."
+   },
+   "route": "codex",
+   "seconds": 3.634,
+   "turn": 1
+  }
+ ],
+ "case": "cmd-help-typo"
+}

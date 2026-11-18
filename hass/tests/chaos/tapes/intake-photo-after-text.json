@@ -1,0 +1,69 @@
+{
+ "case": "intake-photo-after-text",
+ "calls": [
+  {
+   "turn": 1,
+   "method": "interpret",
+   "result": {
+    "question": "Do you want to add glue as a new shop item, or did you mean something else?"
+   },
+   "attrs": {
+    "last_error": null,
+    "last_backend": "codex",
+    "last_fallback": false,
+    "last_primary_error": null,
+    "last_seconds": 3.325,
+    "last_model": "gpt-6.2-sol"
+   },
+   "seconds": 3.325,
+   "route": "codex"
+  },
+  {
+   "turn": 2,
+   "method": "label",
+   "result": {
+    "name": "Supergrip Glue",
+    "brand": "Supergrip",
+    "category": "general",
+    "product_type": "Glue",
+    "size": "2 fl oz",
+    "colour": "Off-white container with a yellow top and a black label with yellow text",
+    "description": "Supergrip Glue comes in a 2 fl oz rectangular container with a tapered yellow top and a black front label.",
+    "printed_claims": [
+     "Made in USA",
+     "The strongest glue"
+    ]
+   },
+   "attrs": {
+    "last_error": null,
+    "last_backend": "codex",
+    "last_fallback": false,
+    "last_primary_error": null,
+    "last_seconds": 5.288,
+    "last_model": null
+   },
+   "seconds": 5.289,
+   "route": "codex"
+  },
+  {
+   "turn": 2,
+   "method": "capture",
+   "result": {
+    "ok": true,
+    "checks": {
+     "productShown": true,
+     "description": true,
+     "priceShown": true,
+     "imageShown": true,
+     "noPageErrors": true,
+     "noPosts": true
+    },
+    "error": null,
+    "cardText": "Supergrip\n\nSupergrip Glue\n\n$2.00 each\n\nAsk us about the source in store.\n\nNew\n\nSupergrip Glue comes in a rectangular container with a tapered yellow top and a black front label. 2 fl oz. Off-white container with a yellow top and a black label with yellow text. Made in USA, The strongest glue.\n\nLink to this"
+   },
+   "attrs": {},
+   "seconds": 1.787,
+   "route": "browser"
+  }
+ ]
+}

@@ -179,6 +179,21 @@ class ReportError(Exception):
     pass
 
 
+def _has_surrogate(data) -> bool:
+    """True if any decoded string (dict key or value, list item) holds U+D800-U+DFFF. Iterative: no recursion."""
+    stack = [data]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            if any("\ud800" <= ch <= "\udfff" for ch in item): return True
+        elif isinstance(item, dict):
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return False
+
+
 def _load(path: Path, key: str, kind: type):
     try:
         raw = path.read_bytes()
@@ -190,6 +205,8 @@ def _load(path: Path, key: str, kind: type):
     if (not isinstance(data, dict) or type(data.get("schemaVersion")) is not int or data["schemaVersion"] != 1
             or not isinstance(data.get(key), kind)):
         raise ReportError(f"{path}: expected {{\"schemaVersion\": 1, \"{key}\": {kind.__name__}}}")
+    if _has_surrogate(data):
+        raise ReportError(f"cannot read {path}: JSON contains surrogate text")
     return data[key], hashlib.sha256(raw).hexdigest()
 
 

@@ -6,10 +6,10 @@
 
 create refuses a symlinked or odd config.json/writer.lock before anything opens it, takes the writer lock and copies a
 settled state dir (config.json, drafts, changes, screenshots, the audit log and consistent sqlite snapshots of inbox.sqlite3, then
-conversation.sqlite3; never writer.lock, a journal, a symlink or an unknown entry) into a new private
+conversation.sqlite3, transcript.sqlite3 and clover/cache.sqlite3 if present; never writer.lock, a journal, a symlink or an unknown entry) into a new private
 <out>/hass-state-<UTC stamp>/ (out: an existing 0700 user dir; built aside, renamed in) and writes MANIFEST.json last.
-verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on both
-stores, and that config.json is an object naming the manifest's exact worktree; listed photo originals and sidecars must pair one-to-one
+verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on each
+store, and that config.json is an object naming the manifest's exact worktree; listed photo originals and sidecars must pair one-to-one
 and match media.originals. restore verifies first, then builds a NEW state dir bound
 to a separate drill worktree (only config.json `worktree` is rewritten). Isolation rule: nothing restores over an existing
 dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
@@ -35,12 +35,16 @@ from hass.editor import UnsafeState  # noqa: E402
 
 MANIFEST, CONFIG, DB, LOCK = "MANIFEST.json", "config.json", "conversation.sqlite3", "writer.lock"
 INBOX = "inbox.sqlite3"  # H16 inbound queue; snapshotted like DB
+TRANSCRIPT = "transcript.sqlite3"  # Private append-only conversation history; online snapshot like DB.
+CLOVER = "clover/cache.sqlite3"  # till cache (hass/clover/cache.py); snapshotted; the item link table will join it
 BUNDLE = "content.bundle"  # FAV-07: git bundle of the writer worktree's HEAD == contentCommit
 DIRS = ("drafts", "changes", "screenshots", "audit")  # AVB-10: audit/ is the one audit log (ids only), kept with the state
 ORIG = "media/originals/"  # H10 photo originals <aa>/<sha>.<ext> + <aa>/<sha>.json, aa == sha[:2] (hass/media.py)
-FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|content\.bundle"
+FALLBACK_JPEG = r"screenshots/([0-9a-f]{64})\.jpg"  # frozen listing picture, named by its bytes; never arbitrary JPEGs
+FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|transcript\.sqlite3|clover/cache\.sqlite3|content\.bundle"
                      r"|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
                      r"|screenshots/[0-9A-Za-z_-][0-9A-Za-z._-]*\.png"
+                     rf"|{FALLBACK_JPEG}"
                      r"|audit/[0-9]{4}-[0-9]{2}-[0-9]{2}\.jsonl"
                      r"|media/originals/(?P<aa>[0-9a-f]{2})/(?P=aa)[0-9a-f]{62}\.(json|%s)"
                      % "|".join(sorted(set(photos.EXT.values()))))
@@ -70,6 +74,12 @@ def _write_new(path: Path, data: bytes) -> None:
 
 def _copy(src: Path, dst: Path) -> None:
     _write_new(dst, _read(src))
+
+def _read_fallback(path: Path, digest: str) -> bytes:
+    data = _read_small(path, photos.MAX_BYTES)
+    if not data.startswith(photos.KINDS["jpeg"]) or hashlib.sha256(data).hexdigest() != digest:
+        raise ValueError("invalid frozen listing picture")
+    return data
 
 def _rename_noreplace(src: Path, dst: Path) -> None:
     """Atomic rename that raises FileExistsError if dst exists, even as an empty dir (os.rename would replace it)."""
@@ -113,13 +123,13 @@ def _scan(sdir: Path):
         if entry.is_symlink(): bad.append(f"symlink: {entry.name}")
         elif entry.is_dir(follow_symlinks=False) and entry.name == corrlog.FOLDER:
             continue  # The private log is not backed up; never traverse its contents.
-        elif entry.is_dir(follow_symlinks=False) and entry.name in DIRS + ("journal",):
+        elif entry.is_dir(follow_symlinks=False) and entry.name in DIRS + ("journal", "clover"):
             for sub in sorted(os.scandir(entry.path), key=lambda e: e.name):
                 rel = f"{entry.name}/{sub.name}"
                 if sub.is_symlink(): bad.append(f"symlink: {rel}")
                 elif sub.is_file(follow_symlinks=False) and FILE_RE.fullmatch(rel): files.append(rel)
                 else: bad.append(f"unknown entry: {rel}")
-        elif entry.is_file(follow_symlinks=False) and entry.name in (CONFIG, DB, INBOX): files.append(entry.name)
+        elif entry.is_file(follow_symlinks=False) and entry.name in (CONFIG, DB, INBOX, TRANSCRIPT): files.append(entry.name)
         elif not (entry.is_file(follow_symlinks=False) and entry.name == LOCK): bad.append(f"unknown entry: {entry.name}")
     return files, bad
 
@@ -177,7 +187,14 @@ def create(state, out, now=None, media=None) -> dict:
         for rel in sorted(files + mfiles, key=lambda rel: rel != INBOX):
             (dest / rel).parent.mkdir(mode=0o700, exist_ok=True)
             src = mroot / rel[len("media/"):] if rel.startswith(ORIG) else sdir / rel
-            (_snapshot if rel in (DB, INBOX) else _copy)(src, dest / rel)
+            if fallback := re.fullmatch(FALLBACK_JPEG, rel):
+                try: data = _read_fallback(src, fallback[1])
+                except (OSError, ValueError):
+                    return {"result": "refused", "problems": [f"invalid fallback picture: {rel}"]}
+                _write_new(dest / rel, data)
+                hashes[rel] = fallback[1]
+                continue
+            (_snapshot if rel in (DB, INBOX, TRANSCRIPT, CLOVER) else _copy)(src, dest / rel)
             hashes[rel] = hashlib.sha256(_read(dest / rel)).hexdigest()
         doc = {"schemaVersion": 1, "createdAt": now.isoformat(), "worktree": cfg["worktree"], "files": hashes}
         commit = _head(Path(cfg["worktree"]))  # inside the writer lock; read-only
@@ -240,7 +257,7 @@ def _config_worktree(path: Path):  # the worktree a hashed config.json names, el
     try: cfg = json.loads(_read_small(path, editor.MAX_CONFIG).decode("utf-8"))  # restore merges it as a dict, rewrites worktree
     except (OSError, ValueError, RecursionError): return None
     wt = cfg.get("worktree") if isinstance(cfg, dict) else None
-    return wt if isinstance(wt, str) and wt != "" else None
+    return wt if isinstance(wt, str) and wt != "" and "\x00" not in wt else None  # a NUL path can't be resolved (restore would crash)
 
 def _config_ok(path: Path) -> bool: return _config_worktree(path) is not None
 
@@ -250,7 +267,7 @@ def verify(backup) -> dict:
     doc = _manifest(bdir)
     if doc is None: return {"result": "corrupt", "problems": [f"{MANIFEST} missing or invalid"]}
     files, seen, problems = doc["files"], set(), []
-    walkable = set(DIRS) | ({"media", ORIG[:-1]} if "media" in doc else set())  # + media/originals/<aa> below
+    walkable = set(DIRS) | {"clover"} | ({"media", ORIG[:-1]} if "media" in doc else set())  # + media/originals/<aa> below
     if bdir.stat().st_mode & 0o777 != 0o700: problems.append("mode: backup dir")
     def walk(path: Path, prefix: str) -> None:
         for entry in sorted(os.scandir(path), key=lambda e: e.name):
@@ -267,8 +284,12 @@ def verify(backup) -> dict:
     walk(bdir, "")
     for rel, digest in sorted(files.items()):
         if rel not in seen: problems.append(f"missing: {rel}")
+        elif fallback := re.fullmatch(FALLBACK_JPEG, rel):
+            try: _read_fallback(bdir / rel, fallback[1])
+            except (OSError, ValueError): problems.append(f"invalid fallback picture: {rel}")
+            if fallback[1] != digest: problems.append(f"hash mismatch: {rel}")
         elif hashlib.sha256(_read(bdir / rel)).hexdigest() != digest: problems.append(f"hash mismatch: {rel}")
-        elif rel in (DB, INBOX) and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
+        elif rel in (DB, INBOX, TRANSCRIPT, CLOVER) and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
         elif rel == CONFIG and (cfg_wt := _config_worktree(bdir / rel)) is None:
             problems.append("config: not a JSON object with a worktree")
         elif rel == CONFIG and cfg_wt != doc["worktree"]: problems.append("config: worktree does not match manifest")
@@ -364,6 +385,9 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
             if rel == BUNDLE or rel.startswith(ORIG) and not mtmp: continue  # bundle: FAV-08; media: mediaRestored
             dst = mtmp / rel[len("media/"):] if rel.startswith(ORIG) else tmp / rel
             dst.parent.mkdir(mode=0o700, exist_ok=True)
+            if fallback := re.fullmatch(FALLBACK_JPEG, rel):
+                _write_new(dst, _read_fallback(bdir / rel, fallback[1]))
+                continue
             if rel != CONFIG:
                 _copy(bdir / rel, dst)
                 continue

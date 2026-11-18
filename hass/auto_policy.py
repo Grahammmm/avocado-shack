@@ -1,6 +1,6 @@
-"""H23 policy: which single draft change could skip approval if the owner opted in (UNWIRED).
+"""H23 auto_policy: WIRED only by stock_site for opted-in availability batches.
 
-Nothing imports this module: the approval flow is unchanged and no setting reads it. The opt-in itself needs
+Other approval flows are unchanged. The opt-in itself needs
 H18-H22 and the owner first. The eligible set is closed on purpose: an op added to the registry later needs
 approval until someone edits ``ELIGIBLE`` here. Undo (``history.revert``) is never eligible.
 """
@@ -24,6 +24,10 @@ def qualifies(ops, opted_in, paused) -> tuple[bool, str]:
     if not isinstance(opted_in, (list, tuple, set, frozenset)) or not all(isinstance(n, str) for n in opted_in):
         return False, "opt-in list unreadable"
     if len(ops) != 1:
+        from hass import editor, live_policy
+        if 1 < len(ops) <= min(editor.MAX_OPS, live_policy.MAX_RECORDS) and all(
+                isinstance(c, dict) and c.get('op') == 'product.set_availability' for c in ops):
+            return (True, "opted in") if 'product.set_availability' in opted_in else (False, "not opted in")
         return False, "more than one change" if ops else "no change"
     call = ops[0]
     name = call.get("op") if isinstance(call, dict) else None

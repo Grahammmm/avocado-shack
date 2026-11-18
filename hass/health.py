@@ -55,8 +55,16 @@ UNVERIFIED_SQL = ("SELECT checked_at FROM drafts WHERE checked_at IS NOT NULL AN
 MEMORY_SQL = ("SELECT (SELECT COUNT(*) FROM memory m WHERE superseded_at IS NULL AND forgotten_at IS NULL AND (SELECT"
               " COUNT(*) FROM memory m2 WHERE m2.key = m.key AND m2.superseded_at IS NULL AND m2.forgotten_at IS NULL)"
               " > 1) + (SELECT COUNT(*) FROM memory m WHERE value != '' AND EXISTS (SELECT 1 FROM memory m2 WHERE"
-              " m2.key = m.key AND m2.forgotten_at >= m.created_at))")  # hass/memory.py: one active row per key;
+              " m2.key = m.key AND hass_memory_at_or_after(m2.forgotten_at, m.created_at)))")  # hass/memory.py: one active row per key;
 # forget blanks every row of the key, so only a row created after the forget (re-remembered) may hold text
+
+def _at_or_after(forgot, created) -> int:
+    """SQLite UDF (RF2345-18): forgotten_at >= created_at as aware instants, not ISO text; NULL never matches. A zone-less,
+    invalid or non-text operand raises, which SQLite reports as DatabaseError (fixed 'unreadable' problem, no operand text)."""
+    if forgot is None: return 0
+    pair = datetime.fromisoformat(forgot), datetime.fromisoformat(created)
+    if pair[0].utcoffset() is None or pair[1].utcoffset() is None: raise ValueError("zone-less time")
+    return int(pair[0] >= pair[1])
 
 def _problem(check, detail) -> dict:
     return {"check": check, "detail": detail}
@@ -82,9 +90,10 @@ def _daily_limit(db, tables: set, now: datetime, cap: int, problems: list, info:
     today, refused = now.astimezone(conversation.LOCAL_TZ).date(), 0
     if "messages" in tables:
         for (raw,) in db.execute("SELECT received_at FROM messages WHERE disposition = 'daily-limit'"):
-            try: when = datetime.fromisoformat(raw)
-            except (TypeError, ValueError): continue  # no known day: not today
-            refused += when.utcoffset() is not None and when.astimezone(conversation.LOCAL_TZ).date() == today
+            try:
+                when = datetime.fromisoformat(raw)
+                refused += when.utcoffset() is not None and when.astimezone(conversation.LOCAL_TZ).date() == today
+            except (TypeError, ValueError, OverflowError): continue  # no known day (RF0520-12: or a Pacific date out of range): not today
     if refused: problems.append(_problem("daily-limit", f"{refused} message(s) not read today, cap {cap}"))
     row = db.execute("SELECT calls FROM usage WHERE day = ?", (today.isoformat(),)).fetchone() if "usage" in tables else None
     info.append(_problem("interpreter", f"{row[0] if row and type(row[0]) is int else 0} of {cap} today"))
@@ -117,6 +126,7 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
                     problems.append(_problem("paused-long", detail))
             if "memory" in tables:  # RF1710-5: hass/memory.py rules, count only (no key, value or source)
                 try:
+                    db.create_function("hass_memory_at_or_after", 2, _at_or_after)
                     if n := db.execute(MEMORY_SQL).fetchone()[0]:
                         problems.append(_problem("memory-invariant", f"{n} row(s)"))
                 except sqlite3.DatabaseError:

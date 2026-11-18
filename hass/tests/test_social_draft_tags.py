@@ -46,7 +46,7 @@ class SocialDraftTagTests(unittest.TestCase):
                      "Ask at the counter @", "Full-width \uff03 tag and \uff20 shop"):  # a full-width sign before a space is kept, like "# each"
             with self.subTest(text=text):
                 out = self.build("p1", product("p1", description=text))
-                self.assertEqual(out, {"draft": True, "image": "assets/products/p1.webp", "alt": "Sourdough",
+                self.assertEqual(out, {"draft": True, "illustration": True, "image": "assets/products/p1.webp", "alt": "Sourdough",
                                        "caption": f"Sourdough\n{text}\n{FROM}\n\n#AvocadoShack #Bread"})
         out = self.with_maker({**MAKER, "place": "Morro Bay # 2"}, name="C# loaf")
         self.assertEqual(out["caption"], "C# loaf\nA crust worth tearing.\nFrom Brian's in Morro Bay # 2.\n\n#AvocadoShack #Bread")

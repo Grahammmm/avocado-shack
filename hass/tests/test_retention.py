@@ -32,7 +32,7 @@ def tree(*roots) -> dict:
 
 class RetentionTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
+        self.tmp = Path(os.path.realpath(tempfile.mkdtemp()))
         self.addCleanup(shutil.rmtree, self.tmp)
         self.state, self.media, self.backups = self.tmp / "state", self.tmp / "media", self.tmp / "backups"
         for d in (self.state, self.media, self.backups): d.mkdir(mode=0o700)

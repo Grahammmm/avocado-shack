@@ -45,12 +45,12 @@ class FakePhotos:
 class Chat:
     """One owner conversation on the throwaway repo with the real dispatcher, item.add the only skill."""
 
-    def __init__(self, photos, setup=None):
+    def __init__(self, photos, setup=None, settings=None):
         self.kit = testkit.Scratch({}, {"item.add": ia.ITEM_ADD}, photos=list(photos), setup=setup)
         self.kit.conv.db.close()  # the kit's own Conversation is not used; this one has the dispatcher
         cfg = json.loads((self.kit.repo.state / "config.json").read_text("utf-8"))
         from hass import editor
-        editor._write_json(self.kit.repo.state / "config.json", {**cfg, "settings": {**cfg["settings"], "skills": {"mode": "both"}}})
+        editor._write_json(self.kit.repo.state / "config.json", {**cfg, "settings": {**cfg["settings"], "skills": {"mode": "both"}, **(settings or {})}})
         self.asked, self.photos, self.mapping = [], FakePhotos(), {}
         self.now, self.n, self.out = testkit.START, 0, self.kit.out
         self.interp = _Interp(self.mapping, self.asked)
@@ -62,6 +62,7 @@ class Chat:
             and hasattr(conversation.dispatch_mod, "Registry") else __import__("hass.skills.model", fromlist=["Registry"]).Registry(skills={"item.add": ia.ITEM_ADD})
         self.conv = conversation.Conversation(str(self.kit.repo.state), self.kit.editor, self.interp, lambda: self.now,
                                               self.kit.previewer, photos=self.photos, skills=self.registry)
+        self.conv.polish_transport = types.SimpleNamespace(generate=lambda *a: {"ok": False, "code": "no-hermes"})
 
     def close(self):
         self._patch.stop()
@@ -79,8 +80,8 @@ class Chat:
         if photo:
             self.photos.files[pid] = photo
         msg = conversation.Inbound(pid, testkit.CHAT, testkit.OWNER, text, False, "new", self.now.isoformat(), 1 if photo else 0)
+        before = len(self.out.sent)  # before handle(): a reply may be sent on receipt (HASS-INTAKE-2 early_flush)
         disposition = self.conv.handle(msg)
-        before = len(self.out.sent)
         self.conv.flush(self.out)
         return disposition, [row["text"] for row in self.out.sent[before:]]
 

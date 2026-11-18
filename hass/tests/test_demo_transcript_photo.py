@@ -88,7 +88,7 @@ class PhotoDemoTranscriptTests(unittest.TestCase):
         self.assertEqual(texts[1], f"I already have that photo, and I'm waiting on you. {texts[0]}")
         self.assertTrue(texts[2].startswith("Here's the change I'd make:"), texts[2])
         self.assertTrue(texts[3].startswith("Saved: the photo, the photo description for Hass avocado"), texts[3])
-        self.assertIn("the photo, the photo description for Hass avocado: saved", texts[4])
+        self.assertIn("the photo, the photo description for Hass avocado, approved Mon Nov 2 9:03 am: saved", texts[4])
         self.assertTrue(texts[5].startswith("To undo that, I'd change it back:\nHere's the change I'd make:"), texts[5])
         self.assertTrue(texts[6].startswith("Saved:"), texts[6])
         self.assertEqual((edit["state"], json.loads(undo["ops_json"])[0]["op"]), ("reverted", "history.revert"))

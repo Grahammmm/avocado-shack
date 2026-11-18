@@ -10,7 +10,7 @@ answer says so and quotes the last count labelled as old; a snapshot over 24 hou
 ("AS-PAN-OIL-01") is shown as the till has it and never judged by the voice rules. The default shows the text as is.
 """
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from hass.clover.mapper import format_quantity, norm_name, suggest
@@ -35,7 +35,8 @@ def when(moment, now):
 
 def freshness(snapshot, now, reachable=True):
     """(state, label): state is fresh | stale | unreachable | too-old; label is the sentence to put before or after an answer."""
-    age = now - snapshot.fetched_at
+    # Elapsed time between instants: same-zone aware datetimes would subtract wall clocks and ignore a DST change between them.
+    age = now.astimezone(timezone.utc) - snapshot.fetched_at.astimezone(timezone.utc)
     if age > TOO_OLD:
         return "too-old", (f"I have not been able to read the till since {when(snapshot.fetched_at, now)}, "
                            "so I will not quote a count that old. Check the till, or ask me again in a few minutes.")

@@ -118,6 +118,7 @@ class CorrLog:
                 try: row = json.loads(raw)
                 except (ValueError, RecursionError): continue  # RecursionError: nesting beyond the decoder's depth
                 if isinstance(row, dict) and isinstance(row.get("kind"), str) and row["kind"] in KINDS and isinstance(row.get("at"), str):
+                    if "excerpt" in row and not isinstance(row["excerpt"], str): continue  # damaged row: skip only it
                     try: at = datetime.fromisoformat(row["at"])
                     except ValueError: continue
                     if at.tzinfo is not None and at >= cutoff: out.append((at, row))
@@ -151,10 +152,9 @@ class CorrLog:
 
 
 def _local(iso, clock) -> str:
-    try: at = datetime.fromisoformat(iso)
-    except (TypeError, ValueError): return "an unknown time"
     from zoneinfo import ZoneInfo
-    at = at.astimezone(ZoneInfo("America/Los_Angeles"))
+    try: at = datetime.fromisoformat(iso).astimezone(ZoneInfo("America/Los_Angeles"))
+    except (TypeError, ValueError, OverflowError): return "an unknown time"  # OverflowError: conversion leaves the calendar
     return f"{at:%a %b} {at.day}, {at.hour % 12 or 12}:{at:%M} {'am' if at.hour < 12 else 'pm'}"
 
 

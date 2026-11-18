@@ -27,23 +27,25 @@ class CompareTests(base.EvalTestCase):
     def test_four_outcomes_use_after_reason_in_case_order(self):
         after = self.mk(e01={"unsupported": CANARY}, e25={"question": CANARY}, e06={"unsupported": CANARY})
         after = dict(reversed(list(after.items())))  # reply-file order must not matter
+        with mock.patch.object(ev, "score", wraps=ev.score) as spy:
+            ev.compare(self.cases, self.replies, after, base.REGISTRY)
+        self.assertEqual(len(spy.call_args_list), 2)
+        for call, replies in zip(spy.call_args_list, (self.replies, after)):
+            self.assertIs(call.args[0], self.cases)
+            self.assertIs(call.args[1], replies)
+            self.assertIs(call.args[2], base.REGISTRY)
         code, out, err = self.cmp(self.replies, after)
         self.assertEqual((code, err, out.count("\n")), (1, "", 1))
         self.assertEqual(json.loads(out), {
             "regressed": [{"id": "e01", "why": "expected ops, got unsupported"}], "fixed": ["e25"],
-            "stillFailing": 2, "passedBoth": 71, "missing": {"before": [], "after": []}})
+            "stillFailing": 2, "passedBoth": 94, "missing": {"before": [], "after": []}})
         self.assertNotIn(CANARY, out)
-        self.assertEqual(71 + 2 + 1 + 1, len(self.cases))
-
-    def test_pure_compare_scores_each_side_once_with_same_objects(self):
-        with mock.patch.object(ev, "score", wraps=ev.score) as spy:
-            ev.compare(self.cases, self.replies, self.replies, base.REGISTRY)
-        self.assertEqual([c.args[0] is self.cases and c.args[2] is base.REGISTRY for c in spy.call_args_list], [True, True])
+        self.assertEqual(94 + 2 + 1 + 1, len(self.cases))
 
     def test_identical_inputs_have_no_changes_and_exit_0(self):
         code, out, err = self.cmp(self.replies, self.replies)
         self.assertEqual((code, err), (0, ""))
-        self.assertEqual(json.loads(out), {"regressed": [], "fixed": [], "stillFailing": 3, "passedBoth": 72,
+        self.assertEqual(json.loads(out), {"regressed": [], "fixed": [], "stillFailing": 3, "passedBoth": 95,
                                            "missing": {"before": [], "after": []}})
 
     def test_fixed_or_still_failing_only_exits_0_and_one_regression_exits_1(self):
@@ -59,14 +61,14 @@ class CompareTests(base.EvalTestCase):
         code, out, _ = self.cmp(self.mk(drop=("e03", "e04")), self.mk(drop=("e04", "e06")))
         got = json.loads(out)
         self.assertEqual((code, got["missing"]), (0, {"before": ["e03", "e04"], "after": ["e04", "e06"]}))
-        self.assertEqual((got["regressed"], got["fixed"], got["stillFailing"], got["passedBoth"]), ([], [], 2, 70))
+        self.assertEqual((got["regressed"], got["fixed"], got["stillFailing"], got["passedBoth"]), ([], [], 2, 93))
         code, out, _ = self.cmp({}, {})  # both empty: everything missing, nothing compared
         got = json.loads(out)
-        self.assertEqual((code, got["stillFailing"], got["passedBoth"], len(got["missing"]["after"])), (0, 0, 0, 75))
+        self.assertEqual((code, got["stillFailing"], got["passedBoth"], len(got["missing"]["after"])), (0, 0, 0, 98))
 
     def test_extra_reply_ids_are_ignored(self):
         code, out, _ = self.cmp(self.mk(zz9={"unsupported": "x"}), self.replies)
-        self.assertEqual((code, json.loads(out)["passedBoth"]), (0, 72))
+        self.assertEqual((code, json.loads(out)["passedBoth"]), (0, 95))
         self.assertNotIn("zz9", out)
 
     def test_explicit_cases_path_and_reason_is_the_scorers(self):
@@ -90,7 +92,7 @@ class CompareTests(base.EvalTestCase):
         self.assertEqual(base.run("compare", "--before", good, "--after", dup)[::2], (2, "replies line 2: duplicate id"))
         short = self.write("short.jsonl", self.rows[:5])
         code, out, err = base.run("compare", "--before", good, "--after", good, "--cases", short)
-        self.assertEqual((code, out, err), (2, "", "cases: 5 cases, expected 75"))
+        self.assertEqual((code, out, err), (2, "", "cases: 5 cases, expected 98"))
 
     def test_mixed_modes_and_missing_arguments_exit_2_before_any_work(self):
         good = self.file("good.jsonl", self.replies)

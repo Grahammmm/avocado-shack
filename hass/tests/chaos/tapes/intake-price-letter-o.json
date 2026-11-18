@@ -1,0 +1,24 @@
+{
+ "case": "intake-price-letter-o",
+ "calls": [
+  {
+   "turn": 1,
+   "method": "answer.fields",
+   "result": {
+    "price_cents": 350,
+    "cost_cents": null,
+    "quantity": null
+   },
+   "attrs": {
+    "last_error": null,
+    "last_backend": null,
+    "last_fallback": false,
+    "last_primary_error": null,
+    "last_seconds": null,
+    "last_model": null
+   },
+   "seconds": 2.714,
+   "route": "qwen"
+  }
+ ]
+}

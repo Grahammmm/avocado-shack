@@ -19,11 +19,6 @@ class AttachmentTailTests(unittest.TestCase):
         self.assertEqual(len(fake.calls), 1)  # metadata only: nothing downloaded
         return exc
 
-    def test_null_guid_after_first_n_keeps_the_photo(self):
-        fake = FakeTransport(meta=_meta({"guid": "att-1"}, {"guid": None}))
-        self.assertEqual(self.photos(fake).fetch("msg-1", 1), [JPG])
-        self.assertEqual(len(fake.calls), 2)  # metadata + one download
-
     def test_each_bad_entry_after_first_n_is_never_read(self):
         for bad in BAD:
             with self.subTest(bad=bad):

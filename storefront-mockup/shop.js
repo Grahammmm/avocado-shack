@@ -9,7 +9,7 @@ function organic(p){return /\borganic\b/i.test(p.name)||['Ocean Ranch','Straus',
 // AV1352-01: only an installed owner photo (same shape as content_model.HOME_IMAGE_RE) is not an illustration; JS $ without the m flag is a true end.
 const installedImage=s=>typeof s==='string'&&/^assets\/products\/photo-[0-9a-f]{16}\.(jpg|png)$/.test(s);
 function photo(p){return `<img loading=\"lazy\" width=\"800\" height=\"800\" src=\"${esc(p.image)}\" alt=\"${esc((p.imageAlt||p.name)+(installedImage(p.image)?'':' (illustration)'))}\">`}
-function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
+function origin(p){return p.supplier?`From ${p.supplier}`:maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
 function badges(p){const tags=(organic(p)?'<span>Organic</span>':'')+(isNew(p,pinNow||undefined)?'<span>New</span>':'');return (tags?`<div class="food-badges">${tags}</div>`:'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
 function brand(p){return p.displayBrand||(p.brand==='Producer not identified'?'From the market':p.brand)}
 // AV0222-10: a maker's story is optional. Story: story paragraph; no story but a link: place only; neither: no panel at all.
@@ -18,7 +18,8 @@ function makerStory(p){const m=maker(p);if(!m)return'';const story=typeof m.stor
 // The maker's key and name are always on the card (screen-reader only), so a preview finds the card with or without the panel.
 function card(p){
  const m=maker(p);
- return `<article data-product-id="${esc(p.id)}" data-category="${esc(p.category)}"${m?` data-maker-key="${esc(p.producerKey)}"`:''}><div class="food-card-top"><div class="product-image">${photo(p)}</div><div class="food-identity"><p class="product-meta">${esc(brand(p))}</p><h3>${esc(p.name)}</h3><p class="origin-label">${esc(origin(p))}</p>${m?`<span class="sr-only maker-name">${esc(m.name)}</span>`:''}${badges(p)}</div></div><p class="food-description">${esc(p.description)}</p>${makerStory(p)}<a class="text-link card-link" href="?item=${esc(encodeURIComponent(p.id))}#market">Link to this</a></article>`;
+ const amount=p.sellingPrice?`<p class="product-meta product-price">$${esc(p.sellingPrice)}</p>`:'';
+ return `<article data-product-id="${esc(p.id)}" data-category="${esc(p.category)}"${m?` data-maker-key="${esc(p.producerKey)}"`:''}><div class="food-card-top"><div class="product-image">${photo(p)}</div><div class="food-identity"><p class="product-meta">${esc(brand(p))}</p><h3>${esc(p.name)}</h3>${amount}<p class="origin-label">${esc(origin(p))}</p>${m?`<span class="sr-only maker-name">${esc(m.name)}</span>`:''}${badges(p)}</div></div><p class="food-description">${esc(p.description)}</p>${makerStory(p)}<a class="text-link card-link" href="?item=${esc(encodeURIComponent(p.id))}#market">Link to this</a></article>`;
 }
 [...new Set(catalog.map(p=>p.brand))].sort().forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=b==='Producer not identified'?'Other market selections':b;$('#brand-filter').append(o)});
 // AV1622-04: shelf-check words and the selection line are worked out here, in the visitor's browser, from the recorded dates
@@ -74,15 +75,22 @@ const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
 // A new array each time; the day is renderNow's, so badges and sequence agree for one render.
 function orderedProducts(now=renderNow){const d=catalog.map((p,i)=>({p,i,n:isNew(p,now)}));
  d.sort((x,y)=>x.n!==y.n?(x.n?-1:1):x.n&&x.p.addedOn!==y.p.addedOn?(x.p.addedOn>y.p.addedOn?-1:1):x.i-y.i);return d.map(x=>x.p)}
+// AV1104-02: cards whose current word is exactly Sold out go last; other positions stay stable (new array, nothing mutated).
+const soldLast=l=>l.filter(p=>p.availability!=='Sold out').concat(l.filter(p=>p.availability==='Sold out'));
 function drawCards(l){pinNow=renderNow;try{return l.map(card).join('')}finally{pinNow=null}}
 // AV1052-01: a search term also matches the description, after the card's own words. One stable pass splits the ordered list:
-// name, brand, town, shelf or Organic badge first, then description-only hits (a card in both groups appears once, in the first).
-// The two texts are folded and searched separately, so a term never matches across the end of one and the start of the other.
-function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;
+// name, brand, town, shelf or Organic badge first, then description hits (a card in both groups appears once, in the first).
+// AV1104-01: the term is split into words; a card matches when EVERY word is found, regardless of sequence, each in any searched field. A word is found
+// in a field as literal text, or as a whole field word with the same one-step -ies/-y, -es or -s form (words of 4+ letters, reductions of 3+). Fields are folded and searched separately.
+const wordsOf=t=>t.match(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu)||[];
+const forms=w=>{const f=new Set([w]);if(/^\p{L}+$/u.test(w)&&[...w].length>=4){const add=x=>{if([...x].length>=3)f.add(x)};if(w.endsWith('ies'))add(w.slice(0,-3)+'y');if(w.endsWith('es'))add(w.slice(0,-2));if(w.endsWith('s'))add(w.slice(0,-1))}return f};
+const hasWord=(field,piece,pf)=>field.includes(piece)||wordsOf(field).some(w=>{for(const x of forms(w))if(pf.has(x))return true;return false});
+function filteredProducts(){const pieces=fold(searchText($('#product-search').value)).split(/\s+/).filter(Boolean),brand=$('#brand-filter').value;
  const list=orderedProducts().filter(p=>inView(p)&&(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability)));
- if(!term)return list;const first=[],second=[];
- for(const p of list){if(fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))first.push(p);else if(fold(p.description).includes(term))second.push(p)}
- return first.concat(second)}
+ if(!pieces.length)return soldLast(list);const first=[],second=[],pf=pieces.map(forms);
+ for(const p of list){const meta=[p.name,p.brand,maker(p)?.place,SHELF[p.category],organic(p)?'Organic':''].map(fold),desc=fold(p.description),got=(i,f)=>hasWord(f,pieces[i],pf[i]);
+  if(pieces.every((_,i)=>meta.some(f=>got(i,f))))first.push(p);else if(pieces.every((_,i)=>meta.some(f=>got(i,f))||got(i,desc)))second.push(p)}
+ return soldLast(first).concat(soldLast(second))}
 // RF0854-13: once a render re-ages every word to Last confirmed, the Available today control is retired as a reload would:
 // unchecked, removed, and only ?avail dropped (replaceState; other params, hash and item state untouched). Whole catalog, not the results.
 function retireStaleAvail(){if(!availBox||catalog.some(p=>CURRENT.has(p.availability)))return false;availBox.checked=false;availBox.closest('.avail-filter').remove();availBox=null;
@@ -128,7 +136,7 @@ try{const u=new URLSearchParams(location.search),shelf=[...document.querySelecto
  if(shelf&&!shelf.hidden)selectShelf(shelf);$('#product-search').value=searchText(u.get('q'));$('#brand-filter').value=mk&&[...$('#brand-filter').options].some(o=>o.value===mk)?mk:'';
  // AV1322-10: ?item=<catalog id> wins over the filters: show everything, load enough cards to reach it.
  // An unknown, empty or over-80-character id is ignored and the filters above apply as before.
- const item=u.get('item'),i=item&&[...item].length<=80?orderedProducts().findIndex(p=>p.id===item):-1;
+ const item=u.get('item'),i=item&&[...item].length<=80?soldLast(orderedProducts()).findIndex(p=>p.id===item):-1;
  if(i>=0){activeFrom='';setView('all');selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';limit=Math.max(12,Math.ceil((i+1)/12)*12);linkedItem=item;if(availBox)availBox.checked=false}
  if(availBox)availBox.checked=u.get('avail')==='1'&&i<0;
  let fix=false;

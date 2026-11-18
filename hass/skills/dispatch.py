@@ -30,6 +30,7 @@ Optional hooks a skill's module may define (found in the module that defines the
 """
 from __future__ import annotations
 
+import dataclasses
 import importlib
 import re
 import sys
@@ -37,11 +38,12 @@ from datetime import datetime
 
 from hass import content_model, nl_prep
 from hass.ops import DATE_RE, TIME_RE
-from hass.skills import kinds, openreq
+from hass.skills import item_intake, kinds, openreq
 from hass.skills.model import MAX_OPS
 
 MODES = ("ops-only", "both", "skills-first")
 DEFAULT_MODE = "ops-only"
+INTAKE_BEFORE = frozenset({"description", "image_alt", "availability", "photo"})  # HASS-INTAKE-2: the interview comes before these
 MAX_CALLS = MAX_OPS
 BACKLOG_REASONS = ("unknown-skill", "policy", "unsupported-page", "stuck", "price", "other")  # the reasons a refusal may name (see _read_only)
 NEAR_TIE = 0.10  # the router's top two within 10%: the owner is asked (same figure as hass/skills/router.py)
@@ -85,8 +87,10 @@ RULES.setdefault("no-price", _no_price)
 class Ctx:
     """What a skill's ``plan`` and rules may read: the saved content (read-only), today (Pacific), aliases, the owner's texts."""
 
-    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, live=False, maker_page=None, site_dir=None, *, guest_counts_db=None, hike_lookup=None):
+    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, live=False, maker_page=None, site_dir=None, *, guest_counts_db=None, hike_lookup=None, intake=False, intake_reader=None):
         self.content, self.today, self.aliases, self.texts, self.now = content, today, aliases, texts, now
+        self.intake = intake is True  # HASS-INTAKE-2: settings itemIntake is on, so a new item gets the full intake interview
+        self.intake_reader = intake_reader  # HASS-INTAKE-2: fn(key, words, today) -> {"value": ...} for an answer fixed code cannot read, or None
         self.media_root, self.house_render = media_root, house_render  # the stored originals (for a photo check) and the houseRender setting
         self.live = live is True  # HASS-LIVE-ADD-2: settings liveSite is on, so a change goes to the real website on his yes
         self.maker_page = maker_page  # HASS-LIVE-ADD-2: fn(address) -> the page of a maker's own website (hass/maker_site.py) or PageError
@@ -424,6 +428,7 @@ class Dispatcher:
         read = maker_site.prefetched(getattr(self.conv, "_pages", None))
         return Ctx(content, today, self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
                    house_render=settings.get("houseRender") is True, live=bool(settings.get("liveSite")), maker_page=read,
+                   intake=settings.get("itemIntake") is True, intake_reader=self._intake_reader(),
                    site_dir=writer / "storefront-mockup", guest_counts_db=settings.get("guestCountsDb"),
                    hike_lookup={"contact": settings["hikeLookupContact"], "folder": self.conv.sdir / "hike_lookup", "waiting": self._draft_waiting(now)}
                    if settings.get("hikeLookupContact") else None)
@@ -436,6 +441,11 @@ class Dispatcher:
 
     def _owner(self):
         return self.conv._chat()  # the answering chat, so each owner has their own open request (HASS-LIVE-PLAN-1)
+
+    def intake_ready(self) -> bool:
+        """HASS-INTAKE-2: item.add has the interview hooks and a photo can start it (the conversation sends the first question on receipt)."""
+        starter = self.registry.get("item.add")
+        return starter is not None and skill_hook(starter, "intake_next") is not None and bool(self.photo_skills())
 
     def photo_skills(self):
         return [s for s in self.registry.active() if any(sl.kind == "attachment" and sl.from_attachment for sl in s.slots)]
@@ -488,6 +498,182 @@ class Dispatcher:
         return "Do you want to " + ", or ".join(labels) + "?", offered
 
     # entry points --------------------------------------------------------------------------------------------
+    def simple_intake(self, req=None):
+        return ((getattr(self.conv, "settings", None) or {}).get("itemIntake") is True
+                and self.registry.get("item.add") is not None and (req is None or req["skill"] == "item.add"))
+
+    def intake_text(self, msg, now, req):
+        """Separate typed purchase facts before the general interpreter sees any text."""
+        if not self.simple_intake(req): return msg, req
+        public, answers = item_intake.caption_answers(msg.text, getattr(self.conv, "_intake_fields", None))
+        if not answers: return msg, req
+        if not msg.attachments:
+            public = item_intake.without_unresolved_finance(public)
+        slots = dict(req["slots"]) if req else {}
+        slots["intake"] = {**slots.get("intake", {}), **answers,
+                           "simple": bool(slots.get("intake", {}).get("simple") or not public)}
+        self.conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"] if req else None,
+                               state=req["state"] if req else "open", skill="item.add", slots=slots,
+                               texts=req["texts"] if req else [], attachments=req["attachments"] if req else [],
+                               asked_slot=req["asked_slot"] if req else None, draft_code=req["draft_code"] if req else None)
+        return dataclasses.replace(msg, text=public), self.conv.requests.get(self._owner(), now)
+
+    def _simple_advance(self, msg, now, req, new_slots, resolved=False):
+        """One website-only draft. No interview or till planning; all writes use Conversation._draft."""
+        from hass.skills import intake_simple as simple
+        conv = self.conv
+        skill = self.registry.get("item.add")
+        if hasattr(conv.editor, "skill_allowed") and not conv.editor.skill_allowed(skill):
+            conv._reply("That's switched off, so nothing changed.")
+            return "refused"
+        slots = dict(req["slots"]) if req else {}
+        if resolved and "intake" in new_slots: slots["intake"] = new_slots["intake"]
+        texts = _joined(req, msg)
+        ctx = self._ctx(now, texts)
+        # Model fields still need owner-word provenance. Only checked label-reader data
+        # supplies additional source words, never the raw image or model instructions.
+        trusted = [*texts, *simple.public_sources(slots)]
+        # Simple intake drafts ordinary product prose for owner review. Identity,
+        # maker and origin still need their own provenance; the plan sanitizes
+        # unsupported claim clauses before either image generation or preview.
+        copy_skill = dataclasses.replace(skill, slots=tuple(
+            dataclasses.replace(slot, owner_words=False) if slot.name == "description" else slot
+            for slot in skill.slots))
+        filled = validate(copy_skill, {}, new_slots, trusted, ctx, req["attachments"] if req else [])
+        slots.update(filled.slots)
+        attachments = req["attachments"] if req else []
+        if attachments: slots["photo"] = attachments[-1]
+        revises = req["draft_code"] if req else None
+        if slots.get("intake", {}).get("reading_photo"):
+            conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"] if req else None,
+                              skill="item.add", slots=slots, texts=texts, attachments=attachments)
+            return "question"
+        slots = simple.fill(slots, texts)
+        slots['_owner_texts'] = texts
+        if filled.problem:
+            conv._reply(filled.problem)
+            return "not-drafted"
+        from hass.skills import item_add
+        if item_add.several_products(slots.get("name"), texts):
+            conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"] if req else None,
+                              skill="item.add", slots=slots, texts=texts, attachments=attachments,
+                              asked_slot=item_intake.PREFIX + "name", question=item_add.ONE_PHOTO, draft_code=revises)
+            conv._reply(item_add.ONE_PHOTO)
+            return "question"
+        ops = []
+        if slots.get("name"):
+            try:
+                ops = simple.plan(slots, ctx.content)  # validate wording even before a required price/photo arrives
+            except ValueError as exc:
+                conv._reply(str(exc))
+                return "not-drafted"
+        if slots.get('name') and slots['intake'].get('price') and not slots.get('photo'):
+            from hass import photo_polish
+            if not slots['intake'].get('generation_error'):
+                sha, error = photo_polish.generate_product(conv.settings['mediaRoot'], slots, conv.polish_transport)
+                if sha:
+                    slots['photo'] = sha
+                    slots['image_alt'] = slots['name'] + ' (illustration)'
+                    slots['intake']['generated_picture'] = True
+                    attachments = [sha]
+                else:
+                    slots['intake']['generation_error'] = error
+        if slots.get('photo') and slots.get('name'):
+            from hass import product_claims
+            product_claims.remember_owner(conv.settings['mediaRoot'], slots['photo'], texts)
+            ops = simple.plan(slots, ctx.content)
+        needed = next((k for k in ("name", "photo") if not slots.get(k)), None)
+        needed = needed or ("price" if not slots["intake"].get("price") else None)
+        if needed:
+            already = slots["intake"].get("asked_required") == needed
+            slots["intake"]["asked_required"] = needed
+            question = {"name": "Send the product photo or its name.", "photo": "Send a product photo for this listing.",
+                        "price": "What price should it sell for?"}[needed]
+            if needed == 'photo' and slots['intake'].get('generation_error'):
+                from hass import photo_polish
+                question = "I couldn't make the product picture (" + photo_polish.plain_reason(slots['intake']['generation_error']) + "). Please send a photo."
+
+            if already: question = "Tell me what to change, or send the missing " + needed + "."
+            conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"] if req else None,
+                              skill="item.add", slots=slots, texts=texts, attachments=attachments,
+                              asked_slot=item_intake.PREFIX + needed, question=question, draft_code=revises)
+            conv._reply(simple.preview(slots) + "\n" + question if slots.get("name") else question, long_ok=True)
+            return "question"
+        source = "\n".join([*texts, *simple.public_sources(slots)])
+        conv._intake_listing = slots
+        try:
+            disposition = conv._draft(dataclasses.replace(msg, text=""), now, {"ops": ops, "revises": revises},
+                                      [source], legacy=False, skill_names=(skill,))
+        finally:
+            conv._intake_listing = None
+        if disposition == "proposed":
+            code = conv._last_draft_code
+            conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"] if req else None,
+                              state="drafted", skill="item.add", slots=slots, texts=texts, attachments=attachments, draft_code=code)
+            self._keep_intake(skill, slots, now, texts, code, ctx)
+        return disposition
+
+    def _simple_answer(self, msg, now, req):
+        from hass.chat.commands import parse_keyword, parse_near, parse_unknown_code
+        from hass.skills import intake_simple as simple
+        words = msg.text.strip()
+        if item_intake.ABORT.fullmatch(words):
+            row = self.conv._by_code(req["draft_code"], ("proposed",)) if req["draft_code"] else None
+            if row is not None:
+                self.conv._move(row, "rejected", reason="owner")
+                self.conv._audit("refused", row, "owner")
+            self.conv.requests.mark(req["request_id"], "cancelled", now)
+            self.conv._reply(DROPPED)
+            return "cancelled"
+        # Refusals and reminders only. The conversation still owns every approval.
+        near = parse_near(words) == "" or re.fullmatch(r"(?:looks|sounds) good[, ]+yes please[.!]*", words, re.I)
+        hold = re.fullmatch(r"no[, ]+wait[.!]*", words, re.I)
+        if not msg.attachments and (near or hold):
+            code = req["draft_code"]
+            row = self.conv._by_code(code, ("proposed",)) if code else None
+            if row is not None and self.conv._expiry(row) > now:
+                self.conv._reply(f"Reply yes {code} to publish." if near else
+                                 f"Nothing is published. Keep it, change something, or say no {code}.")
+            else:
+                self.conv._reply(req["question"] or "Nothing is waiting to publish.")
+            return "near-approval" if near else "question"
+        unknown = parse_unknown_code(words)
+        if not unknown and parse_keyword(words) is None:
+            # The shared parser requires a digit; a bad code like 'zzzz' still
+            # isn't a product name or a supplier answer.
+            match = re.fullmatch(r"(?:yes|approv(?:e|ed))\s+([a-z0-9]{4,12})[.!]*", words, re.I)
+            unknown = match[1].lower() if match else None
+        if unknown and not msg.attachments:
+            self.conv._reply(self.conv._no_target(unknown, [], []), long_ok=True)
+            return "no-target"
+        # Keep every accepted source word across edits, not the financial clauses.
+        asked = (req["asked_slot"] or "").removeprefix(item_intake.PREFIX)
+        if req["slots"].get("intake", {}).get("reading_photo"):
+            if msg.attachments:
+                return "question"  # this turn's photo callback owns the reply
+            # A later turn after an interrupted callback must not wait forever on
+            # an in-memory job that no longer exists. Keep the photo and typed facts.
+            slots = {**req["slots"], "intake": {**req["slots"]["intake"], "reading_photo": False}}
+            req = {**req, "slots": slots}
+            if not slots.get("name"): asked = "name"
+        if req["state"] == "drafted" and simple.NEXT.fullmatch(words):
+            row = self.conv._by_code(req["draft_code"], ("proposed",))
+            if row is not None and self.conv._expiry(row) > now:
+                shown = self.conv.editor.show(row["change_id"]).get("draft")
+                if shown:
+                    self.conv._proposal_reply(row, shown)
+                    return "proposed"
+        slots, public, question = simple.edit(req["slots"], msg.text, asked)
+        if question:
+            if question == simple.SUPPLIER_QUESTION:
+                self.conv.requests.mark(req["request_id"], req["state"], now,
+                                        asked_slot=item_intake.PREFIX + "supplier", question=question)
+            self.conv._reply(question)
+            return "question"
+        # Already-validated state plus fixed owner edits; validate the edit on the full path.
+        updated = {**req, "slots": slots}
+        return self._simple_advance(dataclasses.replace(msg, text=public), now, updated, {})
+
     def _explicit_page(self, msg) -> bool:
         from hass.skills.backlog import explicit_page_request
         return self.registry.get("page.faq") is not None and explicit_page_request(msg.text)
@@ -499,6 +685,16 @@ class Dispatcher:
         try:
             req = self.conv.requests.get(self._owner(), now)
             skill = self.registry.get(req["skill"]) if req is not None and req["skill"] and req["state"] == "open" else None
+            if req and self.simple_intake(req):
+                from hass.chat.commands import parse_near
+                if (req["state"] == "drafted" and req["draft_code"] and req["slots"].get("intake", {}).get("simple")
+                        and parse_near(text or "") == ""):
+                    row = self.conv._by_code(req["draft_code"], ("proposed",))
+                    if row is not None and self.conv._expiry(row) > now:
+                        return True  # _simple_answer gives the code, never an approval
+                return not item_intake.CODED_KEYWORD.match(text or "") and not item_intake.YES_FULL.fullmatch(text or "") and not item_intake.NO_FULL.fullmatch(text or "")
+            if self._intake_open(req, skill):  # HASS-INTAKE-2: his answer to an intake question, never an approval (a coded yes is)
+                return not item_intake.CODED_KEYWORD.match(text or "")
             hook = skill_hook(skill, "answer") if skill is not None else None
             return hook is not None and hook(req, text, self._ctx(now, [*req["texts"], text])) is not None
         except Exception:  # noqa: BLE001 - an unreadable request is no reason to change how a yes is read
@@ -507,6 +703,8 @@ class Dispatcher:
     def cheap(self, msg, now):
         """A short answer to the asked slot read by code alone (no model call). The disposition, or None to let the model read it."""
         req = self.conv.requests.get(self._owner(), now)
+        if req and self.simple_intake(req) and (req["slots"].get("intake", {}).get("simple") or req["asked_slot"]):
+            return self._simple_answer(msg, now, req)
         if req is None and self._explicit_page(msg):  # RF2345-12: an unmistakable fresh FAQ-page ask is refused by code, no model
             from hass.skills.backlog import NO_FAQ
             return self._backlog(msg, now, None, "", "unsupported-page", reply=NO_FAQ, texts=[msg.text],
@@ -514,6 +712,8 @@ class Dispatcher:
         if req is None or not req["skill"] or not req["asked_slot"]:
             return None
         skill = self.registry.get(req["skill"])
+        if self._intake_open(req, skill):  # HASS-INTAKE-2: an answer to one of the intake questions: read by code, kept private
+            return self._intake_answer(msg, now, req, skill)
         slot = next((s for s in getattr(skill, "slots", ()) if s.name == req["asked_slot"]), None)
         try:
             ctx = self._ctx(now, [*req["texts"], msg.text])
@@ -523,8 +723,11 @@ class Dispatcher:
                 slot, msg.text, ask=req["ask"], content=ctx.content, aliases=ctx.aliases, today=ctx.today)
         except Exception:  # noqa: BLE001 - unreadable content: the model path (and its own errors) decides
             return None
+        if isinstance(answered, dict) and "skipped" in answered:  # HASS-INTAKE-2: skip / don't know to a name, shelf or packaging question
+            return self._intake_skipped(msg, now, req, skill, answered["skipped"], ctx)
         if answered is not None:
-            return self._advance(msg, now, req, skill, answered, None, ctx=ctx, resolved=True)
+            said = answered.pop("_text", None) if isinstance(answered, dict) else None  # HASS-INTAKE-2: "skip" at the maker reads as his words "I don't know"
+            return self._advance(dataclasses.replace(msg, text=said) if said else msg, now, req, skill, answered, None, ctx=ctx, resolved=True)
         if not ok:
             return None
         return self._advance(msg, now, req, skill, {slot.name: value}, None, ctx=ctx, resolved=True)
@@ -570,8 +773,94 @@ class Dispatcher:
         self.conv._reply(question)
         return "question"
 
+    def _intake_open(self, req, skill) -> bool:
+        """HASS-INTAKE-2: True while the owner's open request is waiting on one of the intake questions of a skill that has them."""
+        return (req is not None and skill is not None and req["state"] == "open" and isinstance(req.get("asked_slot"), str)
+                and req["asked_slot"].startswith(item_intake.PREFIX) and skill_hook(skill, "intake_read") is not None)
+
+    def _intake_answer(self, msg, now, req, skill):
+        """His answer to an intake question. Read by code (no model call). ``skip`` and ``don't know`` leave that answer blank, an
+        unreadable answer asks the same question again (the third time it is left blank), ``cancel`` drops the request. The answer
+        is kept in the request's slots only: it never joins his texts (a price he types is not a public word), except a
+        maker's website, which the story reader needs as his own words."""
+        conv = self.conv
+        ctx = None
+        try:
+            ctx = self._ctx(now, list(req["texts"]))
+            got = skill_hook(skill, "intake_read")(req, msg.text, ctx)
+        except Exception:  # noqa: BLE001 - a private answer must never fall through to the general interpreter
+            got = {"again": req["question"]}
+        if got.get("abort"):
+            conv.requests.mark(req["request_id"], "cancelled", now)
+            conv._reply(DROPPED)
+            self._logged(msg, "refused", "said-no", skill)
+            return "cancelled"
+        if got.get("again"):
+            conv.requests.put(self._owner(), msg.provider_id, now, texts=req["texts"], request_id=req["request_id"], skill=skill.name,
+                              slots=req["slots"], asked_slot=req["asked_slot"], question=got["again"], attachments=req["attachments"],
+                              asks=req["asks"] + 1, calls=req["calls"], draft_code=req["draft_code"])
+            conv._reply(got["again"], long_ok=req["asked_slot"].startswith(item_intake.PREFIX + "photo_"))
+            return "question"
+        shown = dataclasses.replace(msg, text=got.get("text", msg.text) if got.get("public") else "")
+        self._note = got.get("note")  # a blank left after three tries is said once, before the next question
+        try:
+            return self._advance(shown, now, req, skill, got["slots"], None, ctx=ctx, resolved=True)
+        finally:
+            self._note = None
+
+    def _intake_reader(self):
+        """HASS-INTAKE-2: the interpreter for one intake answer the fixed reading could not take (``conv.answer_reader``), as
+        fn(key, words, today); None when none is set up. It sees the one answer and its question key, never the rest of the interview."""
+        reader = getattr(self.conv, "answer_reader", None)
+        return None if reader is None else (lambda key, words, today: reader.read(key, words, today))
+
+    def _intake_skipped(self, msg, now, req, skill, slot, ctx):
+        """He skipped a question whose answer the listing needs (name, shelf, packaging): nothing is made up; one honest reply and the
+        same question again (he can say cancel)."""
+        hook = skill_hook(skill, "intake_skip")
+        if hook is None:
+            return None
+        text = hook(req, slot, ctx)
+        self.conv.requests.put(self._owner(), msg.provider_id, now, texts=req["texts"], request_id=req["request_id"], skill=skill.name,
+                               slots=req["slots"], asked_slot=req["asked_slot"], question=text, attachments=req["attachments"],
+                               asks=req["asks"] + 1, calls=req["calls"], draft_code=req["draft_code"])
+        self.conv._reply(text)
+        return "question"
+
+    def _intake_step(self, skill, slots, missing, ctx):
+        """(asked-slot name, question) of the next intake question, or None. The interview comes after the name, the maker, their
+        town and the shelf, and before the description, the picture words, the stock word and the photo."""
+        hook = skill_hook(skill, "intake_next")
+        if hook is None or getattr(ctx, "intake", False) is not True:
+            return None
+        if missing is not None and missing.name not in INTAKE_BEFORE:
+            return None
+        try:
+            return hook(dict(slots), ctx)
+        except Exception:  # noqa: BLE001 - a question is a convenience: without it the ordinary path goes on
+            return None
+
+    def _ask_intake(self, msg, now, req, skill, given, texts, attachments, step):
+        key, question = step
+        asks = (req["asks"] + 1) if req and req["asked_slot"] == key else 1
+        note, self._note = getattr(self, "_note", None), None
+        self.conv.requests.put(self._owner(), msg.provider_id, now, texts=texts, request_id=req["request_id"] if req else None,
+                               skill=skill.name, slots=given, asked_slot=key, question=question, attachments=attachments, asks=asks,
+                               calls=req["calls"] if req else [], draft_code=(req["draft_code"] if req else None))
+        self.conv._reply(f"{note} {question}" if note else question, long_ok=key.startswith(item_intake.PREFIX + "photo_"))
+        return "question"
+
+    def intake_applied(self, code, now) -> None:
+        """The draft ``code`` was applied: its private intake record is saved (HASS-INTAKE-2). Best effort."""
+        item_intake.save_applied(self.conv.db, self.conv.sdir, code, now)
+
+    def intake_undone(self, code, now) -> None:
+        item_intake.mark_undone(self.conv.sdir, code, now)
+
     # the common step: slots in -> question, refusal, backlog or draft ----------------------------------------
     def _advance(self, msg, now, req, skill, new_slots, revises, ctx=None, prior=None, resolved=False):
+        if skill.name == "item.add" and self.simple_intake(req):
+            return self._simple_advance(msg, now, req or prior, new_slots, resolved=resolved)
         conv, owner = self.conv, self._owner()
         if hasattr(conv.editor, 'skill_allowed') and not conv.editor.skill_allowed(skill):
             conv._reply("That's switched off, so nothing changed.")
@@ -589,6 +878,9 @@ class Dispatcher:
             self._logged(msg, "refused", "policy", skill)  # AVB-10: an ask to post, send or schedule
             return "refused"
         slots = dict(req["slots"]) if req else {}
+        if not req and prior and skill.name == "item.add" and getattr(ctx, "intake", False) is True:
+            if prior["slots"].get("intake"):
+                slots["intake"] = dict(prior["slots"]["intake"])
         if resolved:  # a cheap answer: already a checked value (an id the owner picked from our own list), not words to resolve
             filled = Filled()
             filled.slots = {**slots, **new_slots}
@@ -619,6 +911,8 @@ class Dispatcher:
         given = slots  # what the owner gave: a default the skill picks is not kept across a question, so it is still said as "I set" when he answers
         slots, defaults = apply_defaults(skill, slots, ctx)
         slot = next_missing(skill, slots)
+        if (step := self._intake_step(skill, slots, slot, ctx)) is not None:  # HASS-INTAKE-2: the full intake, one question at a time
+            return self._ask_intake(msg, now, req, skill, given, texts, attachments, step)
         if slot is not None:
             return self._ask(msg, now, req, skill, given, texts, attachments, skill_slot=slot.name, problem=None, ask=None, revises=revises,
                              shown=slots, ctx=ctx)
@@ -745,6 +1039,7 @@ class Dispatcher:
         code = conv._last_draft_code
         if disposition == "proposed":
             self._keep_sources(skill, slots, now, texts, code, ctx)
+            self._keep_intake(skill, slots, now, texts, code, ctx)
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if queued:  # the shelf-check question now holds the open request: the queued asks wait on it, not lost
@@ -781,6 +1076,19 @@ class Dispatcher:
         except Exception:  # noqa: BLE001
             return
 
+    def _keep_intake(self, skill, slots, now, texts, code, ctx=None) -> None:
+        """HASS-INTAKE-2: the private intake record (quantity, price, dates ...) waits beside the draft ``code`` in the
+        conversation's own state, and is saved to the private store only when that draft is applied. Best effort."""
+        hook = skill_hook(skill, "intake_record")
+        if hook is None or not slots.get("intake") or not code:
+            return
+        try:
+            rec = hook(skill.name, dict(slots), ctx if ctx is not None else self._ctx(now, texts), code, now)
+            if rec:
+                item_intake.keep_pending(self.conv.db, code, rec, now)
+        except Exception:  # noqa: BLE001
+            return
+
     def _next_queued(self, msg, now, rid, queued, texts, attachments, disposition):
         """The current call is done: the next queued call becomes the open request and its one question is asked. Calls whose
         skill is gone are skipped. Returns ``disposition`` (what happened to the call just handled)."""
@@ -792,6 +1100,11 @@ class Dispatcher:
     # several asks in one message ------------------------------------------------------------------------------
     def _calls(self, msg, now, result, req):
         conv, owner = self.conv, self._owner()
+        if len(result["calls"]) == 1 and (getattr(conv, "settings", None) or {}).get("itemIntake") is True:
+            only = self.registry.get(result["calls"][0]["skill"])  # HASS-INTAKE-2: one ask is drafted like one skill, so the interview is not skipped
+            if only is not None and skill_hook(only, "intake_next") is not None:
+                return self.reply(msg, now, {"skill": result["calls"][0]["skill"], "slots": result["calls"][0]["slots"],
+                                             "revises": result.get("revises")}, req)
         if hasattr(conv.editor, 'skill_allowed') and any(
                 s is not None and not conv.editor.skill_allowed(s) for s in (self.registry.get(c['skill']) for c in result['calls'])):
             conv._reply("That's switched off, so nothing changed.")
@@ -1009,11 +1322,26 @@ class Dispatcher:
         return "backlog"
 
     # a photo (spec 2.7) --------------------------------------------------------------------------------------
-    def photo(self, msg, now, sha, caption):
+    def photo(self, msg, now, sha, caption, intake_answers=None):
         """The stored original joins the owner's request. Returns a disposition, or None when the caption should now be read
         as an ordinary text of that request (``Conversation._request``)."""
+        from hass import photo_polish
         conv = self.conv
         how, req = conv.requests.bind_attachment(self._owner(), msg.provider_id, sha, now, self.registry)
+        if self.simple_intake(req) or how == "opened" and self.simple_intake():
+            slots = dict(req["slots"])
+            slots["intake"] = {**slots.get("intake", {}), **(intake_answers or {}), "simple": not bool(caption),
+                               "reading_photo": conv.labels is not None or photo_polish.enabled(conv.settings)}
+            conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"], skill="item.add",
+                              slots=slots, texts=req["texts"], attachments=req["attachments"])
+            req = conv.requests.get(self._owner(), now)
+            if caption: return None
+            return self._simple_advance(msg, now, req, {})
+        if intake_answers and (how == "opened" or req["skill"] == "item.add" and req["state"] == "open"):
+            conv.requests.put(self._owner(), msg.provider_id, now, texts=req["texts"], request_id=req["request_id"],
+                              skill=req["skill"], slots={**req["slots"], "intake": {**req["slots"].get("intake", {}), **intake_answers}},
+                              attachments=req["attachments"], asked_slot=req["asked_slot"], question=req["question"], asks=req["asks"])
+            req = conv.requests.get(self._owner(), now)
         if how == "filled":
             if caption:
                 return None  # the caption may say more (a name, a description): the model reads it with this request
@@ -1021,6 +1349,14 @@ class Dispatcher:
             return self._advance(msg, now, req, skill, {}, None)
         if caption:
             return None
+        starter = self.registry.get("item.add")  # HASS-INTAKE-2: with the interview on, a bare photo starts it at once: fixed words, no model, no preview
+        if (how == "opened" and starter is not None and skill_hook(starter, "intake_next") is not None
+                and (getattr(conv, "settings", None) or {}).get("itemIntake") is True):
+            conv.requests.put(self._owner(), msg.provider_id, now, texts=[], request_id=req["request_id"], skill=starter.name, slots=req["slots"],
+                              asked_slot="name", question=item_intake.START, attachments=req["attachments"], asks=1)
+            if not item_intake.acknowledged(conv.db, msg.provider_id):  # on receipt it was already sent (Conversation._intake_receipt)
+                conv._reply(item_intake.START)
+            return "question"
         labels = ", ".join(s.label for s in self.photo_skills())
         conv.requests.put(self._owner(), msg.provider_id, now, texts=req["texts"] if req else [], request_id=req["request_id"],
                           skill=req["skill"], slots=req["slots"], attachments=req["attachments"],

@@ -93,7 +93,7 @@ class SocialDraftInputTests(unittest.TestCase):
 
     def test_happy_path_unchanged(self):
         self.load(product("p1"))
-        self.assertEqual(self.run_cli(), (0, {"draft": True, "image": "assets/products/p1.webp", "alt": "Sourdough",
+        self.assertEqual(self.run_cli(), (0, {"draft": True, "illustration": True, "image": "assets/products/p1.webp", "alt": "Sourdough",
                                               "caption": HAPPY_CAPTION}))
 
 

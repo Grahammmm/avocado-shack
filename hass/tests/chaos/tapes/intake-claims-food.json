@@ -1,0 +1,22 @@
+{
+ "case": "intake-claims-food",
+ "calls": [
+  {
+   "turn": 1,
+   "method": "interpret",
+   "result": {
+    "question": "Strawberries are already on the site. Did you mean to add a new kind, or change the ones we have?"
+   },
+   "attrs": {
+    "last_error": null,
+    "last_backend": "openai",
+    "last_fallback": true,
+    "last_primary_error": "codex-local",
+    "last_seconds": 1.408,
+    "last_model": "qwen3.8:27b-thinkingcap-q6"
+   },
+   "seconds": 1.408,
+   "route": "qwen"
+  }
+ ]
+}

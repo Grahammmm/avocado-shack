@@ -266,7 +266,7 @@ class StateTests(AgainTestCase):
         self.assertEqual(self.drafts()[-1]["state"], "expired")
         for state, text in (("approved", "That one is being saved."), ("applied", "That one is already saved."),
                             ("verified", "That one is already saved."), ("failed", "That one couldn't be saved."),
-                            ("reverted", "That one was undone.")):
+                            ("reverted", f"{waiting['code']}: the draft details are not available any more.")):  # AV2137-01: undone drafts need the linked undo
             with self.subTest(state):
                 self.conv.db.execute("UPDATE drafts SET state = ? WHERE row_id = ?", (state, waiting["row_id"]))
                 self.refused(waiting["code"], text)
@@ -386,10 +386,10 @@ class ReplayAndHelpTests(AgainTestCase):
         self.assertEqual(len(self.drafts()), len(before) + 1)
 
     def test_again_help_and_docs(self):
-        lines = [ln for ln in voice.plain(conversation.HELP_TEXT).splitlines() if ln.startswith("again ")]
-        self.assertEqual(lines, ["again a1b2 - re-draft an expired change (within 7 days)"])
-        self.assertEqual(self.say("help"), "help")
-        self.assertIn(lines[0], self.replies()[0])
+        lines = voice.plain(conversation.help_detail("again")).splitlines()  # AV1052-12: the full line is in `help again`
+        self.assertEqual(lines, ["again a1b2 - re-draft an expired or undone change (within 7 days)"])
+        self.assertEqual(self.say("help again"), "help")
+        self.assertEqual(self.replies(), lines)
 
 
 if __name__ == "__main__":

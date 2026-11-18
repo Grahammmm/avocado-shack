@@ -1,0 +1,23 @@
+{
+ "calls": [
+  {
+   "attrs": {},
+   "method": "capture",
+   "result": {
+    "checks": {
+     "addressShown": true,
+     "hoursShown": true,
+     "introShown": true,
+     "noPageErrors": true,
+     "noPosts": true
+    },
+    "error": null,
+    "ok": true
+   },
+   "route": "browser",
+   "seconds": 1.411,
+   "turn": 1
+  }
+ ],
+ "case": "cmd-look-bare"
+}

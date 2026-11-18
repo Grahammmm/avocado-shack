@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "alias": "fixture-fern",
+  "at": "2026-11-01T10:00:00Z",
+  "later": "2026-11-01T11:00:00Z",
+  "expires": "2026-11-02T10:00:00Z",
+  "after": "2026-11-03T10:00:00Z",
+  "cases": {
+    "newsletter_only": 1, "hiking_only": 1, "missing": 0, "other_purpose": 0,
+    "revoked_pending": 0, "unsubscribed_future": 0, "duplicate": 1,
+    "cancelled": 0, "expired": 0, "stale_revision": 0
+  }
+}

@@ -163,7 +163,10 @@ def build_spec(ns, ops, registry_skills) -> Spec:
         args[slot], kinds[slot] = a, kind
         if kind == "enum":
             choices[slot] = tuple(op.args[a].choices or ())
-    setup = json.loads(ns.setup) if ns.setup else []
+    try:
+        setup = json.loads(ns.setup) if ns.setup else []
+    except RecursionError:
+        raise ScaffoldError("--setup is a JSON list of {\"op\": ..., \"args\": {...}} applied before each draft row") from None
     if not (isinstance(setup, list) and all(isinstance(o, dict) and set(o) == {"op", "args"} for o in setup)):
         raise ScaffoldError("--setup is a JSON list of {\"op\": ..., \"args\": {...}} applied before each draft row")
     verb = ns.name.split(".")[1].replace("_", " ")

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Mac-side Hass forwarder. BlueBubbles REST shapes remain UNVERIFIED on a real Mac."""
 import argparse, base64, functools, hashlib, hmac, ipaddress, json, os, re, secrets, signal, sqlite3, stat, sys, threading, time  # noqa: E401
-import urllib.error, urllib.parse, urllib.request
+import subprocess, tempfile, urllib.error, urllib.parse, urllib.request
 from dataclasses import asdict
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from hass import bridge, bridge_attach, relay, stagelog  # noqa: E402
+from hass import bridge, bridge_attach, bridge_photos, media, relay, stagelog  # noqa: E402
 from hass.conversation import parse_command, read_command, sender_key  # noqa: E402
 
 MAX_BODY = 256 * 1024
@@ -158,6 +158,9 @@ class Spool:
             "CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY,seen_at REAL);"
             "CREATE TABLE IF NOT EXISTS drops(reason TEXT PRIMARY KEY,count INTEGER);"
             "CREATE TABLE IF NOT EXISTS ack(provider_id TEXT PRIMARY KEY,state TEXT,created_at REAL,done_at REAL);"
+            "CREATE TABLE IF NOT EXISTS photo_posts(at REAL);"
+            "CREATE TABLE IF NOT EXISTS photo_jobs(guid TEXT,idx INTEGER,count INTEGER,body TEXT,tries INTEGER DEFAULT 0,"
+            "next_try_at REAL DEFAULT 0,created_at REAL,done INTEGER DEFAULT 0,code TEXT,PRIMARY KEY(guid,idx));"
             "CREATE TABLE IF NOT EXISTS ack_chat(provider_id TEXT PRIMARY KEY,chat TEXT);")  # HASS-OWNERS-2: the owner chat a tapback goes back to
         for name, value in (("start_ms", int(now * 1000)), ("last_seen_ms", int(now * 1000)), ("outage_since", 0), ("outage_notified", 0), ("last_rejected", 0),
                             ("fast_until", 0), ("rejected_streak", 0)):
@@ -237,14 +240,114 @@ class Forwarder:
         self.query_other = {}  # HASS-OWNERS-2: the other owner chats' page state
         self.ack_thread, self.ack_stop, self.ack_wake = None, threading.Event(), threading.Event()
         self.ack_live, self.ack_lock = set(), threading.Lock()
+        self.photo_worker = None
 
     def bb(self, path, body=None):
         password = private_read(self.cfg["bbPasswordFile"], 4096).decode().strip()
         sep = "&" if "?" in path else "?"
         return self.transport(f'http://127.0.0.1:{self.cfg["bbPort"]}{path}{sep}{urllib.parse.urlencode({"password": password})}', body)["data"]
 
-    def post(self, path, env, big=False, quick=False):
-        return (self.big if big else self.quick if quick else self.transport)(self.cfg["receiverUrl"] + path, env)
+    def post(self, path, env, big=False, quick=False, timeout=None):
+        transport = self.big if big else self.quick if quick else self.transport
+        if timeout is not None and self.transport is request_json:
+            return request_json(self.cfg["receiverUrl"] + path, env, limit=MAX_REPLY if big else 1024 * 1024, timeout=timeout)
+        return transport(self.cfg["receiverUrl"] + path, env)
+
+    def push_photos(self, msg):
+        """One bounded worker: even a trickling socket cannot hold text or tapbacks."""
+        if (msg.kind != "new" or msg.from_me or msg.chat not in owner_chats(self.cfg)
+                or not re.fullmatch(r"iMessage;-;[^;\s]+", msg.chat)
+                or sender_key(msg.sender) is None or sender_key(msg.sender) != sender_key(msg.chat.split(";", 2)[2])
+                or not 1 <= msg.attachments <= media.MAX_PHOTOS_PER_MESSAGE
+                or not bridge_photos._valid_guid(msg.provider_id)): return
+        db = self.spool.db
+        db.execute("DELETE FROM photo_jobs WHERE done=1 AND created_at<? AND NOT EXISTS (SELECT 1 FROM inbound WHERE provider_id=guid AND state='pending')", (self.clock() - 86400,))
+        if (not db.execute("SELECT 1 FROM photo_jobs WHERE guid=?", (msg.provider_id,)).fetchone()
+                and db.execute("SELECT COUNT(DISTINCT guid) FROM photo_jobs WHERE done=0").fetchone()[0] >= CATCH_UP_PAGE):
+            raise ValueError("photo-queue-full")  # retain inbound; never accept text and discard its photo job
+        db.executemany("INSERT OR IGNORE INTO photo_jobs(guid,idx,count,created_at) VALUES (?,?,?,?)",
+                       [(msg.provider_id, i, msg.attachments, self.clock()) for i in range(msg.attachments)])
+        self.retry_photos()
+
+    def retry_photos(self):
+        self.spool.db.execute("UPDATE photo_jobs SET done=1,body=NULL,code='expired' WHERE done=0 AND created_at<=?", (self.clock() - 1800,))
+        if self.photo_worker is not None and self.photo_worker.is_alive(): return
+        row = self.spool.db.execute("SELECT guid,count,tries FROM photo_jobs WHERE done=0 AND next_try_at<=? ORDER BY created_at,idx LIMIT 1", (self.clock(),)).fetchone()
+        if row is None: return
+        done, deadline = threading.Event(), time.monotonic() + 30
+        def work():
+            spool = Spool(self.spool.directory, self.clock(), ready=True)
+            try: self._push_photos(*row[:2], deadline, spool)
+            except Exception:  # fixed code only; the durable host outbox owns the single owner failure reply
+                spool.db.execute("UPDATE photo_jobs SET tries=tries+1,next_try_at=?,code=COALESCE(code,'retry') WHERE guid=? AND done=0",
+                                 (self.clock() + min(300, 30 * 2 ** min(row[2], 4)), row[0]))
+            finally:
+                spool.db.close()
+                done.set()
+        self.photo_worker = threading.Thread(target=work, name="hass-photo", daemon=True)
+        self.photo_worker.start()
+        done.wait(max(0, deadline - time.monotonic()))
+
+    def _push_photos(self, guid, count, deadline, spool):
+        def remaining():
+            left = deadline - time.monotonic()
+            if left <= 0: raise TimeoutError("photo-budget")
+            return left
+        def download(url, headers, timeout, limit):
+            return bridge_photos._urllib_transport(url, headers, min(timeout, remaining()), limit)
+        photos = bridge_photos.BlueBubblesPhotos(f'http://127.0.0.1:{self.cfg["bbPort"]}',
+                                                self.cfg["bbPasswordFile"], transport=download, timeout=30)
+        data, code = None, None
+        for idx, saved, tries, created in spool.db.execute("SELECT idx,body,tries,created_at FROM photo_jobs WHERE guid=? AND done=0 ORDER BY idx", (guid,)).fetchall():
+            if self.clock() - created >= 1800:
+                spool.db.execute("UPDATE photo_jobs SET done=1,body=NULL,code='expired' WHERE guid=? AND idx=?", (guid, idx))
+                continue
+            if saved is None and data is None:
+                try: data = photos.fetch(guid, count)
+                except Exception as exc:
+                    if tries < 3: raise
+                    real = exc.code if isinstance(exc, bridge.BridgeError) else None
+                    code = real if real == "too-large" or real in relay.FETCH_DIAG else "fetch-failed"
+                    data = [None] * count
+            stored = json.loads(saved) if saved is not None else None
+            raw = data[idx] if stored is None else base64.b64decode(stored["b64"]) if stored["op"] == "photo" else None
+            remaining()
+            failure = stored.get("code") if stored is not None else code
+            if raw is not None:
+                try:
+                    if media.sniff(raw) not in ("jpeg", "png") or len(raw) > relay.PHOTO_MAX:
+                        with tempfile.TemporaryDirectory(prefix="hass-photo-") as tmp:
+                            src, dst = Path(tmp) / "in", Path(tmp) / "out.jpg"
+                            src.write_bytes(raw)
+                            subprocess.run(["/usr/bin/sips", "-s", "format", "jpeg", "-s", "formatOptions", "85",
+                                            "-Z", "4096", str(src), "--out", str(dst)],
+                                           timeout=min(30, remaining()), check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            with dst.open("rb") as stream: raw = stream.read(relay.PHOTO_MAX + 1)
+                    failure = "too-large" if len(raw) > relay.PHOTO_MAX else None if media.sniff(raw) in ("jpeg", "png") else "unsupported-type"
+                except subprocess.TimeoutExpired:
+                    spool.db.execute("UPDATE photo_jobs SET code='conversion-timeout' WHERE guid=? AND idx=?", (guid, idx))
+                    if tries < 3: raise
+                    failure = "fetch-failed"
+                except (subprocess.CalledProcessError, OSError):
+                    failure = "too-large" if len(raw) > relay.PHOTO_MAX else "unsupported-type"
+            body = {"op": "photo-refused" if failure else "photo", "guid": guid, "idx": idx, "count": count}
+            if failure: body["code"] = failure
+            else:
+                assert raw is not None
+                body.update(sha256=hashlib.sha256(raw).hexdigest(), b64=base64.b64encode(raw).decode("ascii"))
+            if saved is not None: body = json.loads(saved)
+            else: spool.db.execute("UPDATE photo_jobs SET body=?,code=? WHERE guid=? AND idx=?", (json.dumps(body), failure, guid, idx))
+            now = self.clock()
+            spool.db.execute("DELETE FROM photo_posts WHERE at<=?", (now - 60,))
+            if spool.db.execute("SELECT COUNT(*) FROM photo_posts").fetchone()[0] >= 8:
+                spool.db.execute("UPDATE photo_jobs SET next_try_at=?,code='rate-limit' WHERE guid=? AND done=0", (now + 60, guid))
+                return
+            env = relay.seal_control(body, self.secret, nonce=secrets.token_hex(16), now=now)
+            spool.db.execute("INSERT INTO photo_posts VALUES (?)", (now,))
+            sent = self.post("/v1/photo", env, big=True, timeout=remaining())
+            answer = relay.unseal_control(sent, self.secret, now=self.clock(), seen=spool)
+            if answer != {"op": "photo-ok", "guid": guid, "idx": idx}: raise ValueError("photo-reply")
+            spool.db.execute("UPDATE photo_jobs SET done=1,body=NULL,code=? WHERE guid=? AND idx=?", (body.get("code"), guid, idx))
 
     def fetch(self):
         row = self.spool.db.execute("SELECT guid,event,created_at,tries,next_try_at FROM fetch ORDER BY created_at,rowid LIMIT 1").fetchone()
@@ -314,7 +417,8 @@ class Forwarder:
         if db.execute("SELECT 1 FROM fetch WHERE created_at<=? LIMIT 1", (row[4],)).fetchone(): return
         try:
             inbound = bridge.Inbound(**json.loads(row[1]))
-            env = bridge.seal(inbound, self.secret, nonce=secrets.token_hex(16), now=now)
+            self.push_photos(inbound)  # durably queue before text can erase its payload
+            env = bridge.seal(inbound, self.secret, nonce=secrets.token_hex(16), now=self.clock())
             self.stage("post-start", inbound.provider_id)
             result = self.post("/v1/inbound", env)["result"]
             if result not in ("queued", "duplicate", "history", "rejected"): raise ValueError("post-shape")
@@ -587,6 +691,7 @@ class Forwarder:
             try: self.catch_up()
             except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError): print("retry", file=sys.stderr)
             finally: self.ack_kick()
+        self.retry_photos()
         try: self.deliver()
         except (bridge.BridgeError, ValueError): print("retry", file=sys.stderr)
         if self.clock() >= self.next_pull:

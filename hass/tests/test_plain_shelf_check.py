@@ -156,6 +156,28 @@ class ModeTests:
         self.assertEqual(self.content("products.json"), products)
         self.assertEqual(json.loads(self.content("store.json")), json.loads(store))  # the editor rewrites the file pretty-printed; the content is restored
 
+    def test_stale_reissue_names_the_new_code_and_only_it_saves(self):
+        # Contract: a stale shelf-check draft is written up again with its code-required marker, and the reply is
+        # rendered from that saved row. Bug it catches: the reply rendered from the pre-marker snapshot told the owner
+        # to send bare `yes`, which the next turn refuses.
+        old, _ = self.propose_check()
+        self.edit("products.json", lambda doc: next(p for p in doc["products"] if p["id"] == HASS).update(description="Picked this week."))
+        self.assertEqual(self.say(f"yes {old['code']}"), "approved")
+        reply = "\n".join(self.replies())
+        stale, new = self.drafts()[-2:]
+        self.assertEqual((stale["state"], stale["reason"], new["state"], new["reason"]), ("rejected", "stale", "proposed", "shelf-check"))
+        self.assertNotEqual(new["code"], old["code"])
+        self.assertIn("written it up again", reply)
+        self.assertIn(f"Reply yes {new['code']} to save it", reply)
+        self.assertNotIn("Reply yes to", reply)
+        self.assertEqual(self.commits(), 0)
+        self.assertEqual(self.say("yes"), "no-target")  # the bare yes the old reply would have asked for is refused
+        self.replies()
+        self.assertEqual(self.commits(), 0)
+        self.assertEqual(self.say(f"yes {new['code']}"), "approved")
+        self.replies()
+        self.assertEqual((self.commits(), self.checked_on()), (1, DAY))
+
     def test_paused_busy_and_disabled_skill(self):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()

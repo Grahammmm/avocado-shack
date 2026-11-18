@@ -2,7 +2,7 @@
 
 **Status (HASS-CLOVER-2): READ-ONLY connection to the real store, built and fixture-tested; the operator turns it on after review and merge
 ("Go live: read-only", below).** Hass reads items and stock into a private cache and answers Mike's stock questions. It cannot change the till:
-there is no write path, and the installed token is Inventory: Read only. Writes (HASS-CLOVER-3/4) come later, behind their own approval and a write token.
+the deployed chat has no write path, and the installed token is Inventory: Read only. HASS-CLOVER-3 adds an unconnected fixture-qualified engine; HASS-CLOVER-4 wiring and live enablement remain separately gated.
 G decided on 2026-11-09 that Hass talks to Clover directly so that Mike (the owner) can make SKUs and manage inventory by text. This page is the
 design (the seven questions, one chosen answer each) and describes the code in `hass/clover/`. It builds on `reports/hass/SKILLS-SPEC.md`
 (5.2 asked these questions; the answers are mapped at the end) and `docs/hass/TASKMAP.md` (T26 "Price change", gated until Clover).
@@ -80,6 +80,62 @@ Comparison uses saved links only; unlinked items are gaps, not confirmed absence
 - Market special \(ring up price\) \(FAKEITEM00006\): no count
 ```
 
+## Website stock words
+
+`clover.siteStock` is **off by default**; choices are `off`, `auto`, `draft`.
+`siteStockWords` defaults to `words` (Available today / Sold out); `limited`
+also uses Limited at or below `lowStockThreshold` (5 by default). Activation
+still needs G's STOCK-AUTO/SITE-WORDS choices, reviewed LINK wiring, and an
+attended runtime/service-template move. This code installs/enables nothing.
+
+The sync template adds one `stock_site.py run --host ...` post-step. Because
+the existing unit accepts sync exit 1, the post-step also independently checks
+the identity, successful last attempt, matching asOf/lastAttempt, age <=20
+minutes, strictly newer read, and >=90% of the last item count. Failed, skipped,
+stale or partial reads never touch the queue or the site. The old health alert
+after two hours remains. No network or token is needed to read this cache.
+
+Only a crossing changes a word; a hand-set word otherwise stays. First sync
+and each new/relinked product make a reconcile preview, never an automatic
+release. `stock yes stk-...` approves exactly that set; `stock no stk-...` drops
+the remaining words even between batches. LINK authenticates sender/chat and
+excludes groups before calling `stock_site.approve(state, code, owner_role)`
+or `decline`; these library functions do not authenticate chat themselves.
+Proposals are private files/state, not outbound messages. More than
+max(5, 10% of links) new Sold outs needs that same one yes and a warning.
+
+The private, atomic 0600 `clover/site-stock.json` keeps counts, pending words,
+hashed sets and inflight batch progress, under a nonblocking stock lock. A
+corrupt file fails closed, never resets. Deferred words retry on later good
+reads; latest crossing wins and a later owner edit wins. Before every retry,
+unlinked/relinked/gone entries are dropped with an audit row; missing/no-count,
+hidden till or inactive site items are parked, with no attempt charged.
+Re-eligible words are recomputed; an approved word changing needs a new set
+when it came from reconciliation. Turning off leaves the queue untouched.
+
+At most one batch per read, bounded by min(editor.MAX_OPS,
+live_policy.MAX_RECORDS), currently 10. Automatic crossings go first, then
+oldest approved set; Sold out, Limited, Available today within each batch.
+One live wrapper apply performs its own baseline check and editor apply.
+No editor/live-policy limit, shelf-check-today rule, STOP, sandbox binding,
+writer lock, settling check or read-back gate is bypassed. A not-published
+writer/site divergence stays held for the operator, never treated as success.
+Three daily slots are reserved for owner changes, including approved stock
+sets: normally seven batches (70 words) a day, only on shelf-check days.
+
+`clover/reports/site-stock-totals.json` is counts/reason/age/batches only; POS-2
+and the dashboard can read it. `stock-reconcile-<date>-stk-<code>.md` lists
+the private per-product preview; `stock-reconcile-<date>-gaps.md` lists missing
+and parked links. Folder 0700, files 0600, reconcile reports pruned at 90 days.
+Keep these finance-local files off models, the repo and the website. Site ops
+contain only product ids and words, never count, price or SKU.
+
+Each completed batch adds one audit row (`who: timer`, `skill: stock.sync`)
+and correspondence row (`reason: stock-sync-published`). The stock state also
+records `actor: stock-sync` and the change id. Existing revert-last **does pick
+the latest landed stock release**: POS-2 must read that marker and say
+“That was a stock update from the till”; changing undo targeting is not here.
+
 ## Credential rule (read this first)
 
 G's standing fleet rule is that no agent handles credentials; this design keeps its spirit.
@@ -106,7 +162,7 @@ G's standing fleet rule is that no agent handles credentials; this design keeps 
 1. **Auth and scopes:** Clover Platform REST v3 with a *merchant-generated API token* (one merchant, internal tool), Bearer header; the token permission page only has coarse Read/Write per data category, so READ = *Inventory: Read* and every write kind = *Inventory: Write* (nothing else ticked); sandbox first, production only after a go-live card.
 2. **Data model:** a private link table (`product id -> Clover item id + SKU`) keeps the site free of SKUs and prices; match by link, then the link's SKU, then **exact** name, never fuzzy for writes; one-sided items are reported, never auto-created.
 3. **SKU:** `AS-<CAT>-<NAME up to 18>-<NN>`, e.g. `AS-PAN-SUNSHINE-OLIVE-OIL-01`; deterministic, issued once and never changed, collision-checked against every SKU and barcode in the till and again live right before the create.
-4. **Write safety:** every write is a draft in plain words, needs the owner's `yes <code>` bound to the asker, daily cap, a big price move needs a second yes, no deletes (hide only), journalled before and after so `undo` restores, Clover decides price and stock, the site never shows a price; no checkout, payment, refund, discount or order calls exist.
+4. **Write safety:** every write is a draft in plain words, needs the owner's `yes <code>` bound to the asker, daily cap, one yes even for a big price move, no deletes (hide only), journalled before and after so `undo` restores, Clover decides price and stock, the site never shows a price; no checkout, payment, refund, discount or order calls exist.
 5. **Inventory flows:** `how many X`, `low stock` (reads); `received 12 X`, `set X to 7`, `X sold out`, `new item: ...`, `change price of X to ...` (drafts); a count that reaches zero (or restarts from zero) carries the website's Sold out / Available word in the same draft, one yes.
 6. **Sync:** read-only pull every 15 minutes plus on demand, a private cache, answers older than 20 minutes labelled "as of", "can't reach the till" when it is down, nothing quoted after 24 hours, writes never from cache; only items and stock are pulled, no sales or customer data, nothing leaves the box except the HTTPS calls to Clover.
 7. **Rollout:** G makes a developer account, a sandbox merchant and a sandbox token; build cards follow on the sandbox; a go-live card (G approves) swaps in a read-only production token first and a write token only after a clean read-only week.
@@ -171,7 +227,7 @@ write card must also hold a separate write token.
 | `price` (cents), `priceType` (`FIXED`, `VARIABLE`, `PER_UNIT`), `unitName` | **never** | prices stay off the site (AGENTS.md catalog-only scope; the live policy refuses price words). Variable-price items have no price to change |
 | `categories` (names) | `category` (one of the nine site words) | a settings map `categoryMap` {site word: Clover category name}; Hass never creates a Clover category |
 | `tags` | none | read and cached, used for nothing in v1 |
-| `itemStock.quantity`, `stockAlertThreshold` | `available` (`yes` / `limited` / `no`) | **only** through an approved draft (see flow 5). The site never shows a count |
+| `itemStock.quantity`, `stockAlertThreshold` | `available` (`yes` / `limited` / `no`) | approved draft (flow 5), or the separately opted-in Website stock words path below. The site never shows a count |
 | `hidden`, `available`, `autoManage` | `status` (`active`/`hidden`/`held`) | different meanings (hidden on the Register vs. hidden on the website); a disagreement is reported, never copied |
 | `modifiedTime` (ms) | (none) | the stale check and the incremental sync |
 | `cost`, tax rates, modifiers, employee or customer fields | n/a | **dropped on read** (the mapper is a whitelist) |
@@ -227,9 +283,7 @@ negative or over $1,000.00 is refused with a plain sentence), checks `pantry` is
   its full content, so a changed draft is a different draft and needs its own yes.
 * **Daily cap:** at most `dailyWriteCap` Clover changes per Pacific day (default 20). Over the cap: "I have already made 20 changes to the till today, which is my daily limit. Nothing was changed. The count starts again at
   midnight Pacific." Checked when the draft is made and again at apply. `undo` is exempt (it only puts back what was there) but still needs its own yes.
-* **Big price moves need a second yes.** A new price more than `priceConfirmPct` (default 25%) above or below the old one is flagged, tested exactly in integers (not on the rounded percentage). The draft says
-  "that is a 36.0% increase ... I will ask once more after your yes"; the first yes produces a second proposal with a **new** code (a code is never reissued) and only that second yes applies.
-  A price must be between $0.01 and `maxPriceCents` (default $1,000.00) as a typo guard.
+* **One owner yes for every kind, including prices.** G amended this on 2026-11-16: `priceConfirmPct` never requires a second yes (the legacy setting only affects warnings). A price must stay between $0.01 and `maxPriceCents` (default $1,000.00) as a typo guard.
 * **No deletes, hide only.** There is no DELETE call anywhere in the code (a test checks every draft's methods are POST or PUT on `/items`, `/item_stocks` or `/category_items`). Taking an item off is `hidden: true`;
   "show it again" is `hidden: false`. A count record is never deleted either.
 * **Journal and undo.** Before a call, the apply step writes an *intent* row (draft, before, after) to `<state>/clover/journal.sqlite3` (0600); after the call it reads the item back from Clover, compares, and settles
@@ -238,6 +292,7 @@ negative or over $1,000.00 is refused with a plain sentence), checks `pantry` is
   A stock draft that changes the site word also journals the word the site showed before (`before`/`after` `site`); its undo puts that word back, and only while the site still shows the word the draft set. A product that had no word before gets
   no word back (`product.clear_availability`), never an invented "Available today"; a journal that does not say what the site showed is refused with a plain reason.
   One honest limit: the first-ever count on an item that had none cannot be undone (that would be deleting the count record, which Hass never does); Hass says so and offers "set X to <number>".
+* **Durable till yes (M2):** before acknowledging a yes, its bounded job is saved in the same conversation transaction as the provider id. Desk attachment at startup and provider redelivery reconcile these jobs under a process lock. Drafts may run once through all existing gates; interrupted intents become durable uncertainty and are never resent. Settled results only enqueue an outcome to the approving owner's chat. Job completion and that outbox row commit together; completed jobs may be pruned, pending jobs are never evicted (256-row cap, backpressure before acknowledgement). This guarantees one queued outcome, not exactly-once transport delivery across a lost send receipt. Website bundle crash recovery remains a separate gate; no engine is connected by this change.
 * **Stale check at apply:** the item is re-read live; if its `modifiedTime` or its stock's `modifiedTime` moved since the draft (a sale decrements stock on its own), the draft is stale, nothing is written, and Mike gets a fresh draft
   that needs its own yes. "Received 12" is computed from the till's current count and shown as both numbers ("Count: 12 -> 24"), and the live re-read makes that arithmetic race-safe.
 * **Clover is the source of truth for price and stock.** The site never shows a price or a count; the live policy still refuses price words in site changes (`COMMERCE_WORDS`, the "prices" protected sentences, the
@@ -258,7 +313,7 @@ Clover commands are exact patterns; anything else still goes to the interpreter 
 | `received 12 Sunshine olive oil` | write (set count = till count + 12) | `Add stock to ...? Count: 12 -> 24, Received: 12` + yes line | only if the site says Sold out: marks it **Available today** in the same draft |
 | `set Sunshine olive oil to 7` / `... to 0` / `Sunshine olive oil is sold out` | write (set count) | `Set the count of ...? Count: 12 -> 7` or `Mark ... as sold out? Count: 12 -> 0` | at 0: marks it **Sold out** (if the site does not already say so); from 0 up, back to Available; otherwise no site change |
 | `new item: Sunshine olive oil, 12.50, pantry` | write (create + category link) | the "Did you mean to add ..." draft in section 3 | no (a new till item is not on the site until Mike says "put it on the site") |
-| `change price of Sunshine olive oil to 14.00` | write (set price) | `Change the price of ...? Price: $12.50 -> $14.00 each (+12.0%)`; a big move adds the second-yes line | **never** (the site shows no price) |
+| `change price of Sunshine olive oil to 14.00` | write (set price) | `Change the price of ...? Price: $12.50 -> $14.00 each (+12.0%)`; one yes even for a big move | **never** (the site shows no price) |
 | `give X a SKU`, `hide X on the till`, `show X on the till` | write | the plain draft for that change | no |
 | `undo` / `undo <code>` | write (inverse) | the restoring draft, or the reason it cannot | the site part is reversed in the same draft when the original had one |
 
@@ -297,7 +352,7 @@ unchanged. "Got more honey in" with a linked product asks "How many came in?" (a
 | 0. This card | sonnet-coder, reviewer queued by the operator | design, `hass/clover/`, fixture tests, `docs/hass/CLOVER.md`. No credential, no network |
 | 1. Accounts | **G** | Clover developer account, one sandbox test merchant (with Clover's sample inventory imported), one sandbox API token, stored as below |
 | 2. HASS-CLOVER-2 (build) | worker | done: settings block `clover` in **host.json** (`hass/host.py` KEYS and check), `cli.py check/sync/status`, cache, 15-minute timer template, the three read replies, health `clover-token` / `clover-sync`; **production, read-only** (G installed the read token first, skipping the sandbox for reads) |
-| 3. HASS-CLOVER-3 (build) | worker | apply step (intent row, live re-read, stale check, call, read-back, journal), undo, cap, second-yes; sandbox only |
+| 3. HASS-CLOVER-3 (build) | worker | apply step (intent row, live re-read, stale check, call, read-back, journal), undo, cap, one owner yes; fixtures only |
 | 4. HASS-CLOVER-4 (build) | worker | owner commands, `help`, `COMMANDS.md`, parser-before-interpreter wiring, the site bundle and its undo |
 | 5. Sandbox rehearsal | worker + G reads | run section "Sandbox acceptance" with the sandbox token; evidence on the card |
 | 6. Go-live card | **G approves** | see the checklist |
@@ -365,7 +420,7 @@ All of this is G's own hands; no worker, tool or chat sees the token. **Sandbox 
 ## Mapping to the open questions in SKILLS-SPEC 5.2
 
 1 POS: Clover. 2 Direction: read and, by approved draft, write items and stock only. 3 Source of truth: Clover for price and count; Hass content for words, pictures, makers; the site word follows only through an approved draft. 4 Identity: the private
-link table, exact matching, one-sided items reported. 5 Prices on the site: never. 6 Approvals: the same owner `yes <code>`, a daily cap, a second yes for big price moves, no deletes. 7 Money/customer data: items and stock only; no sales,
+link table, exact matching, one-sided items reported. 5 Prices on the site: never. 6 Approvals: the same owner `yes <code>`, a daily cap, one yes even for big price moves, no deletes. 7 Money/customer data: items and stock only; no sales,
 customers or card data, ever. 8 Where processed: local code only; no model sees Clover data. 9 Credentials: G creates and installs one file; the service reads it; revocation drill at go-live. 10 Counts vs words: counts live in Clover; the site
 shows a word. 11 Failure: cached answers labelled old, writes refused, nothing quoted after 24 hours. 12 Refunds, voids, shrink, spoilage: not pulled (they are sales data); a count can drift when sales happen, which is why every write re-reads first.
 
@@ -397,3 +452,32 @@ patched so any network attempt fails the run. `python3 -B hass/acceptance.py` is
 
 Limits of this research: only public pages were read, no Clover account was used, and the token-permission dialog itself (its exact checkbox labels) was not seen, only Clover's text about it. Where a fact came from a search excerpt rather than a full page it is
 on the sandbox acceptance list above.
+
+## HASS-CLOVER-3 engine and write go-live (2026-11-16)
+
+The standalone `ApplyEngine` now offers persisted, expiring `clv-` drafts with a
+random approval code bound to an explicit owner `(sender, private chat)` pair.
+Mike owns changes; G owns them only with `g_is_owner` enabled by the service.
+Original private `yes <code>` only: groups, edits, reactions and bare yes refuse.
+`stop changes` persists a pause. Chat wiring and site bundles remain CLOVER-4;
+the engine refuses a draft carrying site ops rather than silently omitting them.
+There is no live write enablement in this PR. Read-only client behaviour stays unchanged.
+
+Write service construction requires `writes: true`, `liveApproved: true` and
+an absolute `writeTokenFile` distinct from `tokenFile`, even for sandbox.
+`credential.load_write_token` applies the same private-file checks and refuses
+aliases of the read file. Only the deterministic service may load it; workers
+and reviewers never read any real token file. The client factory must construct
+`CloverWriteClient` with that token, the configured merchant/environment and the
+existing allowlisted transport. Writes are single-attempt POST/PUT only.
+
+`journal.sqlite3` is private 0600 in the private Clover folder; operations hold
+one cross-process lock. Intent commits before the live stale check, then calls,
+read-back and settlement. Recovery only reads: it never retries a write or a
+partially completed create/category bundle. Uncertain outcomes need attended
+reconciliation; attempted/uncertain changes conservatively consume the cap.
+Undo uses the recorded read-back revision and gets a separate approval; it is
+cap-exempt but cannot overwrite a later till edit. Default cap is 20 per Pacific
+day. At the separately reviewed write go-live set `dailyWriteCap: 5`; the first
+live write must be **TESTITEM**, watched by G. This fixture PR neither installs
+credentials nor changes host.json, services, chat routes or the live till.

@@ -8,7 +8,7 @@ fields is a conflict. A field's value (a notice with its dates, the hours list) 
 route idea (no hidden state), which is removed. An added product is hidden without the stock word and day the change
 gave it (SKILLS-ITEMADD-1: a new item and today's shelf check undo together). The A2 writer
 sets ``revertedBy`` on the original change record once the revert is committed.
-An undo of an undo is refused, so the original keeps ``revertedBy``; to bring a change back, ask for it again.
+An undo of an undo is refused, so the original keeps ``revertedBy``; to bring a change back, send ``again <code>`` with the original draft's code.
 An undo that cancels a hike, moves its start or turns its RSVPs off carries the forward op's guest warning, never a
 refusal, and only when the undo is drafted; so does one that changes its meeting place, meet time or route.
 """
@@ -153,7 +153,7 @@ def _revert(content, args, ctx):
     if (ops := _draft_ops(ctx, change_id)) is False:
         return Refused(f"{change_id} draft is unreadable")
     if any(call.get("op") == "history.revert" for call in ops):
-        return Refused(f"{change_id} is an undo; to bring the change back, ask for it again")
+        return Refused(f"{change_id} is an undo; to bring the change back, use again <code> with the original draft code")
     first, last = {}, {}  # per record: the value before the change and the value the change finally wrote
     store_records = [r for r in change.get("records") or [] if r["collection"] == "store"]
     if not all(_store_shape_ok(r) for r in store_records):

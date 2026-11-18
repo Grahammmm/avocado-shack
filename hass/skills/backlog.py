@@ -105,6 +105,8 @@ class Backlog:
         """Remove one row by its number (numbers are never reused, so a stale forget cannot hit a newer row). True when a row was removed."""
         if isinstance(number, bool) or not isinstance(number, int):
             return False
+        if not -(2**63) <= number <= 2**63 - 1:  # not a possible SQLite rowid: same as a missing number
+            return False
         return self.db.execute("DELETE FROM backlog WHERE id = ?", (number,)).rowcount == 1
 
     def purge(self, days=RETENTION_DAYS) -> int:

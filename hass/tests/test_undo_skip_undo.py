@@ -23,11 +23,13 @@ class FlakyEditor(conversation.Editor):
 
 
 class BareUndoSkipsUndoTests(H06TestCase):
-    def undo_proposal(self, target):
+    def undo_proposal(self, target, waiting=None):
         """A bare undo proposes the revert of ``target``; returns the proposed row."""
         self.assertEqual(self.say("undo"), "proposed")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("To undo that, I'd change it back:\nHere's the change I'd make:"), reply)
+        prefix = (f"{waiting['summary']} is still waiting for your yes. Reply no {waiting['code']} to drop it.\n\n"
+                  if waiting else "")
+        self.assertTrue(reply.startswith(prefix + "To undo that, I'd change it back:\nHere's the change I'd make:"), reply)
         row = self.drafts()[-1]
         self.assertEqual(json.loads(row["ops_json"]), [{"op": REVERT, "args": {"changeId": target["change_id"]}}])
         return row
@@ -64,9 +66,9 @@ class BareUndoSkipsUndoTests(H06TestCase):
         a = self.apply("desc")
         self.undo_proposal(a)
         u = self.approve()
-        self.assertEqual(self.say(f"undo {u['code']}"), "not-drafted")
+        self.assertEqual(self.say(f"undo {u['code']}"), "no-target")
         self.assertEqual(self.replies(),
-                         ["I couldn't undo that, so nothing changed. Could you say it another way?"])
+                         [f"That code is for an undo. To bring the change back, send again {a['code']}."])
         self.assertEqual([d["state"] for d in self.drafts()], ["reverted", "verified"])
 
     def test_proposed_undo_does_not_change_the_choice(self):
@@ -85,7 +87,10 @@ class BareUndoSkipsUndoTests(H06TestCase):
         b = self.apply("hours")
         self.assertEqual((b["state"], b["commit"]), ("failed", None))
         self.editor.fail = False
-        self.undo_proposal(a)
+        waiting = self.drafts()[-1]  # a failed apply leaves a fresh proposal waiting
+        self.assertEqual((waiting["state"], waiting["summary"]), ("proposed", b["summary"]))
+        self.undo_proposal(a, waiting=waiting)
+        self.assertEqual(self.drafts()[-2], waiting)
 
 
 class IsUndoTests(unittest.TestCase):

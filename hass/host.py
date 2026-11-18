@@ -19,17 +19,18 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import bridge, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
-from hass import nl_prep, preview, receiver, relay, sandbox, stagelog  # noqa: E402
+from hass import answer_reader, bridge, cloud_codex, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
+from hass import label_reader, nl_prep, preview, receiver, relay, relay_photos, sandbox, stagelog  # noqa: E402
 from hass.content_model import load_content  # noqa: E402
 from hass.ops import load_registry  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("hass.host")
-MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay")
+MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay", "/v1/photo")
 METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"})  # a logged method is one of these, never client text
-KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "release", "clover", "live", "off", "mode_gen"}
-OPTIONAL = {"previewer", "pictures", "release", "clover", "live", "off", "mode_gen"}  # HASS-CLOVER-2: `clover` absent = Clover not configured; nothing else changes
+KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "photos", "release", "clover", "live", "off", "mode_gen"}
+OPTIONAL = {"previewer", "pictures", "photos", "release", "clover", "live", "off", "mode_gen"}  # HASS-CLOVER-2: `clover` absent = Clover not configured; nothing else changes
+PHOTO_BODY, PHOTOS_PER_MIN = 12 * 1024 * 1024, 8
 PICTURES_PER_MIN = 10  # HASS-ATTACH-1: more picture requests in a minute get `gone` with no data
 TAILSCALE = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 LIVE_REASON = "live release is not installed"
@@ -72,7 +73,8 @@ def _ip(value):
 def _interpreter_ok(itp, nested=False) -> bool:
     """host.json `interpreter`: url + model, optional timeout (1-120) and think (Ollama only), and (HASS-INTERP-OPENAI-1) `api`
     ("ollama" default, "openai") and, with api openai only, `fallback`: the same keys for the Ollama model asked once when the
-    first answer fails. url is loopback http."""
+    first answer fails. url is loopback http. HASS-CLOUD-CODEX-1: api "codex" is hass.cloud_codex.block_ok (no url)."""
+    if not nested and isinstance(itp, dict) and itp.get("api") == "codex": return cloud_codex.block_ok(itp, lambda fb: _interpreter_ok(fb, True))
     allowed = {"url", "model", "timeout", "think"} | (set() if nested else {"api", "fallback"})
     if not (isinstance(itp, dict) and {"url", "model"} <= set(itp) <= allowed): return False
     api = itp.get("api", "ollama")
@@ -104,7 +106,7 @@ def load_host(path, allow_port_zero=False) -> dict:
     text = lambda v: isinstance(v, str) and 0 < len(v) <= 4096  # noqa: E731
     itp = raw.get("interpreter")
     peers = raw.get("allowedPeers")
-    checks = {"pictures": type(raw.get("pictures", False)) is bool, "state": text(raw.get("state")), "secretFile": text(raw.get("secretFile")),
+    checks = {"photos": type(raw.get("photos", False)) is bool, "pictures": type(raw.get("pictures", False)) is bool, "state": text(raw.get("state")), "secretFile": text(raw.get("secretFile")),
               "approvals": raw.get("approvals") in ("hold", "private", "live"),
               "previewer": type(raw.get("previewer", False)) is bool,
               "runtimeCommit": isinstance(raw.get("runtimeCommit"), str) and len(raw["runtimeCommit"]) == 40
@@ -132,7 +134,7 @@ def load_host(path, allow_port_zero=False) -> dict:
     if bad: raise HostConfigError(bad)
     ip, port = _listen(raw["listen"], allow_port_zero)
     return {**raw, "addr": (str(ip), port), "peers": frozenset(str(_ip(p)) for p in peers), "previewer": raw.get("previewer", False),
-            "pictures": raw.get("pictures", False), "hostDir": str(Path(path).resolve().parent), "hostPath": str(Path(path).resolve())}
+            "photos": raw.get("photos", False), "pictures": raw.get("pictures", False), "hostDir": str(Path(path).resolve().parent), "hostPath": str(Path(path).resolve())}
 
 
 def runtime_problem(cfg, root=ROOT) -> bool:
@@ -232,7 +234,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard(): return
         length = self.headers.get("Content-Length", "")
         if not length.isdigit(): return self._send(411)
-        if int(length) > MAX_BODY: return self._send(413)
+        if int(length) > (PHOTO_BODY if self.path == "/v1/photo" else MAX_BODY): return self._send(413)
         body, srv = self.rfile.read(int(length)), self.server
         now = srv.clock()
         if self.path == "/v1/inbound":
@@ -243,7 +245,15 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError, RecursionError, bridge.EnvelopeError):
             return self._send(400, {"result": "rejected"})
         secs = int(now.timestamp())
-        if msg["op"] == "pull": out = {"op": "replies", "items": srv.store.pull(msg["max"], secs)}
+        if self.path == "/v1/photo":
+            if msg["op"] not in ("photo", "photo-refused") or not srv.photos: return self._send(400, {"result": "rejected"})
+            while srv.photo_times and secs - srv.photo_times[0] >= 60: srv.photo_times.popleft()
+            if len(srv.photo_times) >= PHOTOS_PER_MIN: return self._send(429)
+            srv.photo_times.append(secs)
+            try: srv.photos.put(msg, secs)
+            except ValueError: return self._send(400, {"result": "rejected"})
+            out = {"op": "photo-ok", "guid": msg["guid"], "idx": msg["idx"]}
+        elif msg["op"] == "pull": out = {"op": "replies", "items": srv.store.pull(msg["max"], secs)}
         elif msg["op"] == "ack": srv.store.ack(msg["ids"], secs); out = {"op": "acked", "ids": msg["ids"]}
         elif msg["op"] == "state" and "paused" not in msg: out = {"op": "state", "paused": srv.paused()}  # HASS-FAST-1, read-only
         elif msg["op"] == "picture":
@@ -261,7 +271,8 @@ class Server(HTTPServer):
         self.address_family = socket.AF_INET6 if ":" in cfg["addr"][0] else socket.AF_INET
         self.peers, self.secret, self.receiver, self.store, self.clock = cfg["peers"], secret, rx, store, clock
         self.paused = paused  # HASS-FAST-1: () -> bool, True when changes are paused or unknown (no 👀)
-        self.pic_times = collections.deque()
+        self.pic_times, self.photo_times = collections.deque(), collections.deque()
+        self.photos = relay_photos.RelayPhotos(cfg["hostDir"], clock, Path(cfg["state"]) / "inbox.sqlite3") if cfg.get("photos") else None
         super().__init__(cfg["addr"], Handler)
 
     def server_bind(self):  # no reverse DNS lookup of the Tailscale address
@@ -297,9 +308,11 @@ class Worker:
     def __init__(self, conv, rx, store, worktree, build, clock=_now, shots_dir=None, stage=stagelog.off):
         self.conv, self.rx, self.worktree, self.build, self.clock = conv, rx, Path(worktree), build, clock
         self.stage, self.current = stage, ""  # HASS-FAST-1: `current` is the message being handled (stage log only)
+        conv.stage = stage
         self.sender = relay.RelaySender(store, owner_chat_order(conv.settings), lambda: int(clock().timestamp()), shots_dir, conv.settings.get("gChat"))
         self.rev = editor_mod.content_revision(self.worktree)
         conv.interpreter = _Timed(conv.interpreter, self)
+        conv.early_flush = lambda: conv.flush(self.sender)  # HASS-INTAKE-2: a photo's first question goes out on receipt, before the photo is fetched
         raw_send = self.sender.send
 
         def send(chat, text, attachments=()):
@@ -378,11 +391,15 @@ def interpreter_builder(cfg, worktree):
         itp, hinter = cfg["interpreter"], nl_prep.make_hinter(content)  # HASS-NL-1
 
         def one(c, api):
+            if api == "codex": return interpreter_local.LocalInterpreter(None, c["model"], prompt, timeout=c.get("timeout", 12), hinter=hinter,
+                                                                         api=api, transport=cloud_codex.CodexTransport(c.get("effort", "low")))
             return interpreter_local.LocalInterpreter(c["url"], c["model"], prompt, timeout=c.get("timeout", 30),
                                                       think=c.get("think"), hinter=hinter, api=api)
         main = one(itp, itp.get("api", "ollama"))
         if "fallback" not in itp: return main  # HASS-INTERP-OPENAI-1: no fallback block, no second call
-        return interpreter_local.FallbackInterpreter(main, one(itp["fallback"], "ollama"), lambda r: conversation._checked(r) is r)
+        fb = one(itp["fallback"], itp["fallback"].get("api", "ollama"))
+        if main.api == "codex": cloud_codex.budget(main.transport, fb)  # HASS-CLOUD-CODEX-1: cloud + local inside the 30 s deadline
+        return interpreter_local.FallbackInterpreter(main, fb, lambda r: conversation._checked(r) is r)
     return build
 
 
@@ -424,8 +441,18 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
             return LiveEditor(cfg['state'], current['release'], current['hostDir'], clock=clock)
 
         editor = SiteEditor(cfg['state'], site_gate(cfg), live_factory, clock=clock)
+    photos, labels = None, None
+    if cfg.get("photos"):
+        photos = relay_photos.RelayPhotos(cfg["hostDir"], clock, Path(cfg["state"]) / "inbox.sqlite3")
+        itp = cfg["interpreter"]
+        if itp.get("api") == "codex":
+            labels = cloud_codex.reader(label_reader.LabelReader, itp)
+        else:
+            fallback = itp.get("fallback")
+            labels = label_reader.LabelReader(itp["url"], itp["model"], timeout=itp.get("timeout", 30), api=itp.get("api", "ollama"),
+                fallback=label_reader.LabelReader(fallback["url"], fallback["model"], timeout=fallback.get("timeout", 30)) if fallback else None)
     conv = conversation.Conversation(cfg["state"], editor or conversation.Editor(cfg["state"]), build(), clock,
-                                     previewer=preview.Previewer(worktree) if cfg["previewer"] else None)
+                                     previewer=preview.Previewer(worktree) if cfg["previewer"] else None, photos=photos, labels=labels)
     if hasattr(conv.editor, 'sync_settings'):
         conv.editor.conv = conv
         conv.editor.sync_settings(conv.settings)
@@ -434,6 +461,11 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
     if cfg["approvals"] == "live" and not hasattr(conv.editor, 'gate'):
         conv.editor.conv = conv
         conv.editor.reconcile()
+    if conv.settings.get("itemIntake") is True:  # HASS-INTAKE-2: the same local model service reads one odd intake answer (first try only)
+        itp = cfg["interpreter"]
+        try: conv.answer_reader = (cloud_codex.reader(answer_reader.AnswerReader, itp, think=itp["fallback"].get("think")) if itp.get("api") == "codex" else
+                                   answer_reader.AnswerReader(itp["url"], itp["model"], timeout=itp.get("timeout", 30), api=itp.get("api", "ollama"), think=itp.get("think")))
+        except (KeyError, ValueError): conv.answer_reader = None  # none set up: an odd answer is asked again, never guessed
     if cfg.get("clover") is not None:  # HASS-CLOVER-2: the owner's till questions, read from the private cache only (no token here)
         from hass.clover.chat import TillDesk
         conv.till = TillDesk(cfg["state"], cfg["clover"])

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "main": "b302d26bee6a4d8993f9da324d743bf206c56aca",
+  "source_sha256": {
+    "storefront-mockup/community-server.py": "7da0fb5d639efc0ebd28765c5c15e16ba6328eb7b8f8bbd3833ff22355378e30",
+    "storefront-mockup/README.md": "cff27e2ea6bbb327b85b9566027d509bf8e2eba863cdc4ecd78a41385f646070",
+    "docs/hass/OPERATIONS.md": "61f9f382a963c0b6dffd958a8aeeb97bb5a45d58a9c12b087d48173a4f860a5f"
+  },
+  "candidate_sha256": {
+    "candidate.py": "236b488e510a4fbf2a3a00ebba76f1fa4bfe39ded4c95f38f6c6b6bdd40cb123",
+    "fixtures.json": "f5d9e78ef1fbb686e3474c6cacf318f6673e752abe1214366ac33fb535c559ce",
+    "README.md": "168317f031b7a00c8ec7515aae2bda3c132db18ec34d10f6c45e1e1bce25302b"
+  },
+  "candidate_only": true,
+  "installed": false,
+  "no_apply": true
+}

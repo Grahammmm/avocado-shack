@@ -1,4 +1,5 @@
-const {out,base}=require('./qa-env.cjs').qaEnv({preview:true});
+const {qaEnv,commerceAuditText}=require('./qa-env.cjs');
+const {out,base}=qaEnv({preview:true});
 const fs=require('fs'),assert=require('assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 (async()=>{
@@ -8,7 +9,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  assert.equal(await page.locator('.section-intro').textContent(),'An avocado from Morro Bay. A loaf from Atascadero. Cheese made in Cambria. Explore our selection and follow the flavors back to the farms, kitchens, and makers from our community.');
  assert.equal(await page.locator('[data-source],.sourcing-filters').count(),0);
  assert.equal(await page.locator('[data-add],#bag,#boxes,#merch,#owner,#order-preview,.price,[data-product],.food-detail,#hikes').count(),0);
- assert.doesNotMatch(await page.locator('body').innerText(),/\$\d|add to basket|pickup|local delivery|weekly boxes|online shop|merchandise|Discover this food|Food & maker story/i);
+ assert.doesNotMatch(await commerceAuditText(page),/\$\d|add to basket|pickup|local delivery|weekly boxes|online shop|merchandise|Discover this food|Food & maker story/i);
  const countText=async()=>(await page.locator('#catalog-count').textContent()).split(' \u00b7 ')[0],fullCount=await countText();assert.equal(fullCount,(await page.evaluate(()=>catalog.length))+' selections');
  const defaultCount=(await page.evaluate(()=>catalog.filter(p=>!['fruit','vegetables','flowers'].includes(p.category)||p.id==='photo-product-018').length))+' selections';
  // AV1052-01: description search on synthetic catalogs (served for catalog-products.js and producers.js only; no file on disk changes). Expected ids are written out, not read from filteredProducts().
@@ -39,7 +40,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await search('honey',['s03','s01'],'a card in both groups appears once, in the first');
     await search('gluten',['s03','s10'],'description-only');
     await search('goatsbeard',['s06'],'brand');await search('goat rock',['s07'],'town');await search('drinks',['s08'],'shelf');await search('dairy',['s02','s06','s09'],'shelf');await search('organic',['s09'],'badge');
-    await search('organic raw',[],'no match across the badge and the description');await search('coffee smooth',[],'no match across the shelf and the description');await search('zzzz',[],'unmatched');
+    await search('organic raw',['s09'],'AV1104-01: badge word plus a description word, each found in its own text');await search('coffee smooth',['s08'],'AV1104-01: shelf word plus description word');await search('coffee zzzz',[],'one absent word');await search('organic raw zzzz',[],'one absent word excludes');await search('zzzz',[],'unmatched');
     await search('',F1ALL,'empty term');await search('   ',F1ALL,'blank term');
     assert.ok(same(await page.evaluate(()=>JSON.stringify(catalog)),before),'the catalog records are unchanged');
     assert.ok(same(await page.evaluate(()=>catalog.map(p=>p.id)),F1ALL),'the catalog order is unchanged');
@@ -85,7 +86,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    descriptionSearchFiltersAndPaging:async()=>{const T=dAgo(0),G=[];
     for(let i=0;i<60;i++){const k=i%4;G.push(P('g'+String(i).padStart(2,'0'),k===0?`Honey item ${i}`:`Plain item ${i}`,{brand:i%2?'Acme':'Bolt',category:['pantry','dairy','bread'][i%3],producerKey:i%5===0?'ZF':null,description:k===3?'Salty.':`Sweet honey ${i}.`,availabilityState:i%7<3?'yes':'no',availabilityCheckedOn:T}))}
     const want=(f={})=>{const rows=G.filter(p=>(!f.shelf||p.category===f.shelf)&&(!f.brand||p.brand===f.brand)&&(!f.from||p.producerKey===f.from)&&(!f.avail||p.availabilityState==='yes'));
-     return [...rows.filter(p=>p.name.toLowerCase().includes('honey')),...rows.filter(p=>!p.name.toLowerCase().includes('honey')&&p.description.toLowerCase().includes('honey'))].map(p=>p.id)};
+     const last=l=>[...l.filter(p=>p.availabilityState!=='no'),...l.filter(p=>p.availabilityState==='no')];// AV1104-02: Sold out last inside each group
+     return [...last(rows.filter(p=>p.name.toLowerCase().includes('honey'))),...last(rows.filter(p=>!p.name.toLowerCase().includes('honey')&&p.description.toLowerCase().includes('honey')))].map(p=>p.id)};
     await serve(G,T);
     const cases=[{},{shelf:'pantry'},{brand:'Acme'},{from:'ZF'},{avail:true},{shelf:'dairy',brand:'Bolt',avail:true},{shelf:'bread',brand:'Acme',from:'ZF',avail:true}];
     assert.ok(want().length>24,'fixture: more than two pages across both groups');assert.ok(cases.some(f=>want(f).length===0)&&cases.some(f=>want(f).length>0),'fixture: a combined filter with no match, and some with matches');
@@ -110,7 +112,68 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
      let release;const held=new Promise(r=>{release=r});await page.route('**/assets/logo-header.png',async route=>{await held;await route.continue()});
      await page.goto(base+'/?item=s05&view=all#market',{waitUntil:'domcontentloaded'});await page.locator('#product-search').fill('goat');release();await page.waitForLoadState('load');await page.waitForTimeout(300);
      s=await st();assert.ok(same(s.order,GOAT),'typing after an item link searches both groups');assert.equal(await page.evaluate(()=>document.activeElement?.dataset?.productId??null),null,'no deferred focus');assert.equal((await params()).params.item,undefined);
-     await page.unroute('**/assets/logo-header.png');}}
+     await page.unroute('**/assets/logo-header.png');}},
+   // AV1104-01: every typed word, any order, across name/brand/town/shelf/badge (first group) and the description (second group).
+   searchEveryWordAnyOrder:async()=>{
+    const W=[P('w03','Jam',{brand:'Poly Shop',description:'Cal sweet.'}),P('w01','Strawberry Jam',{brand:'Cal Poly'}),P('w07','Fromage',{brand:'Stepladder',category:'bread',description:'A soft cheese.'}),P('w02','Raspberry Jam',{brand:'Cal Poly'}),
+     P('w04','Ranch Cheddar',{brand:'Stepladder',category:'dairy'}),P('w05','Cheese Curds',{brand:'Stepladder'}),P('w08','Cheese Board',{brand:'Other'}),P('w09','Dairy Wheel',{brand:'Stepladder',category:'dairy',producerKey:'ZF'}),P('w10','Soap',{producerKey:'ZF',description:'Brand new jam jar.'})];
+    await serve(W);await go('?view=all');
+    await search('cal poly jam',['w01','w02','w03'],'words in any field; w03 needs its description, so it follows');await search('jam poly cal',['w01','w02','w03'],'any order');
+    await search('  cal   poly\tjam  jam ',['w01','w02','w03'],'extra spaces and a repeated word');await search('cal poly jam zzzz',[],'one absent word excludes');
+    await search('stepladder cheese',['w04','w05','w09','w07'],'brand plus shelf word or name word first; description after');await search('cheese stepladder',['w04','w05','w09','w07'],'any order');
+    await search('zorbville stepladder',['w09'],'town and brand');await search('zorbville jam',['w10'],'town in the first group, description word after: the second group');
+    await search('cheeses stepladder',['w04','w05','w09','w07'],'a plural word still finds the cheese shelf and name');await search('ranch cheddar',['w04'],'a phrase still matches');
+    await dropRoutes();await go('?view=all');
+    const real=async(t,must)=>{await page.locator('#product-search').fill(t);const s=await st();for(const id of must)assert.ok(s.order.includes(id),`real catalog '${t}' includes ${id}`);assert.equal(s.count.split(' \u00b7 ')[0],`${s.order.length} selections`);return s};
+    await real('cal poly jam',['photo-product-008']);await real('jam poly cal',['photo-product-008']);await real('stepladder cheese',['photo-product-029','photo-product-033','photo-product-034','photo-product-128']);await real('cheese stepladder',['photo-product-029','photo-product-033','photo-product-034','photo-product-128']);
+    const jam=(await real('cal poly jam',[])).order;assert.ok(jam.length>=3&&await page.evaluate(ids=>ids.every(i=>catalog.find(p=>p.id===i)),jam),'cal poly jam finds at least the three jams');
+    await page.locator('#product-search').fill('');},
+   searchPluralVariants:async()=>{
+    const V=[['a','Tomatoes'],['b','Tomato'],['c','Peaches'],['d','Peach'],['e','Apples'],['f','Apple'],['g','Raspberries'],['h','Raspberry'],['i',"Lion's Mane"],['j','Mice'],['k','Mouse'],['l','Py'],['m','Chee'],['n','Ties'],['o','City'],['p','Cities'],['q','Cheeses'],['r','Cheese'],['s','Strawberries'],['t','Strawberry']].map(([i,n])=>P('v'+i,n,{brand:'Zed'}));
+    await serve(V);await go('?view=all');
+    const pairs=[['tomato','ab'],['tomatoes','ab'],['peach','cd'],['peaches','cd'],['apple','ef'],['apples','ef'],['raspberry','gh'],['raspberries','gh'],['cheese','qr'],['cheeses','qr'],['strawberry','st'],['strawberries','st'],['cities','op'],['city','op'],['ties','np'],['mouse','k'],['mice','j'],['mouse mice',[]]];
+    for(const [t,w] of pairs)await search(t,[...w].map(c=>'v'+c).filter(Boolean),'plural pair '+t);
+    await search('mouse mice',[],'irregular forms are separate words');await search('pies',[],'a reduction under three letters is not used: Py is not Pies');await search('cheeses',['vq','vr'],'one step only: Chee is not found');
+    await search("lion's",['vi'],'apostrophe word');await search('lion\u2019s',['vi'],'curly apostrophe');await search('lions',[],"lions does not become lion's");await search('mane',['vi'],'partial/literal word');await search('ange',[],'no word inside a word, no match');
+    await search('tom',['va','vb'],'a partial name still matches');await dropRoutes();await go('?view=all');await page.locator('#product-search').fill('strawberries');
+    const s=await st();for(const id of ['photo-product-056','photo-product-008','photo-product-106'])assert.ok(s.order.includes(id),'real strawberries finds '+id);
+    await page.locator('#product-search').fill('strawberry');assert.ok((await st()).order.includes('photo-product-056'),'real strawberry finds Strawberries');await page.locator('#product-search').fill('');},
+   searchWordsFiltersAndRestore:async()=>{
+    const M=[];for(let i=0;i<30;i++)M.push(P('m'+String(i).padStart(2,'0'),i%3===0?'Red Plum Jam':'Plum',{brand:i%2?'Orchard':'Acme',category:i%5===0?'bread':'pantry',description:i%3===0?'Red.':'Red plum fruit.'}));
+    await serve(M);await go('?view=all');const meta=M.filter((_,i)=>i%3===0).map(p=>p.id),desc=M.filter((_,i)=>i%3!==0).map(p=>p.id);
+    await search('plum red',[...meta,...desc],'both words: name-and-name first, then name plus description, source order within each');
+    await page.locator('#product-search').fill('red plum');assert.equal(await page.evaluate(()=>$('#catalog-count').textContent),'30 selections \u00b7 12 shown');
+    await page.evaluate(()=>loadMore());assert.equal((await st()).cards.length,24);assert.ok(same((await st()).cards,[...meta,...desc].slice(0,24)),'append has no gap or duplicate');
+    await page.locator('#brand-filter').selectOption('Orchard');assert.ok(same((await st()).order,[...meta,...desc].filter(id=>M.find(p=>p.id===id).brand==='Orchard')),'brand AND words');assert.equal((await st()).visible,Math.min(12,(await st()).order.length),'a filter starts a fresh page');
+    await page.locator('#brand-filter').selectOption('');await page.locator('#product-search').fill('x'.repeat(81)+' plum');assert.equal((await st()).box.length,80,'cut at 80');
+    await page.locator('#product-search').fill('  Red   plum ');const typed=await st();assert.equal(typed.q,'Red   plum','the visible words, not canonical forms, go to the address');
+    await go('?view=all&q='+encodeURIComponent('plum   RED')+'&utm=x#market');const back=await st();assert.ok(same(back.order,[...meta,...desc]),'restore gives the same order');assert.equal(back.box,'plum   RED');assert.equal(back.count,'30 selections \u00b7 12 shown');
+    await go('?view=all&q='+encodeURIComponent('<img src=x onerror=alert(1)> plum'));assert.deepEqual((await st()).order,[]);assert.equal(await page.locator('img[src="x"]').count(),0);}
+   ,
+   // AV1104-02: cards whose current word is exactly Sold out go last in their list/group, still drawn; Last confirmed and no-word cards keep their place.
+   soldOutLast:async()=>{
+    const A=(id,name,state,age,o={})=>P(id,name,{availabilityState:state,availabilityCheckedOn:age===null?'':dAgo(age),...o});
+    const H=[A('z01','Jam One','no',0),A('z02','Jam Two','yes',0),A('z03','Jam Three','no',0,{description:'Jam.'}),A('z04','Jam Four','limited',0),A('z05','Jam Five','no',12),A('z06','Jam Six','',null),A('z07','Plain','yes',0,{description:'Fruit jam.'}),A('z08','Other','no',0,{description:'Some jam here.'}),A('z09','Bread','yes',0,{category:'bread'}),A('z10','Bread Two','no',0,{category:'bread'})];
+    await serve(H,dAgo(0));await go('?view=all');
+    const words=await page.evaluate(()=>catalog.map(p=>p.availability||''));
+    assert.equal(words[0],'Sold out');assert.ok(words[4]!=='Sold out'&&words[4]!=='','a stale raw no is shown as Last confirmed, not Sold out');assert.equal(words[5],'');
+    const all=['z02','z04','z05','z06','z07','z09','z01','z03','z08','z10'];
+    let s=await st();assert.ok(same(s.order,all),'All: Sold out last, rest in source order: '+s.order.join(','));assert.ok(same(s.cards,all),'cards drawn in the same order, Sold out still shown');
+    assert.equal(s.count,'10 selections \u00b7 10 shown','count unchanged');
+    assert.equal(await page.locator('#catalog-grid .availability',{hasText:'Sold out'}).count(),4,'the Sold out word is still shown');
+    await page.locator('#product-search').fill('jam');s=await st();
+    assert.ok(same(s.order,['z02','z04','z05','z06','z01','z03','z07','z08']),'search: name group (available, then Sold out), then description group (available, then Sold out): '+s.order.join(','));
+    await page.locator('#product-search').fill('');
+    await page.locator('[data-filter="bread"]').click();s=await st();assert.ok(same(s.order,['z09','z10']),'one shelf: '+s.order.join(','));
+    await page.locator('[data-filter="all"]').click();
+    // Every card Sold out stays in source order.
+    const S=[A('y1','One','no',0),A('y2','Two','no',0),A('y3','Three','no',0)];await serve(S,dAgo(0));await go('?view=all');s=await st();assert.ok(same(s.order,['y1','y2','y3']),'all Sold out: source order');
+    // ?item reaches a Sold out card at its final place, past the first page.
+    const G=[];for(let i=0;i<16;i++)G.push(A('g'+String(i).padStart(2,'0'),'Item '+i,i<3?'no':'yes',0));
+    await serve(G,dAgo(0));await go('?item=g00');s=await st();
+    assert.ok(s.order.indexOf('g00')===13&&s.cards.includes('g00'),'?item loads enough cards to reach the Sold out card at its final place');
+    assert.ok(same(s.order.slice(0,14),[...G.slice(3).map(p=>p.id),'g00']),'order for item');assert.equal(s.count,'16 selections \u00b7 24 shown'.replace('24','16'));
+   }
   };
   try{for(const [name,check] of Object.entries(checks)){await check();descriptionSearchChecks.push(name)}}finally{await dropRoutes()}
   await page.setViewportSize({width:390,height:844});await go('?view=all');assert.equal(await countText(),fullCount,'real catalog restored after the description search fixtures');

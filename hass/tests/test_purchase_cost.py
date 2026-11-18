@@ -223,9 +223,8 @@ class LeakTests(CostTestCase):
 
 class HelpTests(unittest.TestCase):
     def test_help_lists_cost_and_the_product_form_of_margin_and_both_examples_parse(self):
-        lines = voice.plain(conversation.HELP_TEXT).splitlines()
-        [cost] = [ln for ln in lines if ln.startswith("cost ")]
-        [margin] = [ln for ln in lines if ln.startswith("margin ")]
+        [cost] = voice.plain(conversation.help_detail("cost")).splitlines()  # AV1052-12: the full lines are in `help cost` / `help margin`
+        [margin] = voice.plain(conversation.help_detail("margin")).splitlines()
         self.assertTrue(cost.startswith("cost Hass avocado: 24 for 12 - "))
         self.assertTrue(margin.startswith("margin Hass avocado at 35% - "))
         self.assertEqual(conversation.parse_memory(f"cost {AVO}: 24 for 12"), ("cost", AVO, "24 for 12"))

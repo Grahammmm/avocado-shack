@@ -18,6 +18,11 @@ same input gives the same bytes, so the previewed bytes are the committed bytes.
 and NOT faked: ``install`` returns ``Retake`` (a ``Refused`` whose ``reason`` is a plain sentence asking for a retake and
 whose ``problems`` names every defect found). With the flag off (the default), absent or anything but ``True``, the bytes
 are exactly what they were before. The home page hero photo asks for ``style=False`` and keeps today's behaviour (D6).
+
+HASS-IMAGE-1 (behind ``photo_polish``, which needs ``houseRender``): when ``photo_polish`` settled a cleaned picture for
+this photo (it passed the fidelity gate), that picture is published instead of the house render, also for a photo the
+house render alone would have asked to retake. In every other case (not run, still running, failed, rejected) install
+does exactly what it did before, and that choice is settled so prepare, apply and verify agree.
 """
 
 from __future__ import annotations
@@ -30,7 +35,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from hass import editor, house_style, media, newitem_render
+from hass import editor, house_style, media, newitem_render, photo_polish
 from hass.content_model import TEXT_LIMITS
 from hass.ops import Arg, Op, Refused, Touched
 from hass.ops.catalog import _product
@@ -214,7 +219,7 @@ def _folder_unusable(site_dir):
     return False
 
 
-def install(ctx, sha, alt, *, style=True):
+def install(ctx, sha, alt, *, style=True, owner_fallback=False):
     """Queue the stored photo's web copy for commit; the site path ``assets/products/photo-<sha16>.<ext>`` or Refused.
     Shared by product.set_photo and product.add (AV0022-02). Same bytes already there are reused, not rewritten.
     With settings ``houseRender`` true and ``style`` True the queued bytes are the house-style JPEG instead (named .jpg),
@@ -234,13 +239,23 @@ def install(ctx, sha, alt, *, style=True):
         return found
     data, ext = found
     house = style and ctx.settings.get(HOUSE_FLAG) is True
-    if house:
+    cleaned = None
+    if house and photo_polish.enabled(ctx.settings):  # HASS-IMAGE-1: the settled cleaned picture, if it passed the gate
+        try:
+            cleaned = photo_polish.polished(root, sha)
+        except (OSError, media.Refused, editor.UnsafeState):  # the polish store is unusable: today's behaviour
+            cleaned = None
+    if cleaned is not None:
+        data, ext = cleaned, "jpg"
+    elif house and not (owner_fallback and photo_polish.enabled(ctx.settings)):
         verdict = _verdict(data)
-        if isinstance(verdict, Refused):
-            return verdict
-        if not verdict["ok"]:
-            return Retake(verdict["reason"], tuple(verdict["problems"]))
-        data, ext = verdict["jpeg"], "jpg"
+        if not isinstance(verdict, Refused) and verdict["ok"]:
+            data, ext = verdict["jpeg"], "jpg"
+        elif not owner_fallback:
+            return verdict if isinstance(verdict, Refused) else Retake(verdict["reason"], tuple(verdict["problems"]))
+        # Styling is optional. The already decoded, resized, metadata-free owner
+        # web copy remains usable even when isolation/style checks fail. Never
+        # publish the rejected generated/rendered pixels as the fallback.
     target = f"assets/products/photo-{sha[:16]}.{ext}"
     path, have, link = Path(ctx.site_dir) / target, ctx.assets.get(target), False
     try:  # read the site file only when not already queued; lstat first so a FIFO is never opened

@@ -259,7 +259,7 @@ _PART_RE = re.compile(r"[,&]|\b(?:and|but|then|while|plus|though|although|wherea
 
 def _line_problem(i, line):
     if len(line) > MAX_HOURS_LINE:
-        return f"Line {i} of the hours is too long. Could you keep each line under {MAX_HOURS_LINE} characters?"
+        return HOURS_LINE_LONG.format(i=i)
     if not any(c.isalnum() for c in line):
         return f"Line {i} of the hours has no day or time in it. What should it say?"
     return None
@@ -274,12 +274,30 @@ def check_hours_conflict(slots, texts, ctx):
     return None
 
 
+_KEEP_DAY_RE = re.compile(r"(?:please\s+)?(?:(?:don['’]t|do not)\s+change\s+(?P<a>[a-z]+)(?:\s+hours)?|"
+                          r"keep\s+(?P<b>[a-z]+)(?:\s+hours)?\s+unchanged)", re.I)
+
+
+def _kept_days(texts) -> frozenset:
+    """Days the owner explicitly said to leave as they are: a whole clause (split at ; newline . ,) that is only
+    "[please] don't change|do not change <day> [hours]" or "[please] keep <day> [hours] unchanged". Finite grammar, no
+    general negation. Conservative: it holds anywhere in the current request texts, a later affirmative line for the
+    same day does not revoke it (the stay-as-is question is asked instead)."""
+    out = set()
+    for clause in re.split(r"[;\n.,]", unicodedata.normalize("NFKC", "\n".join(str(t) for t in texts))):
+        m = _KEEP_DAY_RE.fullmatch(clause.strip())
+        day = _day((m.group("a") or m.group("b")).lower()) if m else None
+        if day is not None:
+            out.add(day)
+    return frozenset(out)
+
+
 def check_hours_untouched(slots, texts, ctx):
     """hours-untouched-lines: a day the owner did not name keeps exactly what the site says now, or he is asked."""
     store = store_of(ctx)
     if store is None or not texts or not isinstance(store.get("hours"), list):
         return None  # without the saved hours or his words this rule cannot judge; the structural checks still ran
-    named = days_in_text(" ".join(texts))
+    named = days_in_text(" ".join(texts)) - _kept_days(texts)
     old, new = hours_by_day(store["hours"]), hours_by_day(slots["hours"])
     kept = {_line_key(piece) for line in slots["hours"] for piece in schedule_pieces(line) if piece.strip()}
     for opaque in old[1]:  # a piece of the current hours that names no day: it stays unless he rewrote the whole list around it
@@ -372,6 +390,9 @@ def plan_hours(slots, ctx):
 NOTICE_ASK, UNTIL_ASK = "What should the notice say?", "Until what day?"
 NOTICE_PAST = "That day has already passed. What is the last day for the notice?"
 NOTICE_LONG = f"A notice can stay up for {MAX_NOTICE_DAYS} days at the most. Could you pick an earlier last day?"
+HOURS_LINE_LONG = ("Line {i} of the hours is too long. Could you shorten it to "
+                   f"{MAX_HOURS_LINE} characters or fewer?")
+ADDRESS_LONG = f"That is too long. Could you shorten it to {MAX_ADDRESS_PART} characters or fewer?"
 NOTICE_TEXT_LONG = f"That notice is too long. Could you shorten it to {MAX_NOTICE} characters or fewer?"
 NOTICE_SHORT = "That notice is too short to mean anything. What should it say?"
 NO_NOTICE = "There is no notice up right now, so there is nothing to take down."
@@ -510,7 +531,7 @@ def plan_contact(slots, ctx):
         raise SkillStop(CONTACT_ASK, "question")
     for value in (street, town):
         if len(value) > MAX_ADDRESS_PART:
-            raise SkillStop(f"That is too long. Could you keep it under {MAX_ADDRESS_PART} characters?", "question")
+            raise SkillStop(ADDRESS_LONG, "question")
         if value and not any(c.isalpha() for c in value):
             raise SkillStop("The street and the town each need some letters. What should it say?", "question")
         if "$" in value:
@@ -523,17 +544,18 @@ def plan_contact(slots, ctx):
         if (stop := CONTACT_CHECKS["phone-ten-digits"](clean, texts_of(ctx), ctx)):
             raise stop
         clean["phone"] = phone_digits(phone)
-    if clear and store is not None and not store.get("phone"):
+    new_address = {k: v for k, v in (("streetAddress", street), ("town", town))
+                   if v and not (store is not None and _spaced(store.get(k, "")) == _spaced(v))}  # a part that is already there is left out
+    no_phone = store is not None and not store.get("phone")
+    if clear and no_phone and not new_address:
         raise SkillStop("There is no phone number on the site, so there is nothing to take off.")
     if (stop := CONTACT_CHECKS["not-already-true"](clean, texts_of(ctx), ctx)):
         raise stop
     ops = []
     if phone and not (store is not None and store.get("phone") == clean["phone"]):
         ops.append({"op": "store.set_phone", "args": {"phone": clean["phone"]}})
-    if clear:
+    if clear and not no_phone:  # an already-absent phone has nothing to clear; the address change still goes ahead
         ops.append({"op": "store.clear_phone", "args": {}})
-    new_address = {k: v for k, v in (("streetAddress", street), ("town", town))
-                   if v and not (store is not None and _spaced(store.get(k, "")) == _spaced(v))}  # a part that is already there is left out
     if new_address:
         ops.append({"op": "store.set_address", "args": new_address})
     return ops

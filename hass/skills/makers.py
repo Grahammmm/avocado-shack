@@ -32,6 +32,7 @@ from typing import NamedTuple
 
 from hass import claims, interpret_check, itemstd
 from hass.content_model import CONTENT_DIR, FORBIDDEN_TEXT, TEXT_LIMITS, _https
+from hass.nl_prep import WORD_NUMBERS
 from hass.ops import catalog
 from hass.skills.model import Skill, Slot, Trigger, Undo
 
@@ -40,7 +41,10 @@ MAX_NAMES = 5  # product names listed in one reply before "and N more"
 PRICE_REPLY = interpret_check.PRICE_REPLY
 PLAIN_TEXT_REPLY = interpret_check.PLAIN_TEXT_REPLY
 PRICE_RE = re.compile(r"\$|\bper\s+(?:lb|lbs|pound|pounds|oz|ounce|ounces|kg|dozen|jar|bottle|bag)\b|"
-                      r"\b\d+(?:\.\d+)?\s*(?:dollars|bucks|usd)\b", re.IGNORECASE)
+                      r"\b\d+(?:\.\d+)?\s*(?:dollars|bucks|usd)\b|"
+                      r"\b(?:\d+(?:[.,]\d+)?\s*|(?:a|an|" + "|".join(re.escape(w) for w in sorted(WORD_NUMBERS, key=len, reverse=True)) + r")\s+)"
+                      r"(?:dollars?|bucks?|cents?)\b|\d\s?\u00a2|"
+                      r"\b\d+(?:\.\d+)?\s+(?:a|the)\s+(?:pound|lb|dozen|ounce|oz|jar|bottle|bag)\b", re.IGNORECASE)
 FIELD_WORDS = {"name": "name", "place": "town", "story": "about text", "url": "website link"}
 
 
@@ -168,7 +172,10 @@ _PRESENT = {"make", "keep", "grow", "roast", "bake", "sell", "brew", "press", "p
             "forage", "tap", "bottle", "carry", "treat", "show", "look", "begin", "think", "know", "like", "stir", "mix"}
 _AUX = {"can", "could", "will", "would", "should", "may", "might", "must", "shall", "can't", "won't", "do", "does", "did",
         "don't", "doesn't", "didn't"}
-_PRONOUN = re.compile(r"(They(?:['\u2019](?:re|ve|ll))?|She|He|His|Her|Their)(?=[\s,]|$)")
+_PRONOUN_RE = r"(They(?:['\u2019](?:re|ve|ll))?|She|He|His|Her|Their)(?=[\s,]|$)"
+_PRONOUN = re.compile(_PRONOUN_RE, re.I)  # any capitalization; only the matched pronoun is canonicalized below
+# a sentence starts at a capital or quote, or at a supported pronoun in any case (not any lowercase word: abbreviations)
+_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"\u201c]|(?i:" + _PRONOUN_RE.replace("(They", "(?:They", 1) + "))")
 _STRICT = "make|keep|grow|roast|bake|sell|brew|harvest|raise|own|serve|offer|produce|ship|supply|gather|preserve|ferment|forage|bring|build|choose|carry"
 # the second verb of "They bake and sell": a verb that is rarely a noun, or any listed verb after an adverb ("and now dry")
 _CONJ = re.compile(rf"\b(and|but|or) (?:(?P<adv>(?:now|also|still|then|often|always|only|just|even) )?)(?P<verb>(?(adv)(?:{'|'.join(sorted(_PRESENT))})|(?:{_STRICT})))\b")
@@ -202,10 +209,10 @@ def _sentence(text: str, name: str) -> str:
     m = _PRONOUN.match(text)
     if not m:
         return text
-    pro, rest = m.group(1), text[m.end():]
-    if pro in ("His", "Her", "Their"):
+    pro, rest = m.group(1).lower(), text[m.end():]
+    if pro in ("his", "her", "their"):
         return f"{name}\u2019s{rest}"
-    if pro in ("She", "He"):
+    if pro in ("she", "he"):
         return name + rest
     if len(pro) > 4:  # They're / They've / They'll
         word = {"re": "is", "ve": "has", "ll": "will"}[pro[-2:]]
@@ -234,7 +241,7 @@ def story_words(text: str, name: str) -> str:
     text = _clean(text)
     if not text:
         return ""
-    out = " ".join(_sentence(s, name) for s in re.split(r"(?<=[.!?])\s+(?=[A-Z\"\u201c])", text))
+    out = " ".join(_sentence(s, name) for s in _SENT_SPLIT.split(text))
     return out if out[-1] in ".!?\"\u201d" else out + "."
 
 

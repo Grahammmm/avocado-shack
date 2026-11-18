@@ -1,0 +1,98 @@
+"""Private, one-use photo arrivals in the host directory; never a host-to-Mac fetch."""
+import base64
+import contextlib
+import sqlite3
+from datetime import datetime, timezone
+from hashlib import sha256
+from pathlib import Path
+
+from hass import bridge_photos, media, memory, relay
+
+
+class PhotoRefused(media.Refused):
+    def __init__(self, code, position):
+        if code == "fetch-failed" or code in relay.FETCH_DIAG:
+            from hass.conversation import FETCH_FAILED
+            Exception.__init__(self, code)
+            self.code, self.reply = code, FETCH_FAILED
+        else:
+            super().__init__(code)
+        self.position = position
+
+
+class RelayPhotos:
+    retry_seconds = 3600  # Mac transfer lifetime (30 min), plus outage/restart allowance
+    def __init__(self, host_dir, clock=lambda: datetime.now(timezone.utc), inbox_path=None):
+        self.path, self.clock, self.inbox_path = memory.private_db(Path(host_dir), "photos.sqlite3"), clock, inbox_path
+        with self._db(attach_inbox=False) as db:
+            db.execute("CREATE TABLE IF NOT EXISTS photo_in(guid TEXT, idx INTEGER, count INTEGER, sha256 TEXT,"
+                       " data BLOB, code TEXT, received_at INTEGER, PRIMARY KEY(guid, idx))")
+            db.execute("CREATE TABLE IF NOT EXISTS photo_receipt(guid TEXT,idx INTEGER,count INTEGER,sha256 TEXT,code TEXT,received_at INTEGER,PRIMARY KEY(guid,idx))")
+            db.execute("INSERT OR IGNORE INTO photo_receipt SELECT guid,idx,count,sha256,code,received_at FROM photo_in")
+
+    @contextlib.contextmanager
+    def _db(self, attach_inbox=True):
+        with contextlib.closing(sqlite3.connect(self.path, timeout=30, uri=True)) as db:
+            if attach_inbox and self.inbox_path is not None:
+                db.execute("ATTACH DATABASE ? AS inbox", (Path(self.inbox_path).absolute().as_uri() + "?mode=rw",))
+            with db: yield db
+
+    def _expire(self, db, now):
+        # BEGIN IMMEDIATE locks both attached databases: intake cannot race this
+        # decision, and a pending message retains every part until marked done.
+        pending = (" AND NOT EXISTS (SELECT 1 FROM inbox.inbound WHERE provider_id = photo_in.guid AND state = 'pending')"
+                   if self.inbox_path is not None else "")
+        db.execute("DELETE FROM photo_in WHERE received_at <= ?" + pending, (now - 86400,))
+        db.execute("DELETE FROM photo_receipt WHERE received_at <= ?" + pending.replace("photo_in.guid", "photo_receipt.guid"), (now - 86400,))
+
+    def put(self, body, now):
+        if not relay._body_ok(body) or body["op"] not in ("photo", "photo-refused"): raise ValueError("photo")
+        data = base64.b64decode(body["b64"], validate=True) if body["op"] == "photo" else None
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._expire(db, now)
+            old = db.execute("SELECT count FROM photo_receipt WHERE guid = ?", (body["guid"],)).fetchall()
+            if any(row[0] != body["count"] for row in old): raise ValueError("photo count")
+            receipt = (body["count"], body.get("sha256"), body.get("code"))
+            old = db.execute("SELECT count,sha256,code FROM photo_receipt WHERE guid=? AND idx=?", (body["guid"], body["idx"])).fetchone()
+            if old is not None:
+                if old != receipt: raise ValueError("photo duplicate")
+                return  # validated digest binds the content; never reinsert already consumed bytes
+            db.execute("INSERT INTO photo_in VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       (body["guid"], body["idx"], *receipt[:2], data, receipt[2], now))
+            db.execute("INSERT INTO photo_receipt VALUES (?,?,?,?,?,?)", (body["guid"], body["idx"], *receipt, now))
+
+    def fetch(self, guid, n):
+        return self._fetch(guid, n, consume=True)
+
+    def fetch_for_inbox(self, guid, n):
+        """Keep the arrival until the durable inbox marks this message done."""
+        return self._fetch(guid, n, consume=False)
+
+    def reconcile(self, inbox):
+        """Remove completed arrivals, including a crash after marking the inbox."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._expire(db, int(self.clock().timestamp()))
+            guids = db.execute("SELECT DISTINCT guid FROM photo_in").fetchall()
+            db.executemany("DELETE FROM photo_in WHERE guid = ?",
+                           ((guid,) for (guid,) in guids if inbox.state(guid) == "done"))
+
+    def _fetch(self, guid, n, *, consume):
+        if not bridge_photos._valid_guid(guid) or type(n) is not int or not 1 <= n <= media.MAX_PHOTOS_PER_MESSAGE:
+            raise ValueError("photo request")
+        refused, out = None, []
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self._expire(db, int(self.clock().timestamp()))
+            rows = db.execute("SELECT idx, count, sha256, data, code FROM photo_in WHERE guid = ? ORDER BY idx", (guid,)).fetchall()
+            refused = next((PhotoRefused(code, idx + 1) for idx, count, digest, data, code in rows if code), None)
+            if refused is None:
+                pending = len(rows) != n or any(idx != i or count != n or not isinstance(data, bytes)
+                        or not 1 <= len(data) <= relay.PHOTO_MAX or sha256(data).hexdigest() != digest
+                        for i, (idx, count, digest, data, code) in enumerate(rows))
+                if not pending: out = [row[3] for row in rows]
+            if consume and (refused is not None or out): db.execute("DELETE FROM photo_in WHERE guid = ?", (guid,))
+        if refused is not None: raise refused
+        if not out: raise ValueError("photo pending")
+        return out

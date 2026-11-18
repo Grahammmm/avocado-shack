@@ -113,6 +113,7 @@ class AnswerTests(DeskCase):
     def test_fresh_answers(self):
         seed(self.state)
         self.assertEqual(self.ask("how many hass avocado do we have"), "Hass avocado: 40 in the till.")
+        self.assertEqual(self.ask("how many avocados do we have"), "I can't find exactly that. The closest is Hass avocado: 40 in the till.")
         self.assertEqual(self.ask("is sunshine olive oil in stock"), "Yes, Sunshine olive oil: 11 in the till.")
         self.assertEqual(self.ask("are eggs, dozen in stock"), "No, Eggs, dozen is sold out in the till.")
         self.assertEqual(self.ask("is market special (ring up price) in stock"),

@@ -30,6 +30,40 @@ detached runtime worktree, `runtimeCommit` updated, services restarted (HASS-SYN
 - **G, full stop:** `systemctl --user stop hass-worker hass-receiver`, then on the Mac `launchctl bootout` of the forwarder
   (runbook step 23).
 
+## Photo transfer retries (HASS-PHOTO-RETRY-1)
+
+The private Mac spool keeps up to 50 active photo messages, four parts each, independently of the text acknowledgement.
+Prepared parts are stored before posting; retries reuse those bytes with a fresh authenticated envelope. The eight-post
+minute budget survives a restart. Busy workers leave jobs queued; failures back off 30 seconds up to five minutes.
+Conversion timeouts retry three times before a fixed refusal. Jobs expire after 30 minutes, recording `expired` and
+erasing prepared bytes; completed metadata is pruned after a day on subsequent photo intake. A full queue retains the
+inbound message for retry rather than accepting text and losing its photos. The relay-photo inbox waits up to one hour
+(in order; other messages can wait too), not only two retries. Its existing durable conversation/outbox reports one
+terminal failure if parts never arrive; the Mac does not send a competing failure notice. Exact part retries succeed
+without reinserting consumed bytes; conflicting digests/counts are refused. Host digest-only receipts last at least one
+day (longer while the inbox is pending). No photo/text/ID/URL/secret is added to logs. Deployment remains attended.
+
+## Cloud reads through Codex (HASS-CLOUD-CODEX-1)
+
+The interpreter, the intake answer reader and the photo label reader can use OpenAI through G's ChatGPT/Codex sign-in in
+Hermes. Hass has no key and makes no cloud connection: each call runs `hass/cloud_codex_hermes.py` under the Hermes Python
+(found through the `hermes` launcher), which asks Hermes for the credential. The `interpreter` block in host.json:
+
+```json
+"interpreter": {"api": "codex", "model": "gpt-6.1-sol", "effort": "low", "timeout": 12,
+                "fallback": {"url": "http://127.0.0.1:8010", "model": "<local model>", "api": "openai", "timeout": 60}}
+```
+
+- `fallback` is required: the local block Hass used before (its own `api` is `ollama` or `openai`). `url` and `keyFile` are
+  refused next to `api: "codex"`. `timeout` is 5 to 20 s (default 12), `effort` is `low` or `medium`.
+- Any failed cloud call is answered by the fallback once. A cloud call costs at most `timeout` + 3 s before the fallback starts.
+- Each failure logs `ALERTS hass-cloud: <code>` in the `hass-worker` journal, at most once per code per hour. `auth`: G must
+  sign in to Codex in Hermes again. `rate`: the shared ChatGPT plan is busy (fleet hours); Hass runs on the fallback meanwhile.
+  Other codes: `model`, `timeout`, `api`, `hermes` (Hermes not found or failed to start), `usage`.
+- Clover till messages are still matched before the interpreter, so till prices and counts never reach the cloud.
+- Check (one tiny fixed prompt): `python3 -B hass/cloud_codex.py check --host <host.json>` prints
+  `{"result": "ok", "model": ..., "ms": ...}` or `{"result": "<code>"}`.
+
 ## Alerts (H19 recommendation)
 
 The timer runs `health.py` every 5 min. When the set of problems changes it appends one line to `~/agent-work/modes/ALERTS.log`:
@@ -43,6 +77,37 @@ repeat. Exit 1 (problems) is not a failed unit; exit 2 (unsafe state, bad `--see
 | everything else (`relay-stuck`, `host-config`, `inbox-stuck`, `backup-age`, `stopped-long`, ...) | an ALERTS line only |
 
 Each live publish is an info line, never a page. What to check for each id is in `SUPPORT.md`.
+
+## Private conversation transcript (HASS-TRANSCRIPT-1)
+
+G authorized retaining the full on-box conversation record on 2026-11-16. New events reaching `Conversation.handle`
+are retained in `<state>/transcript.sqlite3` (0600 inside the private state directory), including ignored messages,
+edits, reactions and every owner/G chat. Repeated inbound provider ids retain only their first event. Existing
+conversations cannot be reconstructed from the old ids-only message table. No live install is performed by this change.
+
+The append-only transcript keeps full text as received by the conversation core and cleaned text queued by `Outbox.add`.
+Inbound rows are appended in the entry wrapper's `finally`, before any return, with the processing outcome (or `error`).
+Outgoing rows say `queued`: they are not proof of delivery, and send-time delay prefixes/transport notices are not
+part of the queued text. Provider/reply ids, sender keys, UTC capture time, explicit approval code, interpreter backend
+and model when an audit row identifies the call, and elapsed processing milliseconds accompany the text. Unknown
+metadata is null; attachment-count-only inbound messages are classified as photo because the core receives no MIME
+information. Already-fetched photo bytes and readable outbound pictures are hashed, never fetched again or copied;
+unavailable attachment digests are absent. Original photos remain in `mediaRoot`; preview pictures remain in screenshots.
+A retry retains the first inbound event, even if its first processing attempt failed. Transcript failure emits only
+`ALERT transcript-write-failed` to the application logger and never changes a reply.
+
+Read-only, offline tools (JSONL to stdout; keep output on-box and private, never paste transcripts into Git or alerts):
+
+```
+python3 -B hass/transcript.py export --state DIR --since YYYY-MM-DD
+python3 -B hass/transcript.py export --state DIR --since YYYY-MM-DD --chat ID
+python3 -B hass/transcript.py stats --state DIR
+```
+
+Export uses the UTC capture date; stats groups counts by UTC day and disposition. Both refuse missing, non-regular
+or non-private database files without creating/chmodding them. Keep everything: no transcript expiry or deletion code
+exists. `statebackup.py create` snapshots this database using SQLite's online backup API, `verify` checks integrity,
+and restore/drill includes it. In the isolated restore drill, compare the restored export with the backup's export.
 
 ## Restore drill (unchanged)
 
@@ -77,6 +142,7 @@ these reads that way. A nightly timer for it is proposed in
 | Mac spool | 7 days after delivery |
 | Relay rows | 30 days after ack (picture bytes cleared at ack) |
 | Proposal and result screenshots | 90 days |
+| Transcript | Keep everything (G authorized 2026-11-16); not subject to this proposal |
 | Conversation messages and outbox | 1 year |
 | Approvals, change records, release journals | 2 years (the audit trail of live changes) |
 | Photo originals | 1 year after last use |

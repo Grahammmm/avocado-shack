@@ -181,8 +181,10 @@ NO_HIKE = "There are no upcoming hikes on the site."
 PACIFIC = ZoneInfo("America/Los_Angeles")
 _DAY_NAMES = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 _DAY_WORDS = {word: i for i, name in enumerate(_DAY_NAMES) for word in (name, name[:3])}
-_DAY_TOKEN = r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b"
-_DAY_RANGE = re.compile(r"\b(" + _DAY_TOKEN + r")\s*[–—-]\s*(" + _DAY_TOKEN + r")", re.I)
+_DAY_WORDS.update({"tues": 1, "weds": 2, "thur": 3, "thurs": 3})
+_DAY_TOKEN = r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|thurs|tues|weds|thur|mon|tue|wed|thu|fri|sat|sun)\b"
+# A written range ("Monday to Friday") covers its interior days like a dashed one; word separators need whitespace.
+_DAY_RANGE = re.compile(r"\b(" + _DAY_TOKEN + r")(?:\s*[–—-]\s*|\s+(?:to|through|thru|till|until)\s+)(" + _DAY_TOKEN + r")", re.I)
 _DAY_MATCH = re.compile(r"\b" + _DAY_TOKEN, re.I)
 _PRICE_ASK = re.compile(r"\b(?:prices?|costs?|dollars?|bucks|usd)\b|\$|\bhow much (?:is|are|does)\b", re.I)
 _SALES_ASK = re.compile(r"\b(?:sales|revenue|profit|profits|earnings|turnover)\b|\bhow (?:many|much).*\bsold\b", re.I)

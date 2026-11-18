@@ -1,0 +1,73 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": 1800,
+    "quantity": null
+   },
+   "route": "qwen",
+   "seconds": 5.877,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": 4.911
+   },
+   "method": "label",
+   "result": {
+    "category": "general",
+    "colour": "Light lavender",
+    "description": "Lavender Honey is an 8 oz light lavender soy candle with a visible wick.",
+    "features": [
+     "soy candle"
+    ],
+    "materials": "Soy wax",
+    "name": "Lavender Honey",
+    "product_type": "Soy candle",
+    "size": "8 oz",
+    "warnings": [
+     "not edible"
+    ]
+   },
+   "route": "codex",
+   "seconds": 4.911,
+   "turn": 1
+  },
+  {
+   "attrs": {},
+   "method": "capture",
+   "result": {
+    "cardText": "From the market\n\nLavender Honey\n\n$18.00\n\nAsk us about the source in store.\n\nNew\n\nLavender Honey is an light lavender soy candle with a visible wick. 8 oz. Light lavender. Soy wax. soy candle, not edible.\n\nLink to this",
+    "checks": {
+     "description": true,
+     "imageShown": true,
+     "noPageErrors": true,
+     "noPosts": true,
+     "priceShown": true,
+     "productShown": true
+    },
+    "error": null,
+    "ok": true
+   },
+   "route": "browser",
+   "seconds": 1.958,
+   "turn": 1
+  }
+ ],
+ "case": "intake-nonfood-foodwords"
+}
