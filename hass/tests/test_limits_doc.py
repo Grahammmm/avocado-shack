@@ -1,8 +1,11 @@
 """AV1537-14 (H25): each number in docs/hass/LIMITS.md equals the code constant its comment names. Stdlib, offline."""
 import importlib
 import re
+import types
 import unittest
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from unittest import mock
 
 from hass import content_model, media
@@ -18,7 +21,9 @@ REQUIRED = {"media.MAX_BYTES", "media.MAX_PHOTOS_PER_MESSAGE", "conversation.HIS
             "conversation.FIND_TEXT_MAX", "conversation.ALIAS_NAME_MAX", "content_model.MAX_INTRO",
             "content_model.MAX_HEADLINE_LINE", "content_model.MAX_STORY", "content_model.MAX_NOTICE",
             "content_model.MAX_NOTICE_DAYS", "ops.store.PHONE_DIGITS", "margins.PACK_COST_MAX",
-            "margins.UNITS_MIN", "margins.UNITS_MAX", "shop.NEW_BADGE_DAYS", "live_policy.MAX_RECORDS"}  # AV0022-15, AV1322-12, AV1222-12, AV1622-11, AV1937-13
+            "margins.UNITS_MIN", "margins.UNITS_MAX", "shop.NEW_BADGE_DAYS", "live_policy.MAX_RECORDS",
+            "conversation.AGAIN_WINDOW_DAYS", "conversation.HISTORY_SEARCH_MAX", "conversation.HISTORY_TEXT_MAX",
+            "content_model.MAX_CLUB_INTRO"}  # AV0022-15, AV1322-12, AV1222-12, AV1622-11, AV1937-13, AV2152-14
 
 
 def claims(doc: str) -> list:
@@ -141,6 +146,9 @@ class LimitsDocTest(unittest.TestCase):
         for text in (self.doc, commands):
             self.assertNotRegex(text, r"(?i)one photo per message|one photo at a time")
         self.assertIn("1 to 4 photos per message", commands)
+        for wording in ("Each newly accepted photo gets its own code and question", "already waiting, repeated in the same message",
+                        "already on a product gets no new draft code"):
+            self.assertIn(wording, self.doc)
 
     def test_bold_number_without_comment_names_its_line(self):
         self.assertEqual(problems("Intro.\nAt most **7** things."), ["line 2: bold number without a source comment"])
@@ -204,3 +212,56 @@ class LimitsDocTest(unittest.TestCase):
         self.assertIn("keeps later edits to the other details", section)
         self.assertIn("different value, the undo is refused", section)
         self.assertNotIn("newest", section)
+
+    def test_new_limits_follow_constants_and_require_sources(self):  # AV2152-14
+        from hass import conversation
+        by = {(c[3], c[4], tuple(c[5])): c for c in claims(self.doc)}
+        cases = {("conversation", "AGAIN_WINDOW_DAYS", ()): (conversation, "AGAIN_WINDOW_DAYS", 8, "doc says 7, conversation.AGAIN_WINDOW_DAYS is 8"),
+                 ("conversation", "HISTORY_SEARCH_MAX", ()): (conversation, "HISTORY_SEARCH_MAX", 11, "doc says 10, conversation.HISTORY_SEARCH_MAX is 11"),
+                 ("conversation", "HISTORY_TEXT_MAX", ()): (conversation, "HISTORY_TEXT_MAX", 61, "doc says 60 characters, conversation.HISTORY_TEXT_MAX is 61"),
+                 ("content_model", "MAX_CLUB_INTRO", ()): (content_model, "MAX_CLUB_INTRO", 401, "doc says 400 characters, content_model.MAX_CLUB_INTRO is 401")}
+        for key, (module, name, value, said) in cases.items():
+            self.assertIn(key, by)
+            with mock.patch.object(module, name, value):
+                self.assertEqual(problems(self.doc), [f"line {by[key][0]}: {said}"])
+            self.assertIn(f"{key[0]}.{key[1]}", REQUIRED)
+            line = self.doc.splitlines()[by[key][0] - 1]
+            no_claim = self.doc.replace(line, re.sub(r"\*\*(\d+)[^*]*\*\*\s*<!--[^>]*-->", r"\1", line))
+            self.assertNotIn(f"{key[0]}.{key[1]}", {f"{c[3]}.{c[4]}" for c in claims(no_claim)})
+            self.assertFalse(REQUIRED <= {f"{c[3]}.{c[4]}" for c in claims(no_claim)}, key)
+        note = by[("content_model", "TEXT_LIMITS", ("event", "cancelNote"))]
+        with mock.patch.dict(content_model.TEXT_LIMITS["event"], {"cancelNote": 161}):
+            self.assertEqual(problems(self.doc), [f"line {note[0]}: doc says 160 characters, content_model.TEXT_LIMITS[event][cancelNote] is 161"])
+        self.assertIn("one line", self.doc.splitlines()[note[0] - 1])
+        no_note = self.doc.replace("<!-- content_model.TEXT_LIMITS[event][cancelNote] -->", "")
+        self.assertEqual(problems(no_note), [f"line {note[0]}: bold number without a source comment"])
+
+    def test_again_window_and_named_approval_wording(self):  # AV2152-14
+        line = next(l for l in self.doc.splitlines() if "AGAIN_WINDOW_DAYS" in l)
+        for text in ("expired text proposal only", "exactly seven days still counts", "website still matches", "new code and expiry",
+                     "separate `yes`", "photo draft", "cancelled, replaced or applied", "resuming applies nothing by itself"):
+            self.assertIn(text, line)
+            self.assertNotIn(text, line.replace(text, ""), text)  # dropping the phrase removes it from the checked line
+
+    def test_notice_first_day_matches_fixed_clock_contract(self):  # AV2152-14
+        from hass.ops import OpContext, Refused, load_registry
+        prose = self.doc.split("MAX_NOTICE_DAYS -->")[1].split("\n")[0]
+        for text in ("first day is today or later, never after its last day", "starts today", "Both days count", "Pacific", "no message is sent"):
+            self.assertIn(text, prose)
+        self.assertNotRegex(prose, r"\*\*\d")  # relative date rule: no unbound bold number
+
+        def run(first, until, hour=12):
+            now = datetime(2026, 11, 17, hour, tzinfo=ZoneInfo("America/Los_Angeles"))  # Pacific noon, 2026-11-17
+            args = {"text": "Closed Thanksgiving Day", "until": until, **({"from": first} if first else {})}
+            content = types.SimpleNamespace(store={})
+            return load_registry()["store.set_notice"].apply(content, args, OpContext(now, content_model.REPO_ROOT, {})), content.store
+        for first, until in (("2026-11-16", "2026-11-26"), ("2026-11-27", "2026-11-26"), ("2026-11-17", "2026-11-16")):
+            result, store = run(first, until)
+            self.assertIsInstance(result, Refused, (first, until))
+            self.assertEqual(store, {})
+        for first, until in (("2026-11-17", "2026-11-26"), ("2026-11-26", "2026-11-26"), (None, "2026-11-17")):
+            result, store = run(first, until)
+            self.assertNotIsInstance(result, Refused, (first, until))
+            self.assertEqual(store["notice"]["from"], first or "2026-11-17")
+        late, _ = run("2026-11-17", "2026-11-17", hour=23)  # still the Pacific 17th late in the evening
+        self.assertNotIsInstance(late, Refused)

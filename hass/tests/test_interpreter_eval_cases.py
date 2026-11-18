@@ -49,13 +49,13 @@ class LoadCasesRefusalTests(unittest.TestCase):
         with self.assertRaises(ev.EvalError): ev.load_cases(path)
 
     def assertLoads(self, path):
-        self.assertEqual(len(ev.load_cases(path)), 90)
+        self.assertEqual(len(ev.load_cases(path)), 98)
         code, out, err = self.run_main(path)
-        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 90))
+        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 98))
 
     def test_real_fixture_loads_63_cases_unchanged(self):
         self.assertEqual(ev.load_cases(CASES), self.rows)
-        self.assertEqual(len(self.rows), 90)
+        self.assertEqual(len(self.rows), 98)
 
     def test_bad_pending_code_refused(self):
         bad = [{"code": ["a"]}, {"code": 7}, {"code": ""}, {"code": "a b"}, {"code": "x" * 17}, {},
@@ -148,7 +148,7 @@ class V4NotesTests(base.EvalTestCase):
 
     def test_real_fixture_has_8_new_unique_cases_and_two_with_notes(self):
         ids = [c["id"] for c in self.cases]
-        self.assertEqual((ids[55:63], len(set(ids))), ([f"e{n}" for n in range(56, 64)], 90))
+        self.assertEqual((ids[55:63], len(set(ids))), ([f"e{n}" for n in range(56, 64)], 98))
         self.assertTrue(all(ev.ID_RE.fullmatch(i) for i in ids))
         self.assertEqual({c["id"] for c in self.cases if "notes" in c}, {"e62", "e63"})
         self.assertEqual([c["expect"] for c in self.cases[56:61:2]][:1], [{"question": True}])
@@ -169,7 +169,7 @@ class V4NotesTests(base.EvalTestCase):
         for notes in ([], [{"key": "k", "text": "t"}] * 20):
             with self.subTest(n=len(notes)):
                 path, _ = self.notes_file(notes)
-                self.assertEqual(len(ev.load_cases(path)), 90)
+                self.assertEqual(len(ev.load_cases(path)), 98)
 
     def captured_requests(self):
         bodies = []
@@ -179,7 +179,7 @@ class V4NotesTests(base.EvalTestCase):
             return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
         out = self.tmp / "fresh.jsonl"
         code, _, _ = base.run("--live", "--url", base.URL, "--model", "m", "--out", out, transport=transport)
-        self.assertEqual((code, len(bodies)), (0, 90))
+        self.assertEqual((code, len(bodies)), (0, 98))
         return bodies
 
     def test_live_sends_notes_only_for_cases_that_have_them(self):
@@ -206,7 +206,7 @@ class V4NotesTests(base.EvalTestCase):
         path.write_text("\n".join(rows) + "\n", "utf-8")
         code, out, err = base.scored(CASES, path)
         summary = json.loads(out)
-        self.assertEqual((code, err, summary["missing"], summary["passed"]), (0, "", ["e62"], 86))
+        self.assertEqual((code, err, summary["missing"], summary["passed"]), (0, "", ["e62"], 94))
 
 
 class V5PhoneAndHikeTextTests(base.EvalTestCase):
@@ -251,7 +251,7 @@ class V5PhoneAndHikeTextTests(base.EvalTestCase):
         watched = [p for p in (ev.REPO / "hass" / "content").rglob("*") if p.is_file()]
         before = {p: p.read_bytes() for p in watched}
         code, err, bodies = self.prompts()
-        self.assertEqual((code, err, len(bodies)), (0, "", 90))
+        self.assertEqual((code, err, len(bodies)), (0, "", 98))
         hike = json.loads(ev.EVENTS.read_text("utf-8"))[0]
         row = " | ".join(json.dumps(str(hike[k]), ensure_ascii=False) for k in ("id", "meetingPoint", "capacity", "bring", "accessNote"))
         self.assertTrue(row in bodies[0], "fixture hike details row missing from the live prompt")
@@ -300,7 +300,7 @@ class V8GroupAndCopySlotTests(base.EvalTestCase):
     def test_v8_six_cases_shapes_and_membership(self):
         new = self.cases[69:75]
         self.assertEqual([c["id"] for c in new], self.NEW)
-        self.assertEqual(len({c["id"] for c in self.cases}), 90)
+        self.assertEqual(len({c["id"] for c in self.cases}), 98)
         self.assertEqual([c["text"] for c in new], [
             "Everything on the flowers shelf is limited.", "All the Etto products are limited.",
             "Add \"Great on toast.\" to the end of Brian's sourdough bread description; keep every existing sentence.",
@@ -377,16 +377,16 @@ class V8GroupAndCopySlotTests(base.EvalTestCase):
     def test_v8_prior_scores_and_refusals_unchanged(self):
         code, out, err = base.scored(CASES, REPLIES)
         summary = json.loads(out)
-        self.assertEqual((code, err, summary["passed"], [f["id"] for f in summary["failed"]]), (0, "", 87, ["e06", "e13", "e25"]))
+        self.assertEqual((code, err, summary["passed"], [f["id"] for f in summary["failed"]]), (0, "", 95, ["e06", "e13", "e25"]))
         old = ev.score(self.cases[:69], self.replies, base.REGISTRY)  # the 69 earlier cases score exactly as before
         self.assertEqual((old["passed"], [f["id"] for f in old["failed"]]), (66, ["e06", "e13", "e25"]))
         got = lambda skip=(), more=(): base.scored(CASES, self.write("r.jsonl", [{"id": k, "reply": v} for k, v in self.replies.items() if k not in skip] + list(more)))  # noqa: E731
         code, out, _ = got(skip=("e75",))
-        self.assertEqual((code, json.loads(out)["missing"], json.loads(out)["passed"]), (0, ["e75"], 86))
+        self.assertEqual((code, json.loads(out)["missing"], json.loads(out)["passed"]), (0, ["e75"], 94))
         code, out, _ = got(more=[{"id": "e99", "reply": {"question": "?"}}])
-        self.assertEqual((code, json.loads(out)["extra"], json.loads(out)["passed"]), (0, ["e99"], 87))
-        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:89]), REPLIES), (2, "", "cases: 89 cases, expected 90"))
-        self.assertEqual(base.scored(self.write("d.jsonl", self.rows[:89] + [self.rows[0]]), REPLIES), (2, "", "cases line 90: duplicate id"))
+        self.assertEqual((code, json.loads(out)["extra"], json.loads(out)["passed"]), (0, ["e99"], 95))
+        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:97]), REPLIES), (2, "", "cases: 97 cases, expected 98"))
+        self.assertEqual(base.scored(self.write("d.jsonl", self.rows[:97] + [self.rows[0]]), REPLIES), (2, "", "cases line 98: duplicate id"))
 
 
 class V6SamplesPhotoAvailabilityTests(base.EvalTestCase):
@@ -399,7 +399,7 @@ class V6SamplesPhotoAvailabilityTests(base.EvalTestCase):
 
     def test_v6_five_cases_match_registry(self):
         new = self.cases[75:80]
-        self.assertEqual(([c["id"] for c in new], len({c["id"] for c in self.cases})), (self.NEW, 90))
+        self.assertEqual(([c["id"] for c in new], len({c["id"] for c in self.cases})), (self.NEW, 98))
         self.assertTrue(all(set(c) == {"id", "text", "pending", "expect"} and c["pending"] == [] and
                             c["expect"]["revises"] is None for c in new))
         self.assertEqual([[(o["op"], o["args"]) for o in c["expect"]["ops"]] for c in new], [
@@ -433,20 +433,20 @@ class V6SamplesPhotoAvailabilityTests(base.EvalTestCase):
     def test_v6_preserves_previous_scores(self):
         old = ev.score(self.cases[:75], self.replies, base.REGISTRY)
         new = ev.score(self.cases, self.replies, base.REGISTRY)
-        self.assertEqual((old["passed"], new["passed"]), (72, 87))
+        self.assertEqual((old["passed"], new["passed"]), (72, 95))
         self.assertEqual(old["failed"], new["failed"])  # the three intentional negatives are the only failures
         self.assertEqual((new["missing"], new["extra"]), ([], []))
         code, out, err = base.scored(CASES, self.write("r.jsonl", [{"id": k, "reply": v} for k, v in self.replies.items() if k != "e79"]))
-        self.assertEqual((code, err, json.loads(out)["missing"], json.loads(out)["passed"]), (0, "", ["e79"], 86))
+        self.assertEqual((code, err, json.loads(out)["missing"], json.loads(out)["passed"]), (0, "", ["e79"], 94))
 
     def test_v6_count_bounds(self):
-        too_few = base.scored(self.write("a.jsonl", self.rows[:89]), REPLIES)
-        self.assertEqual(too_few, (2, "", "cases: 89 cases, expected 90"))
+        too_few = base.scored(self.write("a.jsonl", self.rows[:97]), REPLIES)
+        self.assertEqual(too_few, (2, "", "cases: 97 cases, expected 98"))
         extra = dict(json.loads(self.rows[0]), id="e99")
         self.assertEqual(base.scored(self.write("b.jsonl", self.rows + [json.dumps(extra)]), REPLIES),
-                         (2, "", "cases: 91 cases, expected 90"))
-        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:89] + [self.rows[0]]), REPLIES),
-                         (2, "", "cases line 90: duplicate id"))
+                         (2, "", "cases: 99 cases, expected 98"))
+        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:97] + [self.rows[0]]), REPLIES),
+                         (2, "", "cases line 98: duplicate id"))
 
 
 class V9UndoBrandAliasPhotoTests(base.EvalTestCase):
@@ -532,12 +532,12 @@ class V9UndoBrandAliasPhotoTests(base.EvalTestCase):
             with self.subTest(bad=str(bad)[:30]):
                 code, out, err = base.scored(self.rows_with("e83", aliases=bad), REPLIES)
                 self.assertEqual((code, out, err), (2, "", "cases line 83: bad aliases"))
-        self.assertEqual(len(ev.load_cases(self.rows_with("e83", aliases=[good] * 50))), 90)
-        self.assertEqual(len(ev.load_cases(self.rows_with("e83", aliases=[dict(good, kind="maker")]))), 90)
+        self.assertEqual(len(ev.load_cases(self.rows_with("e83", aliases=[good] * 50))), 98)
+        self.assertEqual(len(ev.load_cases(self.rows_with("e83", aliases=[dict(good, kind="maker")]))), 98)
 
     def test_v9_context_forwarding(self):
         bodies = self.requests(CASES)
-        self.assertEqual([("aliases" in b) for b in bodies], [False] * 82 + [True] + [False] * 7)
+        self.assertEqual([("aliases" in b) for b in bodies], [False] * 82 + [True] + [False] * 15)
         self.assertEqual(bodies[82]["aliases"], self.case("e83")["aliases"])
         self.assertEqual(bodies[82]["message"], "the green jam is sold out")
         self.assertEqual(bodies[82]["pending"], [])
@@ -551,9 +551,9 @@ class V9UndoBrandAliasPhotoTests(base.EvalTestCase):
         old = ev.score(self.cases[:80], self.replies, base.REGISTRY)
         self.assertEqual((old["passed"], [f["id"] for f in old["failed"]]), (77, ["e06", "e13", "e25"]))
         code, out, err = base.scored(CASES, self.write("r.jsonl", [{"id": k, "reply": v} for k, v in self.replies.items() if k != "e84"]))
-        self.assertEqual((code, json.loads(out)["missing"], json.loads(out)["passed"], err), (0, ["e84"], 86, ""))
-        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:89] + [self.rows[0]]), REPLIES),
-                         (2, "", "cases line 90: duplicate id"))
+        self.assertEqual((code, json.loads(out)["missing"], json.loads(out)["passed"], err), (0, ["e84"], 94, ""))
+        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:97] + [self.rows[0]]), REPLIES),
+                         (2, "", "cases line 98: duplicate id"))
         bad = self.rows_with("e84", pending=[dict(self.case("e84")["pending"][0], code="a b")])
         self.assertEqual(base.scored(bad, REPLIES), (2, "", "cases line 84: bad pending code"))
         _, out, _ = base.scored(CASES, REPLIES)
@@ -582,8 +582,8 @@ class V7PhotoMakerRepeatTests(base.EvalTestCase):
     def ops(self, op, **args): return _ops((op, args))
 
     def test_v7_six_cases_and_registry_shapes(self):
-        new = self.cases[84:]
-        self.assertEqual(([c["id"] for c in new], len({c["id"] for c in self.cases})), (self.NEW, 90))
+        new = self.cases[84:90]
+        self.assertEqual(([c["id"] for c in new], len({c["id"] for c in self.cases})), (self.NEW, 98))
         self.assertTrue(all(set(c) == {"id", "text", "pending", "expect"} and c["expect"]["revises"] in (None, "v7photo")
                             for c in new))
         self.assertEqual(self.cases[83]["id"], "e84")
@@ -665,16 +665,16 @@ class V7PhotoMakerRepeatTests(base.EvalTestCase):
     def test_v7_preserves_prior_scores_and_refusals(self):
         old = ev.score(self.cases[:84], self.replies, base.REGISTRY)
         new = ev.score(self.cases, self.replies, base.REGISTRY)
-        self.assertEqual((old["passed"], new["passed"], old["failed"] == new["failed"]), (81, 87, True))
+        self.assertEqual((old["passed"], new["passed"], old["failed"] == new["failed"]), (81, 95, True))
         self.assertEqual(new["extra"], [])
-        self.assertEqual(old["extra"], self.NEW)  # replies for cases not in the subset are extra, as before
+        self.assertEqual(old["extra"], self.NEW + [f"e{n}" for n in range(91, 99)])  # replies for cases not in the subset are extra, as before
         replies = {k: v for k, v in self.replies.items() if k != "e87"}
         path = self.write("r.jsonl", [{"id": k, "reply": v} for k, v in replies.items()])
         code, out, err = base.scored(CASES, path)
-        self.assertEqual((code, err, json.loads(out)["missing"], json.loads(out)["passed"]), (0, "", ["e87"], 86))
-        self.assertEqual(base.scored(self.write("a.jsonl", self.rows[:89]), REPLIES), (2, "", "cases: 89 cases, expected 90"))
-        dup = self.write("d.jsonl", self.rows[:89] + [self.rows[84]])
-        self.assertEqual(base.scored(dup, REPLIES), (2, "", "cases line 90: duplicate id"))
+        self.assertEqual((code, err, json.loads(out)["missing"], json.loads(out)["passed"]), (0, "", ["e87"], 94))
+        self.assertEqual(base.scored(self.write("a.jsonl", self.rows[:97]), REPLIES), (2, "", "cases: 97 cases, expected 98"))
+        dup = self.write("d.jsonl", self.rows[:97] + [self.rows[84]])
+        self.assertEqual(base.scored(dup, REPLIES), (2, "", "cases line 98: duplicate id"))
 
 
 if __name__ == "__main__":

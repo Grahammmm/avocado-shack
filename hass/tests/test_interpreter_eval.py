@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 from hass import interpret_check, interpreter_eval as ev
-from hass.content_model import load_content
+from hass.content_model import CATEGORIES, load_content
 from hass.ops import load_registry
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -44,7 +44,7 @@ class ScoreTests(EvalTestCase):
         code, out, err = scored(CASES, REPLIES)
         summary = json.loads(out)
         self.assertEqual((code, err, {k: summary[k] for k in ("cases", "passed", "missing", "extra")}),
-                         (0, "", {"cases": 90, "passed": 87, "missing": [], "extra": []}))
+                         (0, "", {"cases": 98, "passed": 95, "missing": [], "extra": []}))
         self.assertEqual(summary["failed"], [
             {"id": "e06", "why": "ops product.restore but expected product.hide"},  # wrong op
             {"id": "e13", "why": "op 1 hike.create: missing arg capacity"},  # missing arg
@@ -83,27 +83,27 @@ class ScoreTests(EvalTestCase):
                 if "trailId" in args: self.assertIn(args["trailId"], trails)
                 if op == "route.edit": self.assertIn(args["id"], trails, case["id"])
                 if "photo" in args: self.assertRegex(args["photo"], r"\A[0-9a-f]{64}\Z", case["id"])
-        self.assertEqual(kinds, {"product": 20, "maker": 8, "club": 1, "hike": 15, "store": 16, "route": 8, "revises": 7,
-                                 "question": 10, "unsupported": 5})
+        self.assertEqual(kinds, {"product": 24, "maker": 9, "club": 1, "hike": 15, "store": 16, "route": 8, "revises": 7,
+                                 "question": 11, "unsupported": 7})
 
     def test_missing_and_extra_ids(self):
         replies = {k: v for k, v in self.replies.items() if k != "e05"} | {"e99": {"question": "?"}}
         path = self.write("r.jsonl", [{"id": k, "reply": v} for k, v in replies.items()])
         code, out, _ = scored(CASES, path)
         summary = json.loads(out)
-        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 86))
+        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 94))
 
     def test_duplicate_id_in_either_file_exits_2(self):
-        dup_cases = self.write("c.jsonl", self.rows[:89] + [self.rows[0]])
+        dup_cases = self.write("c.jsonl", self.rows[:97] + [self.rows[0]])
         dup_replies = self.write("r.jsonl", [{"_note": "x"}, {"id": "e01", "reply": {}}, {"id": "e01", "reply": {}}])
-        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 90: duplicate id"))
+        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 98: duplicate id"))
         self.assertEqual(scored(CASES, dup_replies), (2, "", "replies line 3: duplicate id"))
 
     def test_malformed_line_or_62_cases_exits_2_naming_only_the_line(self):
         broken = self.write("c.jsonl", self.rows[:3] + ['{"id": "e04", "text": "owner words"'] + self.rows[4:])
         self.assertEqual(scored(broken, REPLIES), (2, "", "cases line 4: not valid JSON"))
-        self.assertEqual(scored(self.write("c62.jsonl", self.rows[:89]), REPLIES),
-                         (2, "", "cases: 89 cases, expected 90"))
+        self.assertEqual(scored(self.write("c62.jsonl", self.rows[:97]), REPLIES),
+                         (2, "", "cases: 97 cases, expected 98"))
         self.assertEqual(scored(CASES, self.tmp / "absent.jsonl"), (2, "", "replies: unreadable"))
 
     def test_unknown_op_scores_as_question(self):
@@ -183,10 +183,10 @@ class LiveTests(EvalTestCase):
     def test_live_records_one_reply_per_case_that_score_reads(self):
         calls, out = [], self.tmp / "fresh.jsonl"
         code, stdout, _ = run("--live", "--url", URL, "--model", "m", "--out", out, transport=self.fake(calls))
-        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 90}, 90))
+        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 98}, 98))
         replies = ev.load_replies(out)
         self.assertEqual(list(replies), [c["id"] for c in self.cases])
-        self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 10)  # only the 10 must-ask cases pass
+        self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 11)  # only the 11 must-ask cases pass
 
     def test_fixture_hikes_survive_the_prompt_caps_when_the_content_is_full(self):
         real = [{"id": f"hike-{n:02d}", "title": "t", "startsAt": f"2026-0{1 + n % 9}-01T08:00:00-08:00", "status": "scheduled",
@@ -206,6 +206,150 @@ class LiveTests(EvalTestCase):
             self.assertIn(hike["id"], prompt.split("Scheduled hike details (id")[-1])
             self.assertIn(hike["bring"], prompt)
             self.assertIn(hike["accessNote"], prompt)
+
+
+class V10NoPriceShelfMakerTests(EvalTestCase):
+    """AV0222-13: v10 adds a price-only message, a price beside a sold-out change, an unknown shelf and a maker with no story."""
+
+    NEW, AVO = ["e91", "e92", "e93", "e94"], "photo-product-001"
+
+    def ops(self, op, **args): return {"ops": [{"op": op, "args": args}], "revises": None}
+
+    def test_v10_exact_four_cases_and_raw_replies(self):
+        new = self.cases[90:94]
+        self.assertEqual(([c["id"] for c in new], len({c["id"] for c in self.cases})), (self.NEW, 98))
+        self.assertTrue(all(c["pending"] == [] and set(c) == {"id", "text", "pending", "expect"} for c in new))
+        self.assertEqual([c["text"] for c in new], ["Set the avocados to 2 for $3.", "The avocados are sold out. They were 2 for $3.",
+                         "Move the avocados to the snacks shelf.", "Add a maker named Fixture Grove in Los Osos."])
+        self.assertEqual([c["expect"] for c in new][::2][0], {"unsupported": True})
+        self.assertEqual(new[2]["expect"], {"question": True})
+        sold = {"ops": [{"op": "product.set_availability", "args": {"id": self.AVO, "available": "no"}}], "revises": None}
+        maker = {"ops": [{"op": "maker.add", "args": {"key": "Fixture Grove", "name": "Fixture Grove", "place": "Los Osos"}}], "revises": None}
+        self.assertTrue(new[1]["expect"] == sold and self.replies["e92"] == sold)
+        self.assertTrue(new[3]["expect"] == maker and self.replies["e94"] == maker)
+        self.assertEqual((list(self.replies["e91"]), list(self.replies["e93"])), (["unsupported"], ["question"]))
+        self.assertEqual(self.replies["e91"]["unsupported"], interpret_check.PRICE_REPLY)
+        self.assertEqual(self.replies["e93"]["question"], "There is no snacks shelf. Which shelf: Fruit, Vegetables, "
+                         "Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread, Flowers or General?")
+        self.assertNotIn("$", json.dumps(self.replies["e92"]))
+        for key in ("story", "url", "organic", "producerKey", "clearStory"):
+            self.assertNotIn(key, self.replies["e94"]["ops"][0]["args"])
+        failed = {f["id"] for f in ev.score(self.cases, self.replies, REGISTRY)["failed"]}
+        self.assertEqual(failed & set(self.NEW), set())
+        self.assertEqual(self.rows[:90], CASES.read_text("utf-8").splitlines()[:90])
+
+    def test_v10_price_only_and_mixed_availability(self):
+        self.assertEqual(self.why("e91", self.replies["e91"]), [])
+        self.assertEqual(self.why("e91", self.ops("product.set_availability", id=self.AVO, available="no")),
+                         ["expected unsupported, got ops"])
+        good = self.replies["e92"]
+        self.assertEqual(self.why("e92", self.ops("product.set_availability", id="photo-product-081", available="no")),
+                         ["op 1 product.set_availability: arg id differs"])
+        self.assertEqual(self.why("e92", self.ops("product.set_availability", id=self.AVO, available="limited")),
+                         ["op 1 product.set_availability: arg available differs"])
+        self.assertEqual(self.why("e92", self.ops("product.set_availability", available="no")),
+                         ["op 1 product.set_availability: missing arg id"])
+        self.assertEqual(self.why("e92", dict(good, revises="v1")), ["expected ops, got question"])
+        extra = {"ops": good["ops"] + [{"op": "product.hide", "args": {"id": self.AVO}}], "revises": None}
+        self.assertEqual(self.why("e92", extra), ["ops product.set_availability,product.hide but expected product.set_availability"])
+        priced = self.ops("product.edit", id=self.AVO, description="2 for $3")  # the dependency's checker turns a dollar into a question
+        self.assertEqual(self.why("e92", priced), ["expected ops, got question"])
+
+    def test_v10_unknown_shelf_question(self):
+        self.assertEqual(self.why("e93", self.replies["e93"]), [])
+        self.assertEqual(self.why("e93", self.ops("product.hide", id=self.AVO)), ["expected question, got ops"])
+        self.assertEqual(self.why("e93", {"unsupported": "No."}), ["expected question, got unsupported"])
+        # the existing checker turns an invalid shelf op into its own shelf question, so scoring passes it (documented, not a new policy)
+        self.assertEqual(self.why("e93", self.ops("product.edit", id=self.AVO, category="snacks")), [])
+
+    def test_v10_maker_without_story(self):
+        args = {"key": "Fixture Grove", "name": "Fixture Grove", "place": "Los Osos"}
+        self.assertEqual(self.why("e94", self.ops("maker.add", **args)), [])
+        for field, other in (("name", "Fixture Glen"), ("place", "Morro Bay"), ("key", "Fixture Glen")):
+            self.assertEqual(self.why("e94", self.ops("maker.add", **dict(args, **{field: other}))),
+                             [f"op 1 maker.add: arg {field} differs"])
+        self.assertEqual(self.why("e94", self.ops("maker.add", **{k: v for k, v in args.items() if k != "place"})),
+                         ["op 1 maker.add: missing arg place"])
+        self.assertEqual(self.why("e94", self.ops("maker.edit", **args)), ["ops maker.edit but expected maker.add"])
+        self.assertEqual(self.why("e94", dict(self.replies["e94"], revises="v1")), ["expected ops, got question"])
+
+    def test_v10_predecessor_outcomes(self):
+        old = ev.score(self.cases[:90], self.replies, REGISTRY)
+        new = ev.score(self.cases, self.replies, REGISTRY)
+        self.assertEqual((old["passed"], new["passed"], old["failed"] == new["failed"]), (87, 95, True))
+        self.assertEqual([f["id"] for f in new["failed"]], ["e06", "e13", "e25"])
+        self.assertEqual(old["extra"], self.NEW + [f"e{n}" for n in range(95, 99)])
+
+
+class V11BulkAndLayoutTests(EvalTestCase):
+    """AV1052-16: whole shelf, whole maker, a product beside a shelf word and the fixed design reply. Synthetic replies."""
+
+    NEW = ["e95", "e96", "e97", "e98"]
+    DESIGN = "design changes cannot be made by message yet"
+
+    def ops(self, op, **args): return {"ops": [{"op": op, "args": args}], "revises": None}
+
+    def expect(self, case_id): return next(c for c in self.cases if c["id"] == case_id)["expect"]
+
+    def test_v11_exact_append_and_raw_contracts(self):
+        from hass.interpreter_prompt import DESIGN_UNSUPPORTED
+        self.assertEqual([c["id"] for c in self.cases[94:]], self.NEW)
+        self.assertEqual([c["text"] for c in self.cases[94:]], ["All the vegetables are in today", "Everything from Cal Poly is sold out",
+                         "The Hass avocado on the Fruit shelf is sold out", "Make the product cards round"])
+        self.assertTrue(all(c["pending"] == [] and set(c) == {"id", "text", "pending", "expect"} for c in self.cases[94:]))
+        want = {"e95": self.ops("product.set_availability_all", available="yes", shelf="vegetables"),
+                "e96": self.ops("product.set_availability_all", available="no", maker="Cal Poly"),
+                "e97": self.ops("product.set_availability", id="photo-product-001", available="no"),
+                "e98": {"unsupported": self.DESIGN}}
+        self.assertEqual({k: self.replies[k] for k in self.NEW}, want)
+        self.assertEqual([self.expect(k) for k in self.NEW[:3]], [want[k] for k in self.NEW[:3]])
+        self.assertEqual(self.expect("e98"), {"unsupported": True})
+        self.assertEqual((DESIGN_UNSUPPORTED, self.replies["e98"]["unsupported"]), (self.DESIGN, self.DESIGN))
+        content = load_content()
+        self.assertIn("vegetables", CATEGORIES)
+        self.assertIn("Cal Poly", {p.get("producerKey") for p in content.active_products()})
+        self.assertEqual(next(p for p in content.active_products() if p["id"] == "photo-product-001")["category"], "fruit")
+        self.assertEqual(ev.score(self.cases[94:], self.replies, REGISTRY)["passed"], 4)
+
+    def test_v11_bulk_is_one_operation_not_record_expansion(self):
+        shelf = self.expect("e95")["ops"][0]
+        for reply in (self.ops("product.set_availability_all", available="yes", shelf="fruit"),
+                      self.ops("product.set_availability_all", available="no", shelf="vegetables"),
+                      self.ops("product.set_availability_all", available="yes"),
+                      self.ops("product.set_availability", id="photo-product-001", available="yes"),
+                      self.ops("product.set_availability_all", available="yes", maker="Cal Poly")):
+            self.assertNotEqual(self.why("e95", reply), [], reply)
+        self.assertEqual(self.why("e95", self.ops(shelf["op"], **shelf["args"])), [])
+        two = {"ops": 2 * self.replies["e95"]["ops"], "revises": None}
+        many = {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-001", "available": "yes"}}] * 52, "revises": None}
+        self.assertNotEqual(self.why("e95", two), [])
+        self.assertNotEqual(self.why("e95", many), [])
+        for reply in (self.ops("product.set_availability_all", available="no", maker="Cal Poly Pomona"),
+                      self.ops("product.set_availability_all", available="yes", maker="Cal Poly"),
+                      self.ops("product.set_availability_all", available="no", shelf="eggs"),
+                      self.ops("product.set_availability", id="photo-product-001", available="no")):
+            self.assertNotEqual(self.why("e96", reply), [], reply)
+
+    def test_v11_product_word_beats_nearby_shelf_word(self):
+        self.assertEqual(self.why("e97", self.replies["e97"]), [])
+        for reply in (self.ops("product.set_availability_all", available="no", shelf="fruit"),
+                      self.ops("product.set_availability", id="photo-product-002", available="no"),
+                      self.ops("product.set_availability", id="photo-product-001", available="yes"),
+                      dict(self.replies["e97"], revises="c3d4")):
+            self.assertNotEqual(self.why("e97", reply), [], reply)
+
+    def test_v11_design_raw_reply_not_conversation_acknowledgement(self):
+        self.assertEqual(self.why("e98", self.replies["e98"]), [])
+        other = {"unsupported": "I cannot restyle the site."}
+        self.assertEqual(self.why("e98", other), [])  # the scorer reads the kind only; the raw contract above pins the wording
+        self.assertNotEqual(other, self.replies["e98"])
+        self.assertNotEqual(self.why("e98", self.ops("product.set_availability_all", available="no", shelf="fruit")), [])
+
+    def test_v11_predecessor_failures_and_private_output_unchanged(self):
+        summary = ev.score(self.cases, self.replies, REGISTRY)
+        self.assertEqual(([f["id"] for f in summary["failed"]], summary["passed"], summary["missing"], summary["extra"]),
+                         (["e06", "e13", "e25"], 95, [], []))
+        self.assertNotIn("Cal Poly", json.dumps(summary))
 
 
 if __name__ == "__main__":
