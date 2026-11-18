@@ -101,6 +101,7 @@ RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question st
 # HASS-SHELFCHECK-FLOW-1: the same open request also carries the change Hass could not draft yet (pending_json), when the
 # only thing missing was today's shelf check. Plain words only: no "selection", no "not drafted", no ids.
 SHELF_QUESTION = "Before I change that, " + SHELF_ASK[0].lower() + SHELF_ASK[1:]
+SHELF_CODE_REASON = "shelf-check"  # AV2007-15: drafts.reason of a plain shelf-check draft: its yes must name the code
 SHELF_NO = "Okay, nothing was changed. Tell me what is different on the shelf list and I will draft that."
 QUESTION_DROPPED = "Okay, I've dropped that question"  # AV2007-13
 SEPARATE_RE = re.compile(r"(?:what'?s|what is|whats) on special(?:s)?\??")  # AV2007-13: a lookup that is never the answer to a question
@@ -651,9 +652,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         return self._repeat(row) or str(row["reason"] or "").startswith("again:")
 
     def _carry_again(self, old, new):
-        """AV2152-03: a proposal written up again from an `again` draft (stale, env-changed, failed) stays an `again` draft."""
-        if str(old["reason"] or "").startswith("again:") and new is not None:
+        """AV2152-03: a proposal written up again from an `again` draft
+        (stale, env-changed, failed) stays an `again` draft. Returns the row as saved: the caller renders the proposal from it,
+        and a snapshot from before the reason was written would not say the yes must name its code."""
+        if (str(old["reason"] or "").startswith("again:") or old["reason"] == SHELF_CODE_REASON) and new is not None:
             self.db.execute("UPDATE drafts SET reason = ? WHERE row_id = ?", (old["reason"], new["row_id"]))
+            return self._row(new["row_id"])
+        return new
 
     _to = None  # HASS-LIVE-PLAN-1: the owner chat being answered (a message's chat, or an old draft's); None means ownerChat
 
@@ -817,7 +822,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                     if not listing:
                         tail = "\n" + PREVIEW_RETRY_LINE
                         self._queue_preview_retry(row)
-        text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._named(row), head=head, undo=_is_undo(row),
+        text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._named(row) or row["reason"] == SHELF_CODE_REASON, head=head, undo=_is_undo(row),
                                       live_site=self.settings.get("liveSite") if draft.get("environment", {}).get("env") != "sandbox" else None,
                                       now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
         if listing:
@@ -1335,6 +1340,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(f"Your yes came before I had written that change up, so I haven't saved it. If you still want it, reply {q('yes ' + target['code'])}.")
             self._record(msg, "no-target")
             return "no-target", None
+        if code is None and target["reason"] == SHELF_CODE_REASON:  # AV2007-15: a plain shelf-check sentence is saved only by its own code
+            self._reply(f"Reply {q('yes ' + target['code'])} to save the shelf check.")
+            self._record(msg, "no-target")
+            return "no-target", None
         if code is None and self._named(target):  # a delayed bare `yes` must not approve a repeat of a closed draft, or an `again` draft
             again = str(target["reason"] or "").startswith("again:")
             self._reply((f"That change was written up again from an expired one, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it." if again else
@@ -1782,6 +1791,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
     def _request_now(self, msg, now, req, separate) -> str:
         cap, skills_on = self.settings["interpreterDailyCap"], self.skills_mode != dispatch_mod.DEFAULT_MODE
         if skills_on and not separate and (done := self.dispatch.cheap(msg, now)) is not None: return done  # a short answer read by code: no model call
+        from hass.skills import stock as stock_skill  # AV2007-15: a plain "shelf check done" is drafted by code, never the model
+        if stock_skill.plain_shelf_check(msg.text): return self._draft_shelf_check(msg, now, {})
         if cap is not None:  # H22: counted before the call in this transaction, so a failed call still counts
             day, calls = self._calls(now)
             if calls >= cap:
@@ -1829,6 +1840,27 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             result = self._stock_choice(msg.text) or result  # AV2007-12: one product named whole is taken before asking which
         return self._draft(msg, now, result, earlier, failed=failed, req=req)
 
+    def _draft_shelf_check(self, msg, now, slots) -> str:
+        """AV2007-15: draft today's shelf-check record (stock.checked's own plan, so the same draft) without a model, in every skills
+        mode. The proposal names its code and only `yes <code>` approves it. A later extension fills ``slots``; this one passes none."""
+        from hass.skills import stock as stock_skill
+        skill = stock_skill.STOCK_CHECKED
+        if hasattr(self.editor, "skill_allowed") and not self.editor.skill_allowed(skill):
+            self._reply("That's switched off, so nothing changed.")
+            return "refused"
+        try:
+            ctx = (self.dispatch or dispatch_mod.Dispatcher(self, None))._ctx(now, [msg.text])
+            ops = skill.plan(dict(slots), ctx)
+        except stock_skill.Refusal as exc:
+            self._reply(exc.reply)
+            return "refused"
+        except Exception:  # noqa: BLE001 - a plan or the content read must not raise past the owner's message
+            self._reply(dispatch_mod.PLAN_FAILED)
+            return "not-drafted"
+        self._skill_ref = f"{skill.name}@{skill.version}"
+        try: return self._draft(msg, now, {"ops": ops, "revises": None}, [], skill_names=(skill,), code_reason=SHELF_CODE_REASON)
+        finally: self._skill_ref = None
+
     def _keep_design(self, msg, said):
         """AV1052-11 (H24/H15): the fixed design refusal also keeps the owner's words (first 500 characters) as a dated owner note
         design.<n> for the developer: local memory only, nothing sent, nothing on the site changes. Any other reply is unchanged."""
@@ -1864,7 +1896,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             if row.get("weekday_mismatch") and used & {row["date"], *row["weekday_dates"]}: return nl_prep.weekday_mismatch_question(row)
         return None
 
-    def _draft(self, msg, now, result, earlier, prefix="", failed=None, req=None, legacy=True, notes=(), skill_names=()):
+    def _draft(self, msg, now, result, earlier, prefix="", failed=None, req=None, legacy=True, notes=(), skill_names=(), code_reason=None):
         """Draft ``result["ops"]`` (from the interpreter, or from a skill plan: SKILLS-FW-3), or relay its question / unsupported
         reply: revises, the interpret check, the editor, the claims gate over the owner's JOINED texts, the proposal. The caller
         has already counted the model call, if there was one. Returns the disposition."""
@@ -1986,6 +2018,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 if revised["state"] == "proposed": self._audit("refused", revised, "replaced")  # AVB-10
                 self._move(revised, "rejected", reason="revised", replaced_by=row["code"])
         self._last_draft_code = row["code"]
+        if code_reason and not str(row["reason"] or "").startswith("again:"):  # AV2007-15: this draft's yes must name its code
+            self.db.execute("UPDATE drafts SET reason = ? WHERE row_id = ?", (code_reason, row["row_id"]))
+            row = self._row(row["row_id"])
         self._proposal_reply(row, draft, prefix, notes)
         return "proposed"
 
@@ -2189,7 +2224,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         elif result == "env-changed":
             again = self._reprepare(row)
             new = self._propose(again["draft"], row["sender"], now) if again["result"] == "ok" else None
-            self._carry_again(row, new)
+            new = self._carry_again(row, new)
             self._move(row, "rejected" if row["state"] == "proposed" else "failed", reason="env-changed",
                        **({"replaced_by": new["code"]} if new else {}))
             if new:
@@ -2201,7 +2236,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             again = self._reprepare(row)
             if again["result"] == "ok":
                 new = self._propose(again["draft"], row["sender"], now, like=row)
-                self._carry_again(row, new)
+                new = self._carry_again(row, new)
                 self._move(row, "rejected", reason="stale", replaced_by=new["code"])
                 self._proposal_reply(new, again["draft"], "The website changed while that was waiting, so I've written it up again. "
                                                           "Please look it over:\n")
@@ -2218,7 +2253,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             again = None if refused else self._reprepare(row)
             self._audit("failed", row, "policy" if refused else result if result in ("refused", "busy") else "failed")  # AVB-10
             new = self._propose(again["draft"], row["sender"], now, like=row) if again and again["result"] == "ok" else None
-            self._carry_again(row, new)
+            new = self._carry_again(row, new)
             self._move(row, "failed", reason=_reason(out), **({"replaced_by": new["code"]} if new else {}))
             self._problem("error", "save-failed")
             if refused: self._reply(refused)
