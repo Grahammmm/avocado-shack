@@ -871,7 +871,7 @@ class LongListTests(base.SkillCase):
         self.assertEqual(self.say_replies("specials and the shelf report", two), ("answer", [self.expected(), shelf]))
         self.untouched_since(before)
         flipped = {"calls": [{"skill": "report.shelf", "slots": {}}, show], "revises": None}
-        self.assertEqual(self.say_replies("the shelf report then specials", flipped), ("answer", [shelf, self.expected()]))
+        self.assertEqual(self.say_replies("shelf report then specials", flipped), ("answer", [shelf, self.expected()]))
         self.untouched_since(before)
         # a change in the same message: neither is answered nor drafted
         mixed = {"calls": [show, {"skill": "item.describe", "slots": {"product": "Hass avocado", "description": "Ripe and creamy"}}], "revises": None}

@@ -7,6 +7,7 @@ import re
 import unicodedata
 
 from hass import memory as memory_mod
+from hass.content_model import SHELF_LABELS
 from hass.chat.shared import ALIAS_NAME_MAX, q
 from hass.ops import catalog
 
@@ -152,7 +153,12 @@ def parse_command(text: str, *, listing_names=False):
     if norm in UNDO_PHRASES: return "undo", None  # AV0222-07: the same as a bare undo
     match = COMMAND_RE.fullmatch(norm)
     if not match: return None
-    if match[24]: return "shelf", (match[25] or "").strip()  # AV1052-05: whole trimmed rest, lower-cased; _shelf resolves it
+    if match[24]:  # AV1052-05: bare, one word or a known shelf name only; longer text ("shelf chek done. milk in") stays a stock update or report
+        rest = (match[25] or "").strip()
+        known = {w.lower() for w in SHELF_LABELS.values()} | set(SHELF_LABELS)
+        norm_rest = " ".join(re.sub(r"[^\w&]+", " ", rest).split())
+        if len(rest.split()) <= 1 or norm_rest in known: return "shelf", rest  # _shelf resolves it
+        return None
     if match[22]: return "again", (match[23] or "").strip()  # AV2152-03: the rest as sent (lower-cased); _again accepts only a code
     if match[21]: return "backlog", None  # SKILLS-FW-3
     if match[20]: return "photos", None  # AV0222-04
