@@ -29,30 +29,78 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(backlog)"  # SKILLS-FW-3: group 21 (what I could not do yet; read-only)
                         r"|(again)(?:\s+((?s:.*)))?")  # AV2152-03 (H05/H16): groups 22/23; the code is checked by _again, never guessed
 
-HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: " + q('"Stop showing the eggs as sold out"') + ".",  # AV1537-03, test_help
-    "Other things you can say:",
-    q("yes") + " - go ahead with the change waiting for you",
-    q("no") + " - cancel it",
-    q("status") + " - what I did last and what is waiting for you",
-    q("history") + " - what we changed lately, or " + q("history hours") + " to look for one",
-    q("undo") + " - take back the last change",
-    q("again a1b2") + " - re-draft an expired change (within 7 days)",  # AV2152-03
-    q("stop changes") + " - I won't change anything until you say " + q("resume changes"),
-    q("report") + " - the morning shelf report",
-    q("find lion's mane") + " - look something up",
-    q("photos to take") + " - the products that still need a photo",
-    q("remember parking: back lot") + " - I'll keep a note; " + q("forget parking") + " removes it; " + q("notes") + " lists them",
-    q("alias jam: Linn's blueberry preserves") + " - a nickname for a product or maker",
-    q("cost Hass avocado: 24 for 12") + " - the price you pay, kept private",
-    q("margin Hass avocado at 35%") + " - a price idea or a price check",
-    q("post Hass avocado") + " or " + q("post maker fixture-farm") + " - a caption to copy",  # AV1937-10: one post line; nothing is posted, no placeholders
-    q("listing Etto") + " - what's shown for one thing; " + q("hidden") + " lists what's hidden",
-    q("look") + " - a fresh picture of the website; add hike or a product",  # AV1922-01
-    q("show") + " and a word from the change - repeat a waiting change",
-    q("help") + " - this list"))
-HELP_TEXT = HELP_TEXT.replace(q("show") + " and a word from the change - repeat a waiting change\n",
-                              q("show") + " and a word from the change - repeat a waiting change\n"
-                              + q("backlog") + " - what I couldn't do yet; " + q("forget backlog.3") + " takes one off\n")  # SKILLS-FW-3
+# AV1052-12 (H17/H25): one entry per command - (name, group, other words that reach it, full lines each ending in a quoted
+# example). `help` replies a short grouped index of the names; `help <name>` replies that entry's lines. Every line is
+# at most 70 plain characters (test_help). The examples parse back to the entry's own verb (test_help).
+HELP_GROUPS = ("Drafts", "Look up", "Notes", "Control")
+HELP_ENTRIES = (
+    ("yes", "Drafts", ("approve", "approved"), (q("yes") + " - go ahead with the change waiting for you",
+                                                 q("yes a1b2") + " - go ahead with the one with that code")),
+    ("no", "Drafts", ("cancel", "reject"), (q("no") + " - cancel the change waiting for you", q("no a1b2") + " - cancel the one with that code")),
+    ("undo", "Drafts", (), (q("undo") + " - take back the last change", q("undo a1b2") + " - take back that one")),
+    ("show", "Drafts", (), (q("show a1b2") + " - repeat a waiting change (its code or a word from it)",)),
+    ("again", "Drafts", (), (q("again a1b2") + " - re-draft an expired change (within 7 days)",)),  # AV2152-03
+    ("find", "Look up", (), (q("find lion's mane") + " - look something up",)),
+    ("listing", "Look up", (), (q("listing Etto") + " - what's shown for one thing",)),
+    ("hidden", "Look up", (), (q("hidden") + " - lists what's hidden",)),
+    ("report", "Look up", ("morning report",), (q("report") + " - the morning shelf report",)),
+    ("post", "Look up", (), (q("post Hass avocado") + " - a caption to copy for a product",  # AV1937-10: nothing is posted
+                              q("post maker fixture-farm") + " - a caption to copy for a maker")),
+    ("look", "Look up", (), (q("look") + " - a fresh picture of the website", q("look hike") + " - or of the hike page; add a product")),  # AV1922-01
+    ("photos to take", "Look up", (), (q("photos to take") + " - the products that still need a photo",)),
+    ("margin", "Look up", (), (q("margin Hass avocado at 35%") + " - a price idea or a price check",)),
+    ("remember", "Notes", (), (q("remember parking: back lot") + " - I'll keep a note",)),
+    ("forget", "Notes", (), (q("forget parking") + " - removes a note", q("forget backlog.3") + " - takes one off the backlog")),
+    ("notes", "Notes", ("memory",), (q("notes") + " - lists your notes",)),
+    ("alias", "Notes", (), (q("alias jam: Linn's preserves") + " - a nickname for a product or maker",)),
+    ("cost", "Notes", (), (q("cost Hass avocado: 24 for 12") + " - the price you pay, kept private",)),
+    ("backlog", "Notes", (), (q("backlog") + " - what I couldn't do yet",)),  # SKILLS-FW-3
+    ("history", "Control", (), (q("history") + " - what we changed lately", q("history hours") + " - look for one change")),
+    ("status", "Control", ("did it work", "did that work", "did my change work"),
+     (q("status") + " - what I did last and what is waiting for you",)),
+    ("stop changes", "Control", ("stop", "pause", "pause changes"), (q("stop changes") + " - I won't change anything until you resume",)),
+    ("resume changes", "Control", ("resume",), (q("resume changes") + " - changes are allowed again",)),
+    ("help", "Control", ("commands", "?", "what can you do", "what do you do", "what can i say"),
+     (q("help") + " - the list of commands", q("help undo") + " - one command with its example")),
+)
+HELP_WORDS = {w: e[0] for e in HELP_ENTRIES for w in (e[0], *e[2])}  # every word `help <word>` knows -> the entry's own name
+HELP_LIMIT = 70
+
+
+def _help_names() -> list:
+    """One line per group: `Group: name, name`, each name marked as a command word; names wrap at a comma (70 plain
+    characters), the next line indented two spaces."""
+    out = []
+    for group in HELP_GROUPS:
+        names = [e[0] for e in HELP_ENTRIES if e[1] == group]
+        line, width = group + ":", len(group) + 1
+        for i, name in enumerate(names):
+            tail = "," if i + 1 < len(names) else ""
+            if width + 1 + len(name) + len(tail) > HELP_LIMIT:
+                out.append(line)
+                line, width = " ", 1
+            line, width = line + " " + q(name) + tail, width + 1 + len(name) + len(tail)
+        out.append(line)
+    return out
+
+
+HELP_TEXT = "\n".join(("Tell me what to change, e.g. " + q('"Stop showing the eggs as sold out"'),  # AV1537-03, test_help
+                       *_help_names(), "Send " + q("help <command>") + " for an example: " + q("help undo")))
+
+
+def help_detail(name: str) -> str:
+    """The full lines of one command (any of its words), or the unknown-name reply with the same grouped names. The
+    unknown word is never echoed."""
+    entry = next((e for e in HELP_ENTRIES if e[0] == HELP_WORDS.get(name)), None)
+    return "\n".join(entry[3]) if entry else "\n".join(("Unknown command. Send help with one of:", *_help_names()))
+
+
+def _help_word(norm: str):
+    """AV1052-12: ("help", word) when the whole (already lower-cased) message is `help <one word>` or `help <known name>`."""
+    found = re.fullmatch(r"help (\S+(?: \S+){0,3})", norm)
+    return ("help", found[1]) if found and (found[1] in HELP_WORDS or " " not in found[1]) else None
+
+
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S.*)|(memory|notes)|(alias)(?:\s+(.*))?"
                        r"|(cost)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)  # AV1222-10: groups 8/9
@@ -147,6 +195,7 @@ def parse_command(text: str, *, listing_names=False):
     if maker := _post_maker(text): return maker  # AV1937-10: before the general punctuation rule, which would cut a key's . or !
     if look := _look(text): return look
     norm = re.sub(r"[.!]+$", "", text.strip().lower())
+    if found := _help_word(norm): return found  # AV1052-12: help <command>; the numbered groups below are unchanged
     if norm in UNDO_PHRASES: return "undo", None  # AV0222-07: the same as a bare undo
     match = COMMAND_RE.fullmatch(norm)
     if not match: return None

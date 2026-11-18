@@ -386,10 +386,10 @@ class ReplayAndHelpTests(AgainTestCase):
         self.assertEqual(len(self.drafts()), len(before) + 1)
 
     def test_again_help_and_docs(self):
-        lines = [ln for ln in voice.plain(conversation.HELP_TEXT).splitlines() if ln.startswith("again ")]
+        lines = voice.plain(conversation.help_detail("again")).splitlines()  # AV1052-12: the full line is in `help again`
         self.assertEqual(lines, ["again a1b2 - re-draft an expired change (within 7 days)"])
-        self.assertEqual(self.say("help"), "help")
-        self.assertIn(lines[0], self.replies()[0])
+        self.assertEqual(self.say("help again"), "help")
+        self.assertEqual(self.replies(), lines)
 
 
 if __name__ == "__main__":

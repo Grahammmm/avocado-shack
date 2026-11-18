@@ -171,8 +171,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
 
     def test_alias_cap_doc_and_help_are_tied(self):
         self.assertEqual(conversation.ALIAS_LIST_MAX, 20)
-        self.assertEqual(sum(1 for line in conversation.HELP_TEXT.splitlines() if "notes lists them" in voice.plain(line)), 1)
-        self.assertIn('notes lists them', voice.plain(conversation.HELP_TEXT))
+        self.assertEqual(voice.plain(conversation.help_detail("notes")), "notes - lists your notes")  # AV1052-12: via `help notes`
 
 
 if __name__ == "__main__":
