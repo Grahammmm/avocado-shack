@@ -93,6 +93,8 @@ def _problem(result: dict, registry, pending_codes, from_intake):
             arg = op.args.get(name)
             if arg is None:
                 return CANT_DO_YET
+            if call["op"] == "product.add" and name == "supplier" and not from_intake:
+                return CANT_DO_YET
             if arg.kind == INTAKE_PRICE:
                 if not from_intake: return CANT_DO_YET
                 if not valid_selling_price(value): return f"I couldn't read the selling price. {AGAIN}"

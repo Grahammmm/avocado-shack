@@ -10,7 +10,8 @@ from pathlib import Path
 
 MAX_BYTES = 512 * 1024
 ORDER = ("sent", "webhook-in", "accepted", "ack-start", "ack-end", "post-start", "receiver-accepted", "post-end", "worker-pickup",
-         "interp-start", "interp-end", "handled", "reply-queued", "reply-pulled", "bb-send-start", "bb-send-end")
+         "finance-start", "finance-end", "interp-start", "interp-end", "style-start", "label-start", "label-end", "style-ready",
+         "card-start", "card-end", "handled", "reply-queued", "reply-pulled", "bb-send-start", "bb-send-end")
 
 
 def short(value) -> str:

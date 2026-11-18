@@ -4,7 +4,7 @@ The interpreter only turns text into typed ops (it never sees approvals or calls
 does every write. handle() stores each result (message id, draft state, reply) before any reply is sent; flush()
 sends. Approval is bound to sender, chat, change id, draft hash, base revision and expiry. Fixture adapter only.
 """
-import contextlib, copy, hashlib, json, os, re, sqlite3, stat, sys  # noqa: E401
+import contextlib, copy, hashlib, json, os, re, sqlite3, stat, sys, time  # noqa: E401
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,7 +19,7 @@ from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.interpreter_prompt import DESIGN_UNSUPPORTED  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
 from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, nl_prep, voice  # noqa: E402
-from hass import capabilities, photo_polish, transcript  # noqa: E402
+from hass import capabilities, photo_polish, stagelog, transcript  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
 from hass.clover import approvals as till_approvals  # noqa: E402
@@ -459,6 +459,8 @@ def _photo_sentence(technical):
 
 
 class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack commands are in hass/chat/
+    stage = staticmethod(stagelog.off)
+
     def __init__(self, state_dir, editor, interpreter, clock, previewer=None, photos=None, labels=None, skills=None):
         """previewer (H06, e.g. preview.Previewer(worktree)): proposal screenshots and checked results; None keeps
         the H05 behaviour (no screenshot, an applied draft stays `applied`). skills (SKILLS-FW-3): a skills Registry; only read
@@ -802,7 +804,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 listing = req["slots"]
         shot, shots, head, tail = None, [], "", ""
         if self.previewer is not None:
-            shot = self._capture(draft)
+            if listing: self.stage("card-start", self.outbox.msg_id)
+            try: shot = self._capture(draft)
+            finally:
+                if listing: self.stage("card-end", self.outbox.msg_id)
             shots = [shot["png"]] if shot.get("png") else []
             if not shot["ok"]:
                 self._problem("error", "preview-failed", excerpt=preview_mod.failure_kind(shot.get("error")))
@@ -875,8 +880,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
     def _listing_public_notes(self, listing, product):
         """Include fixed/generated card text and any expandable maker story, not just slots."""
         maker = self._makers().get(product.get("producerKey")) or {}
+        source = ("From " + product["supplier"] if product.get("supplier") else
+                  "Based in " + maker["place"] if maker.get("place") else "Ask us about the source in store.")
         lines = ["Website description: " + q(product.get("description") or ""),
-                 "Source line: " + ("Based in " + maker["place"] if maker.get("place") else "Ask us about the source in store."),
+                 "Source line: " + q(source),
                  "Picture description: " + q(product.get("imageAlt") or product.get("name") or "")]
         if product.get("addedOn"): lines.append("Badge: New (for the first two weeks).")
         if maker.get("story"): lines.append("Meet the maker: " + q(maker["story"]))
@@ -887,16 +894,18 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if got.get("dropped_claims"):
             lines.append("Dropped from the listing: " + q("; ".join(got["dropped_claims"])))
         sha, root = listing.get("photo"), self.settings.get("mediaRoot")
-        if sha and root:
+        if sha and root and not got.get('generated_picture'):
             try:
-                from hass import photo_polish
                 decision = photo_polish.decision(root, sha) if photo_polish.enabled(self.settings) else None
-                if decision and decision.get("use") == "house":
-                    lines.append("Picture: your photo (styled picture failed: " + photo_polish.plain_reason(decision.get("code")) + ")")
-                elif not photo_polish.enabled(self.settings) and not got.get('generated_picture'):
+                if photo_polish.enabled(self.settings):
+                    if decision and decision.get("use") == "polished" and photo_polish.polished(root, sha) is not None:
+                        lines.append("Picture: styled from your photo.")
+                    else:
+                        lines.append("Picture: your photo (styled picture failed: " + photo_polish.plain_reason((decision or {}).get("code")) + ")")
+                else:
                     lines.append("Picture: your photo.")
             except (OSError, media.Refused, editor_mod.UnsafeState):
-                lines.append("Picture: your photo.")
+                lines.append("Picture: your photo (styled picture failed: image tool unavailable)")
         return "\n" + "\n".join(lines)
 
     PREVIEW_RETRY = ("CREATE TABLE IF NOT EXISTS preview_retry (row_id INTEGER PRIMARY KEY, change_id TEXT NOT NULL, chat TEXT NOT NULL,"
@@ -1069,8 +1078,14 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone(): return {}
         req = self.requests.get(msg.chat, self._now())
         if req and not self.dispatch.simple_intake(req): return {}
+        if msg.attachments == 1:
+            public, facts = item_intake.caption_answers(msg.text.replace("\ufffc", ""))
+            if not public and "price" in facts and "cost" in facts:
+                return {}  # complete typed caption; no private finance model call needed
+        self.stage("finance-start", msg.provider_id)
         try: return self.answer_reader.fields(msg.text)
         except Exception: return {}  # a failed reader leaves the deterministic parser, never an inferred value
+        finally: self.stage("finance-end", msg.provider_id)
 
     def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
@@ -2011,17 +2026,17 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             prior = self.db.execute("SELECT COALESCE(MAX(id), 0) FROM outbox").fetchone()[0]
             intake_answers = None
             if self.settings.get("itemIntake") is True:
-                caption, intake_answers = item_intake.caption_answers(caption)
+                caption, intake_answers = item_intake.caption_answers(caption, self._intake_fields)
             as_text = Inbound(**{**vars(msg), "text": caption})
             done = self.dispatch.photo(as_text, now, sha, caption, intake_answers=intake_answers)
             done = done if done is not None else self._request(as_text, now)
             req = self.requests.get(msg.chat, now)
-            if (self.labels is not None and self.settings.get("itemIntake") is True and req
-                    and req["skill"] == "item.add" and req["state"] == "open" and req["attachments"] == [sha]
-                    and not req["slots"].get("intake", {}).get("photo_details")):
-                question = self.db.execute("SELECT id FROM outbox WHERE chat = ? AND id > ? AND sent_at IS NULL ORDER BY id DESC LIMIT 1",
-                                           (msg.chat, prior)).fetchone()
-                self._label_jobs.append((None, sha, (as_text, req["request_id"], now, question["id"] if question else None)))
+            if (req and req["skill"] == "item.add" and req["state"] == "open" and req["attachments"][-1:] == [sha]
+                    and req["slots"].get("intake", {}).get("reading_photo")):
+                # Do not commit provisional caption replies. Earlier turns' outbox rows are untouched.
+                self.db.execute("DELETE FROM outbox WHERE chat = ? AND id > ? AND sent_at IS NULL", (msg.chat, prior))
+                self._label_jobs.append((None, sha, (as_text, req["request_id"], now)))
+                if sha in self._polish_jobs: self._polish_jobs.remove(sha)
             return done
         code = self._photo_row(sha, msg, now)
         if not caption:
@@ -2083,12 +2098,21 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     def _read_label(self, code, sha, reply_id):  # AV1537-15: a read label joins the waiting question; never ops
         from hass.content_model import CATEGORIES
+        job = reply_id if code is None else None
+        worker, deadline = None, 0.0
+        if job:
+            msg, _, _ = job
+            if photo_polish.enabled(self.settings):
+                self.stage("style-start", msg.provider_id)
+                deadline = time.monotonic() + photo_polish.TIMEOUT_S
+                worker = photo_polish.start(self.settings["mediaRoot"], sha, log=self.log, transport=self.polish_transport)
+            self.stage("label-start", msg.provider_id)
         try:
             web = Path(media.web_copy(self.settings["mediaRoot"], sha)["path"]).read_bytes()  # metadata-free copy only
             products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
             context = ""
-            if code is None:
-                msg, request_id, now, question_id = reply_id
+            if job:
+                msg, _, now = job
                 req = self.requests.get(msg.chat, now)
                 context = " ".join(req["texts"]) if req else ""
             found = (self.labels.read(web, CATEGORIES, owner_text=context)
@@ -2098,19 +2122,24 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 product_claims.remember(self.settings["mediaRoot"], sha, found)
         except Exception: found, products = {}, []  # noqa: BLE001 - one honest missing-detail preview, not a silent reading state
         category = found.get("category")
-        if code is None:
-            msg, request_id, now, question_id = reply_id
+        if job:
+            msg, request_id, now = job
+            self.stage("label-end", msg.provider_id, fallback=getattr(self.labels, "last_fallback", False) is True,
+                       error=getattr(self.labels, "last_primary_error", None) or getattr(self.labels, "last_error", None))
+            if worker is not None:
+                # Label and styling run in parallel outside the write lock.
+                worker.join(max(0, deadline - time.monotonic()))
+            if photo_polish.enabled(self.settings):
+                self.stage("style-ready", msg.provider_id)
             if category == "pantry" and re.search(r"\b(?:glue|adhesive|hardware|screws?|nails?)\b", found.get("product_type", "") + " " + found.get("name", ""), re.I):
                 category = "general"
             with self._answer_to(msg.chat), self._tx():
                 req = self.requests.get(msg.chat, now)
                 if (req is None or req["request_id"] != request_id or req["state"] != "open"
-                        or req["skill"] != "item.add" or req["attachments"] != [sha]): return
+                        or req["skill"] != "item.add" or req["attachments"][-1:] != [sha]): return
                 slots = {**req["slots"], "intake": {**req["slots"].get("intake", {}), "photo_details": found,
                                                    "category_choice": category or "general",
                                                    "reading_photo": False, "simple": True}}
-                # Replace only this message's unsent question; an early receipt already sent stays sent.
-                self.db.execute("DELETE FROM outbox WHERE id = ? AND sent_at IS NULL", (question_id,))
                 return self.dispatch._advance(Inbound(**{**vars(msg), "text": ""}), now, req,
                                               self.dispatch.registry.get("item.add"), {"intake": slots["intake"]}, None, resolved=True)
             return

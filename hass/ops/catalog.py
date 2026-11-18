@@ -15,7 +15,7 @@ import re
 import unicodedata
 
 from hass import voice
-from hass.content_model import AVAILABILITY, CATEGORIES, TEXT_LIMITS, checked_on, shop_today
+from hass.content_model import AVAILABILITY, CATEGORIES, TEXT_LIMITS, checked_on, shop_today, valid_supplier
 from hass.field_words import field_list
 from hass.ops import INTAKE_PRICE, Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
 
@@ -121,6 +121,8 @@ def _touch(collection, key, before, after):
 def _product_add(content, args, ctx):
     if problem := _too_long(args, "product", PRODUCT_LIMITED):
         return problem
+    if "supplier" in args and not valid_supplier(args["supplier"]):
+        return Refused("give just the supplier name")
     if twin := _twin(content, args["name"], args["brand"]):
         tail = {"active": "already has this name and brand; edit it instead",
                 "hidden": "has this name and brand and is hidden; restore it instead"}.get(
@@ -151,6 +153,8 @@ def _product_add(content, args, ctx):
     record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
     if "sellingPrice" in args:
         record["sellingPrice"] = args["sellingPrice"]
+    if "supplier" in args:
+        record["supplier"] = args["supplier"]
     if "labelText" in args:
         from hass import product_claims
         evidence = product_claims.source(ctx.settings.get("mediaRoot"), args.get("photo"), args["labelText"])
@@ -437,6 +441,7 @@ OPS = (
     Op("product.add", {**_PRODUCT_FIELDS, "displayBrand": Arg("text", required=False), "image": Arg("image", required=False), "photo": Arg("id", required=False),
                        "showNew": Arg("bool", required=False), "labelText": Arg("text_list", required=False),
                        "ownerText": Arg("text_list", required=False), "sellingPrice": Arg(INTAKE_PRICE, required=False),
+                       "supplier": Arg("text", required=False),
                        **_OPTIONAL}, _product_add),
     Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
                         **_OPTIONAL, "clearProducer": Arg("bool", required=False),

@@ -247,7 +247,7 @@ def install(ctx, sha, alt, *, style=True, owner_fallback=False):
             cleaned = None
     if cleaned is not None:
         data, ext = cleaned, "jpg"
-    elif house:
+    elif house and not (owner_fallback and photo_polish.enabled(ctx.settings)):
         verdict = _verdict(data)
         if not isinstance(verdict, Refused) and verdict["ok"]:
             data, ext = verdict["jpeg"], "jpg"

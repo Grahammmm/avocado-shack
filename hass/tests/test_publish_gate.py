@@ -19,6 +19,8 @@ from hass.tests.test_label_reader import reader, recorded
 
 
 GLUE_CAPTION = 'Just bought 50 of these for $1. I will sell at $2'
+LIVE_GLUE_CAPTION = 'Bought 100 of these for $1 each. Ill sell them for $2 each'
+SOURCE_EDIT = 'Nice. Just change one thing “ask us about the source in the store”. You should get that info here. This is from “miners”'
 
 
 class PublishGate(unittest.TestCase):
@@ -98,6 +100,63 @@ class PublishGate(unittest.TestCase):
         self.assertEqual(disposition, 'proposed')
         self.assertEqual(first, earlier)
         self.assertIn("Here's the listing:", listing)
+
+    def test_live_source_edit_changes_only_source_under_same_code(self):
+        chat = self.chat()
+        self.real_previewer(chat)
+        _, (initial,) = chat.say(LIVE_GLUE_CAPTION, base.JAR)
+        self.assertIn('Source line: Ask us about the source in store.', initial)
+        original, draft = self.product(chat)
+        code = chat.live()['draft_code']
+        for text, supplier in ((SOURCE_EDIT, 'Miners'), ('source is North Farm', 'North Farm'),
+                               ('we get it from Ridge Farm', 'Ridge Farm')):
+            disposition, (said,) = chat.say(text)
+            self.assertEqual(disposition, 'proposed', said)
+            self.assertEqual(chat.live()['draft_code'], code)
+            product, revised = self.product(chat)
+            self.assertEqual({k: v for k, v in product.items() if k != 'labelSource'},
+                             {**{k: v for k, v in original.items() if k != 'labelSource'}, 'supplier': supplier})
+            self.assertCountEqual(product['labelSource']['text'], original['labelSource']['text'])
+            self.assertNotEqual(revised['draft_hash'], draft['draft_hash'])
+            self.assertEqual(live_policy.check(revised), [])
+            self.assertIn('From ' + supplier, said.split('All website card text:', 1)[1])
+            self.assertIn(original['description'], said.split('All website card text:', 1)[1])
+            self.assertNotIn('Just change one thing', said)
+        for text in ('change that line', 'this is from Miners or Ridge Farm'):
+            disposition, (question,) = chat.say(text)
+            self.assertEqual(disposition, 'question')
+            self.assertTrue(question.endswith('?') and question.count('?') == 1, question)
+            self.assertFalse(chat.out.sent[-1]['attachments'])
+            self.assertEqual(self.product(chat)[1]['draft_hash'], revised['draft_hash'])
+        disposition, (protected,) = chat.say('source is Organic Ridge Farm')
+        self.assertEqual(disposition, 'claim-question', protected)
+        self.assertNotIn('Reply yes ' + code, protected)
+        self.assertEqual(self.product(chat)[1]['draft_hash'], revised['draft_hash'])
+        self.assertEqual(chat.commits(), 0)
+
+    def test_label_read_has_no_pending_reply_even_with_finance_fallback(self):
+        from types import SimpleNamespace
+        for text, model_calls in ((LIVE_GLUE_CAPTION, 0), ('$1/sell $2', 0),
+                                  ('Bought 100 of these for $1 each. I plan to sell at two bucks', 1)):
+            with self.subTest(text=text):
+                chat = self.chat()
+                finance = mock.Mock(return_value={'price_cents': 200, 'cost_cents': 100, 'quantity': 100})
+                chat.conv.answer_reader = SimpleNamespace(fields=finance)
+                label = chat.conv.labels.read
+                def observe(*args, **kwargs):
+                    self.assertEqual(chat.conv.flush(chat.out), 0)
+                    return label(*args, **kwargs)
+                # A callback exception is intentionally caught: Wood Glue plus a
+                # real proposed disposition below prove that the callback completed.
+                with mock.patch.object(chat.conv.labels, 'read', side_effect=observe):
+                    disposition, (said,) = chat.say(text, base.JAR)
+                self.assertEqual(disposition, 'proposed', said)
+                self.assertIn('Wood Glue', said)
+                self.assertNotIn('Not read yet', said)
+                self.assertIn('cost $1.00', said)
+                self.assertEqual(finance.call_count, model_calls)
+                self.assertEqual(chat.asked, [])
+                self.doCleanups()
 
     def test_food_organic_label_is_quoted_but_owner_health_phrase_dropped_only(self):
         chat = self.chat({'name': 'Jam', 'brand': 'Test kitchen', 'category': 'pantry',
@@ -209,12 +268,9 @@ class PublishGate(unittest.TestCase):
 
     def test_image_generation_failure_uses_exact_owner_web_photo_and_still_approves(self):
         chat = self.chat(settings={'houseRender': True, 'photo_polish': True})
-        # Exercise real decision store + failed transport, not a synthetic success JPEG.
-        remember = product_claims.remember
-        def fail(root, sha, details):
-            remember(root, sha, details)
-            photo_polish.run(root, sha, transport=lambda *a: {'ok': False, 'code': 'auth'})
-        with mock.patch.object(product_claims, 'remember', side_effect=fail), mock.patch.object(photos, '_verdict', return_value=Refused('style failed')):
+        # Exercise the real scheduling and decision store; no provider/network.
+        chat.conv.polish_transport = mock.Mock(return_value={'ok': False, 'code': 'auth'})
+        with mock.patch.object(photos, '_verdict', side_effect=AssertionError('fallback must be the owner photo')):
             disposition, said = chat.say('sell for $2', base.JAR)
             self.assertEqual(disposition, 'proposed', said)
             product, draft = self.product(chat)
@@ -227,6 +283,34 @@ class PublishGate(unittest.TestCase):
             chat.say('yes ' + chat.live()['draft_code'])
             self.assertEqual(chat.commits(), 1)
             self.assertEqual((chat.kit.wt / key).read_bytes(), wanted)
+        chat.conv.polish_transport.assert_called_once()
+
+    def test_styled_picture_finishes_before_freeze_and_is_reused_for_source_edit(self):
+        from PIL import Image
+        chat = self.chat(settings={'houseRender': True, 'photo_polish': True})
+        transactions = []
+        def edit(src, out, timeout):
+            transactions.append(chat.conv.db.in_transaction)
+            Image.new('RGB', (800, 800), '#e8d7b8').save(out, 'JPEG')
+            return {'ok': True, 'code': 'ok'}
+        chat.conv.polish_transport = mock.Mock(side_effect=edit)
+        # Fidelity tests live in test_photo_polish. Here check which pixels the
+        # actual Conversation/editor freeze and hand to the previewer.
+        with mock.patch.object(photo_polish, 'gate', side_effect=lambda src, edited:
+                               {'ok': True, 'jpeg': edited}) as gate:
+            disposition, (said,) = chat.say(LIVE_GLUE_CAPTION, base.JAR)
+            self.assertEqual(disposition, 'proposed', said)
+            self.assertIn('Picture: styled from your photo.', said)
+            original, styled = gate.call_args.args
+            self.assertNotEqual(original, styled)
+            _, (edited,) = chat.say(SOURCE_EDIT)
+            self.assertIn('Picture: styled from your photo.', edited)
+            gate.assert_called_once()
+        chat.conv.polish_transport.assert_called_once()
+        self.assertEqual(transactions, [False])
+        product, draft = self.product(chat)
+        assets = chat.conv.editor.render_draft(draft['change_id'])['assets']
+        self.assertEqual(assets['storefront-mockup/' + product['image']], styled)
 
     def test_render_failure_answers_once_and_explicit_retry_rechecks_policy(self):
         chat = self.chat()

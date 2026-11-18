@@ -595,7 +595,7 @@ class Dispatcher:
             conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"] if req else None,
                               skill="item.add", slots=slots, texts=texts, attachments=attachments,
                               asked_slot=item_intake.PREFIX + needed, question=question, draft_code=revises)
-            conv._reply(simple.preview(slots) + "\n" + question, long_ok=True)
+            conv._reply(simple.preview(slots) + "\n" + question if slots.get("name") else question, long_ok=True)
             return "question"
         source = "\n".join([*texts, *simple.public_sources(slots)])
         conv._intake_listing = slots
@@ -624,6 +624,8 @@ class Dispatcher:
         # Keep every accepted source word across edits, not the financial clauses.
         asked = (req["asked_slot"] or "").removeprefix(item_intake.PREFIX)
         if req["slots"].get("intake", {}).get("reading_photo"):
+            if msg.attachments:
+                return "question"  # this turn's photo callback owns the reply
             # A later turn after an interrupted callback must not wait forever on
             # an in-memory job that no longer exists. Keep the photo and typed facts.
             slots = {**req["slots"], "intake": {**req["slots"]["intake"], "reading_photo": False}}
@@ -636,7 +638,10 @@ class Dispatcher:
                 if shown:
                     self.conv._proposal_reply(row, shown)
                     return "proposed"
-        slots, public = simple.edit(req["slots"], msg.text, asked)
+        slots, public, question = simple.edit(req["slots"], msg.text, asked)
+        if question:
+            self.conv._reply(question)
+            return "question"
         # Already-validated state plus fixed owner edits; validate the edit on the full path.
         updated = {**req, "slots": slots}
         return self._simple_advance(dataclasses.replace(msg, text=public), now, updated, {})
@@ -1286,12 +1291,13 @@ class Dispatcher:
     def photo(self, msg, now, sha, caption, intake_answers=None):
         """The stored original joins the owner's request. Returns a disposition, or None when the caption should now be read
         as an ordinary text of that request (``Conversation._request``)."""
+        from hass import photo_polish
         conv = self.conv
         how, req = conv.requests.bind_attachment(self._owner(), msg.provider_id, sha, now, self.registry)
         if self.simple_intake(req) or how == "opened" and self.simple_intake():
             slots = dict(req["slots"])
             slots["intake"] = {**slots.get("intake", {}), **(intake_answers or {}), "simple": not bool(caption),
-                               "reading_photo": conv.labels is not None}
+                               "reading_photo": conv.labels is not None or photo_polish.enabled(conv.settings)}
             conv.requests.put(self._owner(), msg.provider_id, now, request_id=req["request_id"], skill="item.add",
                               slots=slots, texts=req["texts"], attachments=req["attachments"])
             req = conv.requests.get(self._owner(), now)

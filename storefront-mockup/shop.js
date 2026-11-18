@@ -9,7 +9,7 @@ function organic(p){return /\borganic\b/i.test(p.name)||['Ocean Ranch','Straus',
 // AV1352-01: only an installed owner photo (same shape as content_model.HOME_IMAGE_RE) is not an illustration; JS $ without the m flag is a true end.
 const installedImage=s=>typeof s==='string'&&/^assets\/products\/photo-[0-9a-f]{16}\.(jpg|png)$/.test(s);
 function photo(p){return `<img loading=\"lazy\" width=\"800\" height=\"800\" src=\"${esc(p.image)}\" alt=\"${esc((p.imageAlt||p.name)+(installedImage(p.image)?'':' (illustration)'))}\">`}
-function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
+function origin(p){return p.supplier?`From ${p.supplier}`:maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
 function badges(p){const tags=(organic(p)?'<span>Organic</span>':'')+(isNew(p,pinNow||undefined)?'<span>New</span>':'');return (tags?`<div class="food-badges">${tags}</div>`:'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
 function brand(p){return p.displayBrand||(p.brand==='Producer not identified'?'From the market':p.brand)}
 // AV0222-10: a maker's story is optional. Story: story paragraph; no story but a link: place only; neither: no panel at all.

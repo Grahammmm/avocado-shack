@@ -6,10 +6,13 @@ not a second publication path.
 import re
 
 from hass import newitem, voice, product_claims
-from hass.content_model import CATEGORIES, FORBIDDEN_TEXT, INVISIBLE_RE, TEXT_LIMITS
+from hass.content_model import CATEGORIES, FORBIDDEN_TEXT, INVISIBLE_RE, TEXT_LIMITS, valid_supplier
 from hass.skills import item_intake as ii
 
 NEXT = re.compile(r"^(?:what['’]?s next|what next|next|\?)[?!. ]*$", re.I)
+SUPPLIER = re.compile(r"(?:this is from\s+|(?:the\s+)?(?:source|supplier)(?:\s+is\s+|\s*:\s*)|we get it from\s+)(.+)", re.I)
+SOURCE_HINT = re.compile(r"\b(?:source|supplier|from)\b", re.I)
+COPY = re.compile(r"(?:add|description)\s*:\s*(.+)", re.I)
 
 
 def public_sources(slots):
@@ -80,7 +83,7 @@ def fill(slots, texts):
 
 
 def edit(slots, text, asked=None):
-    """Return changed slots and public source text. Unstructured replies become copy, not a yes/no loop."""
+    """Return changed slots, accepted public words, and at most one clarification."""
     out = dict(slots)
     got = dict(out.get("intake") or {})
     public, finance = ii.caption_answers(text)
@@ -88,39 +91,55 @@ def edit(slots, text, asked=None):
     out["intake"] = got
     if asked == "price" and not finance and (value := ii._parse_money(text)) is not None:
         got["price"] = value
-        return out, ""
+        return out, "", None
     if not public or NEXT.fullmatch(public.strip()) or ii.SKIP.fullmatch(public.strip()):
-        return out, ""
+        return out, "", None
+    source = public.rstrip(".")
+    if re.search(r'["“]ask us about the source in (?:the )?store\.?["”]', source, re.I):
+        source = re.split(r"[.!]\s+", source)[-1]
+    if match := SUPPLIER.fullmatch(source):
+        name = match[1].strip()
+        if (name.startswith('"') and name.endswith('"')) or (name.startswith('“') and name.endswith('”')):
+            name = name[1:-1].strip()
+        if valid_supplier(name) and not re.search(r"\b(?:or|maybe|probably|think|guess|please|change|add|remove|replace|instead|not)\b", name, re.I):
+            out["supplier"] = name.title() if name.islower() else name
+            return out, "", None
     if match := re.fullmatch(r"(?:remove|leave out|delete)\s+(.+)", public, re.I):
         target = match[1].strip().rstrip(".")
         description = out.get("description", "")
+        if not re.search(re.escape(target), description, re.I):
+            return slots, "", "Which words should I remove from the listing?"
         out["description"] = re.sub(re.escape(target) + r"[.!]?", "", description, flags=re.I).strip()
         out["description"] = " ".join(out["description"].split())
-        return out, ""
+        return out, "", None
     if match := re.fullmatch(r"(?:name|call it|rename(?: it)?(?: to)?)\s*:?\s+(.+)", public, re.I):
         out["name"] = match[1]
         out["image_alt"] = match[1]
-        return out, match[1]
+        return out, match[1], None
     if match := re.fullmatch(r"(?:brand|maker)\s*:?\s+(.+)", public, re.I):
         out["maker"] = match[1]
         got.pop("maker_default", None)
-        return out, match[1]
+        return out, match[1], None
     if match := re.fullmatch(r"(?:category|shelf)\s*:?\s+(.+)", public, re.I):
         out["shelf"] = match[1].lower()
         got.pop("shelf_default", None)
-        return out, match[1]
+        return out, match[1], None
     stock = {"in stock": "yes", "sold out": "no", "low on stock": "limited"}.get(public.strip().lower())
     if stock:
         out["availability"] = stock
         got["availability_derived"] = False
-        return out, public
-    copy = re.sub(r"^(?:add|description)\s*:\s*", "", public, flags=re.I)
-    if asked == "name":
-        out["name"] = copy
-    elif copy:
+        return out, public, None
+    if match := COPY.fullmatch(public):
+        copy = match[1]
         out["description"] = " ".join([out.get("description", ""), copy]).strip()
         got["description_default"] = False
-    return out, copy
+        return out, copy, None
+    if SOURCE_HINT.search(public):
+        return slots, "", "What supplier name should the source line show?"
+    if asked == "name" and valid_supplier(public) and not re.match(r"(?:change|add|please|use|fix)\b", public, re.I):
+        out["name"] = public
+        return out, public, None
+    return slots, "", "Which part of the listing should change, and what should it say?"
 
 
 def plan(slots, content):
@@ -141,6 +160,8 @@ def plan(slots, content):
     labels = product_claims.sanitize(slots, photo_details(slots.get("intake") or {}))
     args.update(name=slots.get("name") or name, brand=slots.get("maker") or brand,
                 description=slots.get("description") or name)
+    if slots.get("supplier"):
+        args["supplier"] = slots["supplier"]
     if slots.get("photo"):
         args.update(photo=slots["photo"], imageAlt=slots.get("image_alt") or name)
         if labels:
