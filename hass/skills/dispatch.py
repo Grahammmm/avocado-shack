@@ -640,6 +640,9 @@ class Dispatcher:
                     return "proposed"
         slots, public, question = simple.edit(req["slots"], msg.text, asked)
         if question:
+            if question == simple.SUPPLIER_QUESTION:
+                self.conv.requests.mark(req["request_id"], req["state"], now,
+                                        asked_slot=item_intake.PREFIX + "supplier", question=question)
             self.conv._reply(question)
             return "question"
         # Already-validated state plus fixed owner edits; validate the edit on the full path.

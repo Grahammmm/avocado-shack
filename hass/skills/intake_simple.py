@@ -12,6 +12,8 @@ from hass.skills import item_intake as ii
 NEXT = re.compile(r"^(?:what['’]?s next|what next|next|\?)[?!. ]*$", re.I)
 SUPPLIER = re.compile(r"(?:this is from\s+|(?:the\s+)?(?:source|supplier)(?:\s+is\s+|\s*:\s*)|we get it from\s+)(.+)", re.I)
 SOURCE_HINT = re.compile(r"\b(?:source|supplier|from)\b", re.I)
+SUPPLIER_QUESTION = "What supplier name should the source line show?"
+SUPPLIER_UNCERTAIN = re.compile(r"\b(?:or|maybe|probably|think|guess|please|change|add|remove|replace|instead|not)\b", re.I)
 COPY = re.compile(r"(?:add|description)\s*:\s*(.+)", re.I)
 
 
@@ -97,13 +99,15 @@ def edit(slots, text, asked=None):
     source = public.rstrip(".")
     if re.search(r'["“]ask us about the source in (?:the )?store\.?["”]', source, re.I):
         source = re.split(r"[.!]\s+", source)[-1]
-    if match := SUPPLIER.fullmatch(source):
-        name = match[1].strip()
+    match = SUPPLIER.fullmatch(source)
+    if match or asked == "supplier":
+        name = (match[1] if match else source).strip()
         if (name.startswith('"') and name.endswith('"')) or (name.startswith('“') and name.endswith('”')):
             name = name[1:-1].strip()
-        if valid_supplier(name) and not re.search(r"\b(?:or|maybe|probably|think|guess|please|change|add|remove|replace|instead|not)\b", name, re.I):
+        if valid_supplier(name) and not SUPPLIER_UNCERTAIN.search(name):
             out["supplier"] = name.title() if name.islower() else name
             return out, "", None
+        return slots, "", SUPPLIER_QUESTION
     if match := re.fullmatch(r"(?:remove|leave out|delete)\s+(.+)", public, re.I):
         target = match[1].strip().rstrip(".")
         description = out.get("description", "")
@@ -135,7 +139,7 @@ def edit(slots, text, asked=None):
         got["description_default"] = False
         return out, copy, None
     if SOURCE_HINT.search(public):
-        return slots, "", "What supplier name should the source line show?"
+        return slots, "", SUPPLIER_QUESTION
     if asked == "name" and valid_supplier(public) and not re.match(r"(?:change|add|please|use|fix)\b", public, re.I):
         out["name"] = public
         return out, public, None

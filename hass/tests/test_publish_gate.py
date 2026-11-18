@@ -134,6 +134,30 @@ class PublishGate(unittest.TestCase):
         self.assertEqual(self.product(chat)[1]['draft_hash'], revised['draft_hash'])
         self.assertEqual(chat.commits(), 0)
 
+    def test_supplier_clarification_accepts_answer_on_same_draft(self):
+        chat = self.chat()
+        chat.say(LIVE_GLUE_CAPTION, base.JAR)
+        original, draft = self.product(chat)
+        code = chat.live()['draft_code']
+        disposition, (question,) = chat.say('this is from Miners or Ridge Farm')
+        self.assertEqual(disposition, 'question')
+        self.assertEqual(question, 'What supplier name should the source line show?')
+        self.assertEqual(self.product(chat)[1]['draft_hash'], draft['draft_hash'])
+        disposition, (question,) = chat.say('Miners or Ridge Farm')
+        self.assertEqual(disposition, 'question')
+        self.assertEqual(question, 'What supplier name should the source line show?')
+        self.assertEqual(self.product(chat)[1]['draft_hash'], draft['draft_hash'])
+        disposition, (said,) = chat.say('Miners')
+        self.assertEqual(disposition, 'proposed', said)
+        self.assertEqual(chat.live()['draft_code'], code)
+        product, revised = self.product(chat)
+        self.assertEqual({k: v for k, v in product.items() if k != 'labelSource'},
+                         {**{k: v for k, v in original.items() if k != 'labelSource'}, 'supplier': 'Miners'})
+        self.assertIn('From Miners', said)
+        self.assertEqual(live_policy.check(revised), [])
+        self.assertEqual(len(chat.drafts()), 1)
+        self.assertEqual(chat.commits(), 0)
+
     def test_label_read_has_no_pending_reply_even_with_finance_fallback(self):
         from types import SimpleNamespace
         for text, model_calls in ((LIVE_GLUE_CAPTION, 0), ('$1/sell $2', 0),
