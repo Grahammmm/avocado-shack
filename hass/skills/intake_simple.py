@@ -9,6 +9,8 @@ from hass import newitem, voice, product_claims
 from hass.content_model import CATEGORIES, FORBIDDEN_TEXT, INVISIBLE_RE, TEXT_LIMITS, valid_supplier
 from hass.skills import item_intake as ii
 
+PRICE_SUFFIX = {"pound": " per lb", "item": " each"}
+
 NEXT = re.compile(r"^(?:what['’]?s next|what next|next|\?)[?!. ]*$", re.I)
 SUPPLIER = re.compile(r"(?:this is from\s+|(?:the\s+)?(?:source|supplier)(?:\s+is\s+|\s*:\s*)|we get it from\s+)(.+)", re.I)
 SOURCE_HINT = re.compile(r"\b(?:source|supplier|from)\b", re.I)
@@ -86,6 +88,13 @@ def fill(slots, texts):
     return out
 
 
+def _private_price_basis(intake):
+    if intake.get("price_unit") == "basket":
+        return "basket"
+    sold_by = intake.get("sold_by")
+    return sold_by if sold_by in ("bag", "bundle") else None
+
+
 def edit(slots, text, asked=None):
     """Return changed slots, accepted public words, and at most one clarification."""
     words = text.strip()
@@ -93,9 +102,16 @@ def edit(slots, text, asked=None):
         return slots, "", "I can't answer that here. The listing is unchanged."
     out = dict(slots)
     got = dict(out.get("intake") or {})
-    public, finance = ii.caption_answers(text)
-    got.update(finance)
     out["intake"] = got
+    basis = _private_price_basis(got) if got.get("price") is not None else None
+    if basis and (unit := ii._parse_sold_by(words)) and unit in PRICE_SUFFIX:
+        got["sold_by"] = unit
+        got.pop("price_unit", None)
+        return out, "", None
+    public, finance = ii.caption_answers(text)
+    if basis in ("bag", "bundle"):
+        finance.pop("sold_by", None)  # a unit elsewhere, e.g. on a cost edit, isn't this price's basis
+    got.update(finance)
     if asked == "price" and not finance and (value := ii._parse_money(text)) is not None:
         got["price"] = value
         return out, "", None
@@ -183,9 +199,8 @@ def plan(slots, content):
     if len(matches) == 1:
         args["producerKey"] = matches[0]
     intake = slots.get("intake") or {}
-    if intake.get("price") is not None:
-        unit = {"pound": " per lb", "item": " each"}.get(intake.get("sold_by", ""), "")
-        args["sellingPrice"] = intake["price"] + unit
+    if intake.get("price") is not None and not _private_price_basis(intake):
+        args["sellingPrice"] = intake["price"] + PRICE_SUFFIX.get(intake.get("sold_by", ""), "")
     ops = [{"op": "product.add", "args": args}]
     if slots.get("availability"):
         ops.append({"op": "store.confirm_selection", "args": {slots["availability"]: [newitem.next_product_id(content)]}})
@@ -214,8 +229,13 @@ def preview(slots, code=None):
     if size: lines.append("Size: " + voice.quote(size))
     lines.append("Description: " + voice.quote(description or slots.get("name") or "Not read yet"))
     if features: lines.append("Features: " + voice.quote(", ".join(dict.fromkeys(features))))
-    unit = {"pound": " per lb", "item": " each"}.get(got.get("sold_by"), "")
-    if got.get("price") is not None: lines.append("Price: " + ii.money_text(got["price"]) + unit)
+    if got.get("price") is not None:
+        amount = ii.money_text(got["price"])
+        if basis := _private_price_basis(got):
+            lines.append(f'Price: {amount} a {basis} (not on the website: it can show a price per lb or each. '
+                         f'Reply "each" to show {amount} each.)')
+        else:
+            lines.append("Price: " + amount + PRICE_SUFFIX.get(got.get("sold_by", ""), ""))
     category = slots.get("shelf") or "general"
     lines.append("Category: " + voice.quote(category.title()) + (" (say 'category X' to change)" if category == "general" else ""))
     if slots.get("availability"):
