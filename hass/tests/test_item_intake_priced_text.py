@@ -152,7 +152,8 @@ class PricedTextConversation(unittest.TestCase):
                 self.doCleanups()
 
     def test_spelled_ambiguous_quantities_stay_private(self):
-        for counts in ("thirteen jars or fourteen jars", "twenty-one jars or one hundred and five jars"):
+        for counts in ("thirteen jars or fourteen jars", "twenty-one jars or one hundred and five jars",
+                       "twenty-four jars", "a dozen jars", "half a crate", "a couple of crates", "thirteen or fourteen"):
             for result in ({"price_cents": None, "cost_cents": None, "quantity": 13},
                            {"price_cents": None, "cost_cents": None, "quantity": None}, RuntimeError("offline")):
                 with self.subTest(counts=counts, result=result):
@@ -170,7 +171,7 @@ class PricedTextConversation(unittest.TestCase):
                     self.assertTrue(chat.asked)
                     self.assertNotIn(counts, str(chat.asked).lower())
                     for word in counts.split():
-                        if word not in ("or", "and"):
+                        if word not in ("or", "and", "a", "of"):
                             self.assertNotIn(word, str(chat.asked).lower())
                     self.doCleanups()
 
