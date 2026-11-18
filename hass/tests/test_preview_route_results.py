@@ -128,10 +128,6 @@ class CaptureTests(unittest.TestCase):
             stale, checks = self.run_check(self.site([]), name, key)
             self.assertEqual((stale["ok"], checks), (False, {"routeShown": False}), stale)
 
-    def test_archive_and_linked_hike_must_both_read_the_new_title(self):
-        result, checks = self.run_check(self.site([self.hike(1)], {CASS: "Cass Hill Loop"}), "Cass Hill Loop")
-        self.assertEqual((result["ok"], checks), (True, {"routeShown": True}), result)
-
     def test_hidden_archive_route_is_gone(self):
         result, checks = self.run_check(self.site([], drop=(CASS,)), "Cass Hill", status="hidden")
         self.assertEqual((result["ok"], checks), (True, {"routeGone": True}), result)

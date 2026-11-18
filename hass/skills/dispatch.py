@@ -507,6 +507,8 @@ class Dispatcher:
         if not self.simple_intake(req): return msg, req
         public, answers = item_intake.caption_answers(msg.text, getattr(self.conv, "_intake_fields", None))
         if not answers: return msg, req
+        if not msg.attachments:
+            public = item_intake.without_unresolved_finance(public)
         slots = dict(req["slots"]) if req else {}
         slots["intake"] = {**slots.get("intake", {}), **answers,
                            "simple": bool(slots.get("intake", {}).get("simple") or not public)}
@@ -612,8 +614,10 @@ class Dispatcher:
         return disposition
 
     def _simple_answer(self, msg, now, req):
+        from hass.chat.commands import parse_keyword, parse_near, parse_unknown_code
         from hass.skills import intake_simple as simple
-        if item_intake.ABORT.fullmatch(msg.text.strip()):
+        words = msg.text.strip()
+        if item_intake.ABORT.fullmatch(words):
             row = self.conv._by_code(req["draft_code"], ("proposed",)) if req["draft_code"] else None
             if row is not None:
                 self.conv._move(row, "rejected", reason="owner")
@@ -621,6 +625,27 @@ class Dispatcher:
             self.conv.requests.mark(req["request_id"], "cancelled", now)
             self.conv._reply(DROPPED)
             return "cancelled"
+        # Refusals and reminders only. The conversation still owns every approval.
+        near = parse_near(words) == "" or re.fullmatch(r"(?:looks|sounds) good[, ]+yes please[.!]*", words, re.I)
+        hold = re.fullmatch(r"no[, ]+wait[.!]*", words, re.I)
+        if not msg.attachments and (near or hold):
+            code = req["draft_code"]
+            row = self.conv._by_code(code, ("proposed",)) if code else None
+            if row is not None and self.conv._expiry(row) > now:
+                self.conv._reply(f"Reply yes {code} to publish." if near else
+                                 f"Nothing is published. Keep it, change something, or say no {code}.")
+            else:
+                self.conv._reply(req["question"] or "Nothing is waiting to publish.")
+            return "near-approval" if near else "question"
+        unknown = parse_unknown_code(words)
+        if not unknown and parse_keyword(words) is None:
+            # The shared parser requires a digit; a bad code like 'zzzz' still
+            # isn't a product name or a supplier answer.
+            match = re.fullmatch(r"(?:yes|approv(?:e|ed))\s+([a-z0-9]{4,12})[.!]*", words, re.I)
+            unknown = match[1].lower() if match else None
+        if unknown and not msg.attachments:
+            self.conv._reply(self.conv._no_target(unknown, [], []), long_ok=True)
+            return "no-target"
         # Keep every accepted source word across edits, not the financial clauses.
         asked = (req["asked_slot"] or "").removeprefix(item_intake.PREFIX)
         if req["slots"].get("intake", {}).get("reading_photo"):
@@ -631,7 +656,7 @@ class Dispatcher:
             slots = {**req["slots"], "intake": {**req["slots"]["intake"], "reading_photo": False}}
             req = {**req, "slots": slots}
             if not slots.get("name"): asked = "name"
-        if req["state"] == "drafted" and simple.NEXT.fullmatch(msg.text.strip()):
+        if req["state"] == "drafted" and simple.NEXT.fullmatch(words):
             row = self.conv._by_code(req["draft_code"], ("proposed",))
             if row is not None and self.conv._expiry(row) > now:
                 shown = self.conv.editor.show(row["change_id"]).get("draft")
@@ -661,6 +686,12 @@ class Dispatcher:
             req = self.conv.requests.get(self._owner(), now)
             skill = self.registry.get(req["skill"]) if req is not None and req["skill"] and req["state"] == "open" else None
             if req and self.simple_intake(req):
+                from hass.chat.commands import parse_near
+                if (req["state"] == "drafted" and req["draft_code"] and req["slots"].get("intake", {}).get("simple")
+                        and parse_near(text or "") == ""):
+                    row = self.conv._by_code(req["draft_code"], ("proposed",))
+                    if row is not None and self.conv._expiry(row) > now:
+                        return True  # _simple_answer gives the code, never an approval
                 return not item_intake.CODED_KEYWORD.match(text or "") and not item_intake.YES_FULL.fullmatch(text or "") and not item_intake.NO_FULL.fullmatch(text or "")
             if self._intake_open(req, skill):  # HASS-INTAKE-2: his answer to an intake question, never an approval (a coded yes is)
                 return not item_intake.CODED_KEYWORD.match(text or "")

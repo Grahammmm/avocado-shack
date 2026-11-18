@@ -5,7 +5,7 @@
     python3 hass/social_draft.py --maker KEY
     python3 hass/social_draft.py --recap EVENT_ID
 
-Prints one JSON object. Success: {"draft": true, "image", "alt", "caption"} built only from the product's
+Prints one JSON object. Success: {"draft": true, "image", "alt", "caption", "illustration"} (illustration: true unless the image is an installed owner photo, HOME_IMAGE_RE) built only from the product's
 stored name, description, image, imageAlt and its maker's name and place (caption <= 2200 characters, at most
 5 hashtags: #AvocadoShack plus one fixed tag per category, never derived from free text). Refusal (exit 1):
 {"draft": false, "reason"}: "cannot read content" | "no such product" | "not on the site" | "no photo on the site" |
@@ -42,7 +42,7 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass.content_model import CATEGORIES, CONTENT_DIR, INVISIBLE_RE, SITE_DIR, ContentError, load_content  # noqa: E402
+from hass.content_model import CATEGORIES, CONTENT_DIR, HOME_IMAGE_RE, INVISIBLE_RE, SITE_DIR, ContentError, load_content  # noqa: E402
 from hass.ops import hikes  # noqa: E402
 
 MAX_CAPTION = 2200
@@ -94,7 +94,7 @@ def build(content, product_id: str, site_dir: Path = SITE_DIR) -> dict:
     if len(caption) > MAX_CAPTION: return refuse("caption too long")
     alt = product.get("imageAlt")
     alt = alt if _line(alt) and not _TAG_RE.search(alt) else name
-    return {"draft": True, "image": product["image"], "alt": alt, "caption": caption}
+    return {"draft": True, "image": product["image"], "alt": alt, "caption": caption, "illustration": not HOME_IMAGE_RE.fullmatch(product["image"])}
 
 
 def _when(starts_at):  # (aware start, "Saturday, October 17 at 9:00 am (Pacific)"), or None when unreadable

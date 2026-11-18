@@ -46,7 +46,7 @@ def health(text):
     ids = set()
     for p in problems:
         check = p.get("check") if isinstance(p, dict) else None
-        if not isinstance(check, str) or not CHECK_ID.match(check):
+        if not isinstance(check, str) or not CHECK_ID.fullmatch(check):
             raise ValueError("a problem has no valid check id")
         ids.add(check)
     if ok == bool(problems):

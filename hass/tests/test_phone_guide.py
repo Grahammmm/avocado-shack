@@ -25,6 +25,19 @@ AV2152_PLAIN = (
     "Set the home notice to \"Closed Thanksgiving Day\" from 2026-11-26 through 2026-11-26.",
 )
 AV2152_COMMANDS = {"history notice": "history", "again a1b2": "again"}  # AV2152-14
+AV0222_EXAMPLES = (  # AV0222-12: (plain words?, text)
+    (True, "Make the green jam sold out"), (True, "Add Test Orchard quince, brand Test Orchard"),
+    (True, "Add a maker called Test Orchard, with no story"), (True, "thanks"), (True, "\U0001f44d"),
+    (True, "Set the quince price to $3"), (False, "photos to take"), (False, "undo that"), (False, "never mind"))
+AV0222_VERBS = {"photos to take": "photos", "undo that": "undo", "never mind": "reject"}
+AV0222_EXPLAINS = {  # one phrase per owner explanation; dropping any one is reported by name
+    "one brand": "needs one brand, not a second card brand", "alias adds no facts": "naming it adds no facts",
+    "no invented story": "A maker may have no story: Hass never invents one", "thanks changes nothing": "`thanks` makes no change",
+    "thumbs-up is not approval": "a thumbs-up is not an approval", "price draft refused": "nothing is drafted for a price-only change",
+    "photos list is saved only": "saved active products that still use a catalog picture", "photos not a live check": "not a live-site or photo-authenticity check",
+    "history approved in Pacific": "when a change was approved, in Pacific time", "history time unknown": "`time unknown`",
+    "undo that needs a new yes": "needs its own new `yes` code", "never mind is not an undo": "cancels a waiting draft or question without undoing anything",
+    "ambiguity asks": "Hass asks instead of guessing"}
 PRIVATE_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w+|\+\d|http://", re.I)
 
 
@@ -53,6 +66,8 @@ def problems(doc: str) -> list:
     out += [f"required example missing or misclassified: {AV1937_POST}"] if (False, AV1937_POST) not in found else []
     out += [f"required example missing or misclassified: {t}" for t in AV2152_PLAIN if (True, t) not in found]
     out += [f"required example missing or misclassified: {t}" for t in AV2152_COMMANDS if (False, t) not in found]
+    out += [f"required example missing or misclassified: {t}" for plain, t in AV0222_EXAMPLES if (plain, t) not in found]
+    out += [f"required explanation missing ({name}): {text}" for name, text in AV0222_EXPLAINS.items() if text not in doc]
     headings = re.findall(r"^## (.+)$", doc, re.M)
     if headings != SECTIONS:
         out.append(f"sections are {headings}, not {SECTIONS}")
@@ -185,6 +200,38 @@ class PhoneGuideTest(unittest.TestCase):
 
     def test_readme_links_the_guide(self):
         self.assertIn("](PHONE_GUIDE.md)", (DOCS / "README.md").read_text("utf-8"))
+
+
+    def test_av0222_examples_present_and_routed(self):  # AV0222-12
+        from hass.social_message import classify_social
+        found = {(p, t) for p, t, _ in sends(self.doc)}
+        self.assertLessEqual(set(AV0222_EXAMPLES), found)
+        for text, name in AV0222_VERBS.items():
+            self.assertEqual(verb(text), name)
+        for plain, text in AV0222_EXAMPLES:
+            if plain:
+                self.assertIsNone(verb(text), text)
+        self.assertEqual((classify_social("thanks"), classify_social("\U0001f44d")), ("social", "near"))
+        self.assertIsNone(classify_social("Set the quince price to $3"))
+        from hass.interpret_check import PRICE_REPLY
+        self.assertIn("doesn't show prices", PRICE_REPLY)  # the doc's price sentence follows the shared reply
+        self.assertIn("without the price", PRICE_REPLY)
+        self.assertEqual(problems(self.doc), [])
+        self.assertLessEqual(len(self.doc.splitlines()), 110)
+
+    def test_missing_or_reclassified_new_example_fails(self):  # AV0222-12
+        for plain, text in AV0222_EXAMPLES:
+            missing = f"required example missing or misclassified: {text}"
+            line = f"Send{' (plain words)' if plain else ''}: `{text}`"
+            self.assertIn(line, self.doc)
+            self.assertIn(missing, problems(self.doc.replace(f"`{text}`", "`gone`")), text)
+            flipped = f"Send{'' if plain else ' (plain words)'}: `{text}`"
+            self.assertIn(missing, problems(self.doc.replace(line, flipped)), text)
+
+    def test_owner_explanations_do_not_promise_apply(self):  # AV0222-12
+        for name, text in AV0222_EXPLAINS.items():
+            self.assertEqual(self.doc.count(text), 1, text)
+            self.assertEqual(problems(self.doc.replace(text, "gone")), [f"required explanation missing ({name}): {text}"], name)
 
 
 if __name__ == "__main__":

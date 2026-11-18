@@ -104,6 +104,114 @@ class SimpleIntake(unittest.TestCase):
         self.assertEqual(d, "proposed", said)
         self.assertIn("$2.00", said[0])
 
+    def test_f17_mistyped_approval_does_not_answer_the_name_question(self):
+        chat, _ = self.chat()
+        chat.say(FINANCE)
+        original = chat.live()
+        assert original is not None
+        self.assertEqual(original["asked_slot"], ii.PREFIX + "name")
+        disposition, (said,) = chat.say("yes zzzz")
+        self.assertEqual(disposition, "no-target", said)
+        self.assertEqual(chat.live(), original)
+        self.assertEqual(chat.drafts(), [])
+        chat.say("Wood Glue")
+        named = chat.live()
+        assert named is not None
+        self.assertEqual(named["slots"]["name"], "Wood Glue")
+        self.assertEqual(chat.asked, [])
+
+    def test_chatter_leaves_the_waiting_draft_and_request_unchanged(self):
+        chat, _ = self.chat()
+        chat.say(FINANCE, base.JAR)
+        draft, = chat.drafts()
+        original = chat.live()
+        code = draft["code"]
+        for text, expected in (
+            ("looks good yes please!", f"Reply yes {code} to publish"),
+            ("looks good", f"Reply yes {code} to publish"),
+            ("yes please", f"Reply yes {code} to publish"),
+            ("no wait", f"Nothing is published. Keep it, change something, or say no {code}"),
+            ("what time do we close sunday", "listing is unchanged"),
+            ("is this from Miners?", "listing is unchanged"),
+            (f"yes {code}x", "I don't have a change with that code"),
+            ("You should get that information here.", "Which part of the listing"),
+        ):
+            with self.subTest(text=text):
+                _, (said,) = chat.say(text)
+                self.assertIn(expected, said)
+                if text == f"yes {code}x":
+                    self.assertIn("yes " + code, said)
+                self.assertEqual(chat.drafts(), [draft])
+                self.assertEqual(chat.live(), original)
+                self.assertEqual(chat.commits(), 0)
+        self.assertEqual(chat.asked, [])
+
+    def test_bare_undo_keeps_waiting_listing_instead_of_reverting_older_change(self):
+        chat, _ = self.chat()
+        chat.say(FINANCE, base.JAR)
+        chat.say("call it Wood Glue Sample")
+        chat.say("yes " + chat.drafts()[0]["code"])
+        self.assertEqual(chat.commits(), 1)
+        disposition, said = chat.say(FINANCE, base.BAG)
+        self.assertEqual(disposition, "proposed", said)
+        saved, waiting = chat.drafts()
+        original = chat.live()
+        code = waiting["code"]
+        self.assertNotEqual(saved["code"], code)
+        self.assertEqual(waiting["state"], "proposed")
+
+        _, (said,) = chat.say("undo")
+        self.assertEqual(said, f"Nothing is published. Keep it, change something, or say no {code}.")
+        self.assertEqual(chat.drafts(), [saved, waiting])
+        self.assertEqual(chat.live(), original)
+        self.assertEqual(chat.commits(), 1)
+
+        chat.say("no " + code)
+        disposition, (said,) = chat.say("undo")
+        self.assertEqual(disposition, "proposed", said)
+        self.assertEqual(json.loads(chat.drafts()[-1]["ops_json"]),
+                         [{"op": "history.revert", "args": {"changeId": saved["change_id"]}}])
+        self.assertEqual(chat.commits(), 1)
+        self.assertEqual(chat.asked, [])
+
+    def test_miners_source_edit_keeps_owner_chatter_out_of_prepared_listing(self):
+        chat, _ = self.chat()
+        _, (initial,) = chat.say(FINANCE, base.JAR)
+        self.assertIn("Source line: Ask us about the source in store.", initial)
+        original, = chat.drafts()
+        original_ops = json.loads(original["ops_json"])
+        original_add, = [op["args"] for op in original_ops if op["op"] == "product.add"]
+        text = ('Nice. Just change one thing "ask us about the source in the store". '
+                'You should get that info here. This is from "miners".')
+
+        disposition, (said,) = chat.say(text)
+        self.assertEqual(disposition, "proposed", said)
+        revised, = chat.drafts()
+        self.assertEqual(revised["code"], original["code"])
+        revised_ops = json.loads(revised["ops_json"])
+        revised_add, = [op["args"] for op in revised_ops if op["op"] == "product.add"]
+        self.assertEqual(revised_add["description"], original_add["description"])
+        self.assertEqual(revised_add["supplier"], "Miners")
+        self.assertIn("Source line: From Miners", said)
+        for chatter in ("just change one thing", "you should get that info"):
+            self.assertNotIn(chatter, revised["ops_json"].lower())
+            self.assertNotIn(chatter, said.lower())
+        self.assertEqual(chat.commits(), 0)
+        self.assertEqual(chat.asked, [])
+
+    def test_say_its_appends_only_the_explicit_description_words(self):
+        chat, _ = self.chat()
+        chat.say(FINANCE, base.JAR)
+        original = chat.live()
+        disposition, (said,) = chat.say("Say it’s suitable for furniture.")
+        self.assertEqual(disposition, "proposed", said)
+        edited = chat.live()
+        assert original is not None and edited is not None
+        self.assertEqual(edited["draft_code"], original["draft_code"])
+        self.assertEqual(edited["slots"]["description"],
+                         original["slots"]["description"] + " suitable for furniture.")
+        self.assertEqual(chat.commits(), 0)
+
     def test_forbidden_edit_does_not_change_approvable_draft_and_photo_money_ignored(self):
         chat, _ = self.chat({**DETAILS, "price": "99.00", "stock": 999})
         _, said = chat.say(FINANCE, base.JAR)
@@ -261,7 +369,7 @@ class SimpleIntake(unittest.TestCase):
                 self.assertNotIn("Incredibly Strong", description)
                 self.assertNotIn("size", description.lower())
                 self.assertEqual(cloud, [])  # unchanged owner-finance local-only guard
-                self.assertEqual(len(requests), 0 if when == "caption" else 1)
+                self.assertEqual(requests, [])  # Text has a typed fact; the complete photo caption already skipped.
                 if requests:
                     self.assertEqual(requests[0]["format"]["additionalProperties"], False)
                 self.assertNotIn("$", json.dumps(chat.live()["texts"]))
