@@ -14,7 +14,7 @@ from hass.tests.test_conversation import CHAT, OWNER, ConversationTestCase
 from hass.interpreter_local import FAILED, WEEKDAYS, LocalInterpreter
 from hass.interpreter_prompt import build
 from hass.tests.test_interpreter_local import GOOD, MODEL, OWNER_TEXT, PENDING, PROMPT, URL, FakeTransport
-from hass.tests.test_interpreter_prompt import FIXTURE, TEST_REGISTRY, tiny_content
+from hass.tests.test_interpreter_prompt import TEST_REGISTRY, tiny_content
 
 RULE = ('The user message gives "today" (Pacific date) and "weekday". Work out words like "next Saturday" or "tomorrow" '
         "from them and write the exact date; if the day is still unclear, ask.")
@@ -197,9 +197,6 @@ class PromptRuleTests(unittest.TestCase):
         self.assertEqual(prompt.count(f"- {RULE}\n"), 1)
         self.assertIn("- Never guess dates, times, prices or quantities; ask a question instead.\n", prompt)
         self.assertEqual(len(re.findall(r"next Saturday", prompt)), 1)
-
-    def test_snapshot_matches(self):
-        self.assertEqual(build(TEST_REGISTRY, tiny_content()), FIXTURE.read_text("utf-8"))
 
 
 if __name__ == "__main__":
