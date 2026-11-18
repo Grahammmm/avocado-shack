@@ -106,7 +106,7 @@ def _existing(path: Path):
 
 def _write_new(final: Path, data: bytes, created=None) -> None:
     """Write via a 0600 temp file in the same dir, fsync, then hard-link; never overwrites or follows a symlink.
-    created (AV2152-04): a list that gets (path, device, inode) once the new file is linked, for a batch rollback."""
+    created (AV2152-04): a list that gets (path, device, inode, size, sha256) once the new file is linked, for a batch rollback."""
     fd, tmp = tempfile.mkstemp(dir=final.parent, prefix=".tmp-")
     try:
         with os.fdopen(fd, "wb") as fh:
@@ -116,7 +116,7 @@ def _write_new(final: Path, data: bytes, created=None) -> None:
             ident = os.fstat(fh.fileno())
         try:
             os.link(tmp, final, follow_symlinks=False)
-            if created is not None: created.append((final, ident.st_dev, ident.st_ino))
+            if created is not None: created.append((final, ident.st_dev, ident.st_ino, len(data), hashlib.sha256(data).hexdigest()))
         except FileExistsError: raise Refused("corrupt-store") from None
     finally:
         try: os.unlink(tmp)
@@ -187,10 +187,18 @@ def store_originals(root, items, *, received_at: str, source: str) -> list:
     return out
 
 def _unwind(created) -> None:
-    for path, dev, ino in reversed(created):
+    """Remove only a file that is still exactly what this batch wrote: a regular file with the recorded device, inode,
+    size and sha256 (a freed inode number is reused at once, so identity alone is not enough). Anything else stays."""
+    for path, dev, ino, size, digest in reversed(created):
         try:
             st = os.lstat(path)
-            if stat.S_ISREG(st.st_mode) and (st.st_dev, st.st_ino) == (dev, ino): os.unlink(path)
+            if not (stat.S_ISREG(st.st_mode) and (st.st_dev, st.st_ino) == (dev, ino)): continue
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, "rb") as fh:
+                now = os.fstat(fd)
+                if not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (dev, ino) or now.st_size != size: continue
+                if hashlib.sha256(fh.read(size + 1)).hexdigest() != digest: continue
+            os.unlink(path)
         except OSError: pass
 
 def check_photo(data: bytes) -> str:
