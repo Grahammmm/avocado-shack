@@ -223,7 +223,7 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(acceptance.MAP["H02"], ("test_editor", "test_maker_product_batch"))
         self.assertEqual(acceptance.MAP["H03"], ("test_catalog_ops", "test_clear_availability",
                          "test_product_new", "test_maker_hide_products", "test_maker_optional_url",
-                         "test_product_default_brand"))
+                         "test_product_default_brand", "test_maker_optional_story"))
         self.assertEqual(acceptance.MAP["H12"], ("test_attachment_reply", "test_photo_draft",
                          "test_photo_on_product", "test_photo_new_product", "test_photo_home_image",
                          "test_photo_batch", "test_media_batch"))
@@ -240,14 +240,23 @@ class RunnerTest(unittest.TestCase):
                          "test_unknown_approval_code", "test_again", "test_interpreter_prompt_shelf_maker",
                          "test_interpreter_prompt_descriptions", "test_claims_health_awards",
                          "test_interpreter_no_undo", "test_field_words", "test_question_missing_fields",
-                         "test_named_records", "test_interpreter_aliases", "test_social_message"))
+                         "test_named_records", "test_interpreter_aliases", "test_social_message",
+                         "test_interpret_check_enum", "test_shelf_labels",
+                         "test_interpret_check_prices", "test_interpreter_prompt_design",
+                         "test_proposal_notice_words", "test_shelf_check_flow"))
         self.assertEqual(acceptance.MAP["H06"], ("test_preview", "test_undo", "test_history_search",
-                         "test_store_field_undo"))
+                         "test_store_field_undo", "test_history_times",
+                         "test_undo_cancel_phrases"))
+        self.assertEqual(acceptance.MAP["H10"], ("test_label_reader", "test_label_reader_amounts",
+                         "test_label_question_brand", "test_photos_to_take", "test_commands_doc"))
+        self.assertEqual(acceptance.MAP["H15"], ("test_memory", "test_memory_source",
+                         "test_memory_alias", "test_memory_listing", "test_memory_unchanged",
+                         "test_memory_chat", "test_limits_doc"))
         self.assertEqual(acceptance.MAP["H13"], ("test_store_ops", "test_store_intro",
                          "test_store_headline", "test_store_story",
                          "test_store_home_image", "test_store_clear_home_image", "test_notice_start",
                          "test_club_intro"))
-        for id_ in ("H04", "H05", "H06", "H12", "H13"):
+        for id_ in ("H03", "H04", "H05", "H06", "H10", "H12", "H13", "H15"):
             self.assertEqual(len(acceptance.MAP[id_]), len(set(acceptance.MAP[id_])))
 
     def test_av1622_modules_selected_once(self):
@@ -347,6 +356,50 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(len(rec.names), len(set(rec.names)))
             self.assertEqual([n for n in rec.names if n[len("hass.tests."):] in mods],
                              ["hass.tests." + m for m in mods])
+
+    def test_av0222_modules_selected_once_in_order(self):
+        class Recorder(unittest.TestLoader):
+            def __init__(self):
+                super().__init__()
+                self.names = []
+
+            def loadTestsFromName(self, name, module=None):
+                self.names.append(name)
+                return unittest.TestSuite([unittest.FunctionTestCase(lambda: None)])
+
+        want = {"H03": ("test_maker_optional_story",),
+                "H05": ("test_interpret_check_enum", "test_shelf_labels",
+                        "test_interpret_check_prices", "test_interpreter_prompt_design",
+                        "test_proposal_notice_words", "test_shelf_check_flow"),
+                "H06": ("test_history_times", "test_undo_cancel_phrases"),
+                "H10": ("test_photos_to_take", "test_commands_doc"),
+                "H15": ("test_memory_alias", "test_memory_listing", "test_memory_unchanged",
+                        "test_memory_chat", "test_limits_doc")}
+        for id_, mods in want.items():
+            rec = Recorder()
+            rows, code, probs = acceptance.run({id_: acceptance.MAP[id_]}, rec, expected_ids=(id_,))
+            self.assertEqual((code, probs), (0, []))
+            self.assertEqual(rec.names, ["hass.tests." + m for m in acceptance.MAP[id_]])
+            self.assertEqual([n for n in rec.names if n[len("hass.tests."):] in mods],
+                             ["hass.tests." + m for m in mods])
+        # omission of a new member is detected by the pinned tuple
+        self.assertNotEqual(acceptance.MAP["H10"][:-1], ("test_label_reader",
+                            "test_label_reader_amounts", "test_label_question_brand",
+                            "test_photos_to_take", "test_commands_doc"))
+        # a missing module file is a bad map (exit 2) before anything runs
+        rec = Recorder()
+        rows, code, probs = acceptance.run({"H10": ("test_photos_to_take", "test_no_such_av0222")},
+                                           rec, expected_ids=("H10",))
+        self.assertEqual((rows, code, rec.names), ([], 2, []))
+        self.assertIn("missing module: test_no_such_av0222", probs)
+        # H25 stays a release step even beside feature rows
+        rec = Recorder()
+        rows, code, _ = acceptance.run({i: acceptance.MAP[i] for i in ("H10", "H25")}, rec,
+                                       expected_ids=("H10", "H25"))
+        self.assertEqual(code, 0)
+        self.assertEqual((rows[1]["id"], rows[1]["result"], rows[1]["note"]),
+                         ("H25", "not covered", "release step"))
+        self.assertNotIn("H25", [r["id"] for r in rows if r["result"] == "pass"])
 
     def test_h25_stays_release_step(self):
         out = io.StringIO()

@@ -66,9 +66,9 @@ class BareUndoSkipsUndoTests(H06TestCase):
         a = self.apply("desc")
         self.undo_proposal(a)
         u = self.approve()
-        self.assertEqual(self.say(f"undo {u['code']}"), "not-drafted")
+        self.assertEqual(self.say(f"undo {u['code']}"), "no-target")
         self.assertEqual(self.replies(),
-                         ["I couldn't undo that, so nothing changed. Could you say it another way?"])
+                         [f"That code is for an undo. To bring the change back, send again {a['code']}."])
         self.assertEqual([d["state"] for d in self.drafts()], ["reverted", "verified"])
 
     def test_proposed_undo_does_not_change_the_choice(self):

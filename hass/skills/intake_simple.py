@@ -14,7 +14,9 @@ SUPPLIER = re.compile(r"(?:this is from\s+|(?:the\s+)?(?:source|supplier)(?:\s+i
 SOURCE_HINT = re.compile(r"\b(?:source|supplier|from)\b", re.I)
 SUPPLIER_QUESTION = "What supplier name should the source line show?"
 SUPPLIER_UNCERTAIN = re.compile(r"\b(?:or|maybe|probably|think|guess|please|change|add|remove|replace|instead|not)\b", re.I)
-COPY = re.compile(r"(?:add|description)\s*:\s*(.+)", re.I)
+COPY = re.compile(r"(?:(?:add|description)\s*:\s*|say\s+it['’]s\s+)(.+)", re.I)
+QUESTION = re.compile(r"(?:what|when|where|who|why|how)\b|"
+                      r"(?:is|are|can|could|do|does|did|will|would|should)\s+(?:it|this|that|these|they|i|we|you|the)\b", re.I)
 
 
 def public_sources(slots):
@@ -86,6 +88,9 @@ def fill(slots, texts):
 
 def edit(slots, text, asked=None):
     """Return changed slots, accepted public words, and at most one clarification."""
+    words = text.strip()
+    if not NEXT.fullmatch(words) and not COPY.fullmatch(words) and (words.endswith("?") or QUESTION.match(words)):
+        return slots, "", "I can't answer that here. The listing is unchanged."
     out = dict(slots)
     got = dict(out.get("intake") or {})
     public, finance = ii.caption_answers(text)

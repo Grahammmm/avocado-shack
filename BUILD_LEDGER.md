@@ -2760,6 +2760,110 @@ Limits: H25 stays a release step. The spec's name `test_maker_product_one_draft`
 
 Issue #2 (photo and voice trial): AV1937-01 adds a photo-to-home-page path on sample data only; a live photo or voice trial is not shown here. Issue grouping is in each section's first paragraph, as in earlier roll-ups.
 
+## Site: static home Next hike reads published data (AV0007-01) — November 5, 2026
+
+Branch rb/av0007-01 from origin/main (AV0007-01, issue #2, PR #454: merged as dfdf8eaf068d4ef1c0e16867504421d84d7576ad). For Michael: on the static website, where there is no club service, the home page Next hike line now reads the published community data, so it shows the earliest eligible hike instead of staying blank.
+
+Checks at PR head b51dfa004811ee09b10976dd37bb398d8d9e5f12 (recorded in PR #454): `node storefront-mockup/static-site-qa.cjs` against a published copy — Static published site passed, and the same QA against the old `community.js` timed out; `python3 -B storefront-mockup/community-qa.py` against an isolated server — Community UI passed; the edited `storefront-mockup/community-ui-qa.cjs` is the case file for that run; PREPUSH-TESTS not run (JavaScript-only change).
+
+Limits: A valid live answer still wins, even when empty or cancelled-only; static fallback never uses sample hikes or the preview file, and cancelled, completed, past or missing or malformed data leaves the line hidden. It is public-site support, not an H claim, and nothing was published.
+
+## H05: interpreter requests keep undo out (AV0007-02) — November 5, 2026
+
+Branch rb/av0007-02 from origin/main (AV0007-02, issue #1, PR #452: merged as 597724735fdb740f2dde362079a2e4c922922f46). For Michael: if a message would make the interpreter undo something, the whole result is refused with one fixed reply telling you to send `undo`, `undo <code>` or `history`, and no partial draft is made.
+
+Checks at PR head 6e727b9304ef41f5087362e2c4e731032d4f1dd4 (recorded in PR #452): `python3 -B -m unittest hass.tests.test_interpreter_no_undo hass.tests.test_interpreter_prompt hass.tests.test_claims hass.tests.test_claims_lists` — 43 tests, OK; a wider group of prompt, check, eval, undo, conversation and demo modules — 141 tests, OK; the `test_club_intro` check and PREPUSH-TESTS were not run.
+
+Limits: history.revert remains available to the editor and the `undo` command, not to the interpreter; the registry, `undo` and `Editor.prepare` are unchanged.
+
+## H05: missing-field questions in owner words (AV0007-03) — November 5, 2026
+
+Branch rb/av0007-03 from origin/main (AV0007-03, issue #1, PR #462: merged as b3542aa10283b28156f5ab375d2b5eac3eb2c188). For Michael: when a change needs more details, the question names the fields in plain words, and a product with no photo is told to send the photo with the product name as its caption.
+
+Checks at PR head 399ad46ac87faa5210899d641d30e88d0189a4f4 (recorded in PR #462): `python3 -B -m unittest hass.tests.test_field_words hass.tests.test_question_missing_fields` — 9 tests, OK; the catalog, route, hike and conversation baselines — 114 and 116 tests, OK; PREPUSH-TESTS not recorded. The ordered photo-question test named in the spec was not added because no batch photo path existed on main.
+
+Limits: missing-field IDs remain machine-readable, stored with the pending entry so the answer still fills the right arguments; unlisted ids keep their id in the question; a hike repeat question is unchanged.
+
+## H03: default card brand for a new product (AV0007-04) — November 6, 2026
+
+Branch rb/av0007-04 from origin/main (AV0007-04, issue #1, PR #468: merged as 3cab48d3a0cccfc25362969b12faca4bf7c2c413). For Michael: adding a product without saying a card brand no longer fails; the card shows the brand, or From the market when the brand is Producer not identified.
+
+Checks at PR head eb923697664be4cbd9e4c82776665b0ea8777291 (recorded in PR #468): `python3 -B -m unittest hass.tests.test_product_default_brand` — 7 tests, OK; PREPUSH-TESTS NOT-RUN and a few errors seen in the wider hass run were not triaged by the PR, so CI was the check.
+
+Limits: default display brand applies to future adds only; an explicit value, valid or not, is used and validated as before, and `product.edit` is unchanged.
+
+## H05: named records in proposals, show and history (AV0007-05) — November 15, 2026
+
+Branch rb/av0007-05 from origin/main (AV0007-05, issue #1, PR #865: merged as 19a51190f85e00faee7ec1c2198e9b7043668604). For Michael: proposal, show and history lines name the record, show a rename as the new name with was and the old name, give a hike its Pacific day, and read availability in the website words (H05, H06).
+
+Checks at PR head b0265dfbc4e243cfca092cea8f9490840ee743a0 (recorded in PR #865): `python3 -B -m unittest hass.tests.test_named_records hass.tests.test_history_search` — 18 tests, OK; the full hass suite in four slices, with every failure an intended-format pin that was updated; a final group of sandbox, shelf-check, skills, demo and chat-scenario modules including `hass.tests.test_named_records` — 142 tests, OK. The PR did not restore visible ids, arrows or ISO dates, which the owner-voice rules ban.
+
+Limits: summaries do not migrate old history, so older stored lines keep their old wording; show and history stay read-only.
+
+## H05: owner aliases in interpreter requests (AV0007-06) — November 5, 2026
+
+Branch rb/av0007-06 from origin/main (AV0007-06, issue #2, PR #459: merged as 5c556a16af513448b2cc41f01a504d111ed25b39). For Michael: a name you saved as an alias now reaches the interpreter, so a change request that uses your own word finds the right product or maker.
+
+Checks at PR head b39aec55b0291afa562c102234bf078a94154271 (recorded in PR #459): `python3 -B -m unittest hass.tests.test_interpreter_aliases hass.tests.test_interpreter_notes hass.tests.test_interpreter_no_undo hass.tests.test_interpreter_prompt hass.tests.test_commands_doc hass.tests.test_claims` — the PR records 149 tests, OK, for a longer group; conversation, memory-chat and acceptance-runner modules — 39 tests, OK; PREPUSH-TESTS not run.
+
+Limits: aliases supply IDs, never claims; only the newest 50 live aliases are sent, dangling ones are dropped, and claim checks still read only the message.
+
+## H17: thanks, greetings and emoji skip the interpreter (AV0007-07) — November 6, 2026
+
+Branch rb/av0007-07 from origin/main (AV0007-07, issue #2, PR #478: merged as f6029ea8c51fe15b5aca20e1e4824f74b53ef427). For Michael: a message that is only thanks, a greeting or emoji gets a short reply that nothing changed, with no interpreter call and no daily count.
+
+Checks at PR head 4a06fa25552895c8fd0a627dbac898430560ba14 (recorded in PR #478): `python3 -B -m unittest hass.tests.test_social_message hass.tests.test_owner_text_cap hass.tests.test_pending_ops hass.tests.test_needs_details_expiry hass.tests.test_question_missing_fields hass.tests.test_commands_doc` — OK; the PR records the full list of nine modules and 18 new tests; PREPUSH-TESTS not recorded.
+
+Limits: thanks and emoji never approve; a thumbs-up or check mark alone gets the existing near-approval reply, and duplicate, owner, reaction and attachment precedence is unchanged.
+
+## Audit: fixed site copy claims (AV0007-08) — November 15, 2026
+
+Branch rb/av0007-08 from origin/main (AV0007-08, issue #3, PR #852: merged as e8085ab2340aed968bf3828546324e472d6a34e2). For Michael: one report, `reports/site-copy-claims-2026-11.md`, lists 109 claims in the fixed website copy with the record that supports each or the words no record, plus 12 questions for you and G.
+
+Checks at PR head 4c5114d52036579c11f5f2052795ba670b4733e4 (recorded in PR #852): `python3 -B -m unittest hass.tests.test_content hass.tests.test_publish hass.tests.test_publish_404` — 51 tests, OK; `git diff --check` clean; an uncommitted script checked that every cited file and line exists, that each quote is on its cited line and 21 content counts, with 0 failures; PREPUSH-TESTS NOT-RUN. Audited commit 77ed368d15c62d8cb53000b56b44aff3eaebc20e.
+
+Limits: audit changes no copy and writes no replacement copy; no record is not proof a claim is false; source URLs are repository-recorded, not freshly checked, and two photo descriptions are the auditor's own observation.
+
+## H18: trial proposal and handover checklist (AV0007-09) — November 4, 2026
+
+Branch rb/av0007-09 from origin/main (AV0007-09, issue #2, PR #377: merged as 23891bfcae07bc0073c77c384631408bbff17a6c). For Michael: the trial plan has six more tasks (home-page notice, home-page photo, add, hide and bring back a route idea) and the handover guide links it and lists three open public-site decisions.
+
+Checks at PR head 165b5a6f6b6ccd8542cea046c8c7f59a1473fec8 (recorded in PR #377): `python3 -B -m unittest hass.tests.test_commands_doc hass.tests.test_phone_guide hass.tests.test_store_notice hass.tests.test_store_home_image hass.tests.test_route_add hass.tests.test_route_hide hass.tests.test_trial_handover_doc` — 67 tests, OK (run with the browser module path set); `git diff --check` clean; the new tasks in `docs/hass/TRIAL.md` and the links in `docs/hass/HANDOVER.md` checked against `hass/ops/home.py` and `hass/ops/routes.py`; PREPUSH-TESTS NOT-RUN.
+
+Limits: trial remains proposal, untried, and needs Michael and G to agree; no decision, provider, address, spend or logo is recorded, and the three open public-site decisions (H25-domain, H25-forms, H25-logo) stay open.
+
+## H09: interpreter eval set v9 (AV0007-10) — November 17, 2026
+
+Branch rb/av0007-10 from origin/main (AV0007-10, issue #1, PR #991: merged as 308eeeb22b415afab63e2d4f8e0884f70ab7a4f8). For Michael: the practice questions for the interpreter now include undo guidance, a brand-only product add, an owner alias and a missing-field photo answer; the count goes from 75 to 79.
+
+Checks at PR head f152901097b6483a8ab4299ea5747804d06a6cf9 (recorded in PR #991): `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_out hass.tests.test_interpreter_request_encode` — 66 tests, OK; the offline score gave 79 cases, 76 passed, and only the three deliberate negatives failed; PREPUSH-TESTS NOT-RUN.
+
+Limits: eval is offline with synthetic replies, so it makes no model-quality claim; scoring semantics are unchanged.
+
+## H25: acceptance map for owner-word modules (AV0007-11) — November 17, 2026
+
+Branch rb/av0007-11 from origin/main (AV0007-11, issue #3, PR #1006: merged as 211b3818d73e1fe04a34d7d6735d2b396226b212). For Michael: the acceptance runner now selects the AV0007-02 to -07 test modules under H03 and H05.
+
+Checks at PR head 632c1a830a36518b0614aa05555491a470a6466e (recorded in PR #1006): `python3 -B -m unittest hass.tests.test_acceptance_runner hass.tests.test_auto_policy` — 40 tests, OK; `python3 -B hass/acceptance.py --only H03,H05,H25` — H03 pass 55, H05 pass 161, H25 not covered; PREPUSH-TESTS NOT-RUN.
+
+Limits: H25 stays a release step; this is fixture coverage only, and the live phone, trial and launch checks remain open.
+
+## AV0007 milestone progress
+
+These are local Markdown notes, not GitHub issue updates or comments; each links the canonical section above and repeats no unit heading. Historical results stay in those sections and nothing here is a fresh run.
+
+### Issue #1 — working text demo
+
+Progress: [AV0007-02](#h05-interpreter-requests-keep-undo-out-av0007-02--november-5-2026) keeps undo out of the interpreter, [AV0007-03](#h05-missing-field-questions-in-owner-words-av0007-03--november-5-2026) asks for missing fields in owner words, [AV0007-04](#h03-default-card-brand-for-a-new-product-av0007-04--november-6-2026) defaults a new product's brand, [AV0007-05](#h05-named-records-in-proposals-show-and-history-av0007-05--november-15-2026) names records (H05, H06), and [AV0007-10](#h09-interpreter-eval-set-v9-av0007-10--november-17-2026) adds H09 offline eval cases. [AV0007-06](#h05-owner-aliases-in-interpreter-requests-av0007-06--november-5-2026) and [AV0007-07](#h17-thanks-greetings-and-emoji-skip-the-interpreter-av0007-07--november-6-2026) support text usability. Still open: H07, H08, H18 and H25 live requirements.
+
+### Issue #2 — small owner trial
+
+Progress: [AV0007-06](#h05-owner-aliases-in-interpreter-requests-av0007-06--november-5-2026) and [AV0007-07](#h17-thanks-greetings-and-emoji-skip-the-interpreter-av0007-07--november-6-2026) make text easier for the owner, [AV0007-09](#h18-trial-proposal-and-handover-checklist-av0007-09--november-4-2026) adds the H18 trial proposal, the photo-question aspect is in [AV0007-03](#h05-missing-field-questions-in-owner-words-av0007-03--november-5-2026), and [AV0007-01](#site-static-home-next-hike-reads-published-data-av0007-01--november-5-2026) is public-site support, not an H claim. Still open: the trial is a proposal and no trial or decision has been performed; H07, H08, H18 and H25 live requirements stay open.
+
+### Issue #3 — reliable everyday operation
+
+Progress: [AV0007-08](#audit-fixed-site-copy-claims-av0007-08--november-15-2026) audits fixed site copy with no copy change, [AV0007-09](#h18-trial-proposal-and-handover-checklist-av0007-09--november-4-2026) lists open public-site decisions, and [AV0007-11](#h25-acceptance-map-for-owner-word-modules-av0007-11--november-17-2026) adds H25 fixture coverage. Still open: H25 stays a release step, and H07, H08 and H18 live requirements remain open.
+
 ## Unknown approval codes and waiting drafts are named (AV2152-01) — November 5, 2026
 
 Branch rb/av2152-01 (PR #449, head f0fe70e7eac1, merged as cf3962cd973d0c3760aca616db9ee5ef79010514). For the owner: `yes a1b3` or `no a1b3` for a code that matches no draft now replies `No draft a1b3.`, and when drafts are waiting it lists each one as `<code>: <summary>; reply yes <code>.` instead of saying nothing is waiting. A code that exists in any state (expired, cancelled, replaced, applied) keeps its own state reply. Code change is in `_no_target` in `hass/conversation.py`; `hass/tests/test_cancel_question.py` was updated for the new unknown-code wording.
