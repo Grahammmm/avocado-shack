@@ -119,11 +119,15 @@ def caption_answers(caption, extracted=None):
     Ambiguous clauses stay untouched for the existing refusal/question path, not guessed.
     Repeated conflicting answers are not seeded.
     """
+    # The slash between two amounts is a separator, not the /lb or /each suffix.
+    caption = re.sub(r"^\s*(\$\d+(?:\.\d{1,2})?)\s*/\s*(?=sell(?:ing)?\b)", r"cost \1; ", caption, flags=re.I)
+    will_sell = r"(?:I['’]?ll\s+|(?:I\s+)?(?:will\s+)?)sell(?:ing)?\b"
     public, answers, conflicts = [], {}, set()
     model = commerce_answers(extracted)
-    for part in re.split(r"[,;\n]+|\s+and\s+(?=(?:I\s+)?(?:will\s+)?(?:sell|selling|bought|paid|\d)\b)"
-                         r"|(?<=\d)[.!]\s+(?=(?:I\s+)?(?:will\s+)?sell(?:ing)?\b)", caption, flags=re.I):
-        text = re.sub(r"^(?:I\s+)?(?:will\s+)?(?:just\s+(?=bought\b))?", "", part.strip().rstrip(".!"), flags=re.I)
+    for part in re.split(r"[,;\n]+|\s+and\s+(?=" + will_sell + r"|(?:I\s+)?(?:bought|paid|\d)\b)"
+                         r"|(?<=\w)[.!]\s+(?=" + will_sell + r")", caption, flags=re.I):
+        text = re.sub(r"^(?:I['’]?ll\s+(?=sell\b)|(?:I\s+)?(?:will\s+)?(?:just\s+(?=bought\b))?)",
+                      "", part.strip().rstrip(".!"), flags=re.I)
         got = {}
         purchase = re.fullmatch(r"bought\s+(\d+)(?:\s+of\s+(?:these|them))?\s+(?:at|for)\s+(.+)", text, re.I)
         money = re.fullmatch(r"(?:bought|paid|cost|sell|selling|price|retail)(?:\s+(?:it|them))?(?:\s+(?:for|at))?\s*:?\s+(.+)", text, re.I)

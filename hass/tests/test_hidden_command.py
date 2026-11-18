@@ -23,7 +23,8 @@ class HiddenParseTests(unittest.TestCase):
             self.assertIsNone(conversation.parse_command(text), text)
 
     def test_help_line_and_read_only_verb(self):
-        self.assertIn("lists what's hidden", voice.plain(conversation.HELP_TEXT))
+        self.assertIn("hidden", voice.plain(conversation.HELP_TEXT))  # AV1052-12: named in the index; the full line is in `help hidden`
+        self.assertIn("lists what's hidden", voice.plain(conversation.help_detail("hidden")))
 
 
 class HiddenTests(StoreMixin, ConversationTestCase):

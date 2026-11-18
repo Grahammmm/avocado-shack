@@ -241,8 +241,8 @@ class ListingTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.replies(), [])
 
     def test_help_and_card(self):
-        line = "listing Etto - what's shown for one thing; hidden lists what's hidden"
-        self.assertIn(line, voice.plain(conversation.HELP_TEXT).splitlines())
+        line = "listing Etto - what's shown for one thing"  # AV1052-12: the full line is in `help listing`
+        self.assertIn(line, voice.plain(conversation.help_detail("listing")).splitlines())
         self.assertLessEqual(len(line), 70)
         self.assertEqual(verb("listing Etto"), "listing")
 

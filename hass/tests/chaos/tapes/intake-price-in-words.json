@@ -1,0 +1,22 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "openai",
+    "last_error": null,
+    "last_fallback": true,
+    "last_model": "qwen3.8:27b-thinkingcap-q6",
+    "last_primary_error": "codex-local",
+    "last_seconds": 14.03
+   },
+   "method": "interpret",
+   "result": {
+    "question": "Pomegranates are new to the shelf. Should I add them as a new fruit, and what should I call them (just “Pomegranates” or a brand name)?"
+   },
+   "route": "qwen",
+   "seconds": 14.03,
+   "turn": 1
+  }
+ ],
+ "case": "intake-price-in-words"
+}
