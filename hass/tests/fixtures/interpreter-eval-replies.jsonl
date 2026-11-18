@@ -93,3 +93,7 @@
 {"id": "e92", "reply": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-001", "available": "no"}}], "revises": null}}
 {"id": "e93", "reply": {"question": "There is no snacks shelf. Which shelf: Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread, Flowers or General?"}}
 {"id": "e94", "reply": {"ops": [{"op": "maker.add", "args": {"key": "Fixture Grove", "name": "Fixture Grove", "place": "Los Osos"}}], "revises": null}}
+{"id": "e95", "reply": {"ops": [{"op": "product.set_availability_all", "args": {"available": "yes", "shelf": "vegetables"}}], "revises": null}}
+{"id": "e96", "reply": {"ops": [{"op": "product.set_availability_all", "args": {"available": "no", "maker": "Cal Poly"}}], "revises": null}}
+{"id": "e97", "reply": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-001", "available": "no"}}], "revises": null}}
+{"id": "e98", "reply": {"unsupported": "design changes cannot be made by message yet"}}
