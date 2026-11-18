@@ -405,11 +405,14 @@ def run_case(case, mode, out_dir, budget=None, preview=False):
         commits = int(testkit._git(wt, "rev-list", "--count", "HEAD")) - base
         drafts = [dict(r) for r in conv.db.execute("SELECT code, state, summary, ops_json, base FROM drafts ORDER BY row_id")]
         public = _public_text(wt)
+        products = json.loads(public.removeprefix("const catalog=").split(";\n", 1)[0])
+        request = conv.requests.get(CHAT, clock["now"])
+        intake = (request or {}).get("slots", {}).get("intake", {})
         conv.db.close()
         if mode == "record": tape.save()
         result = {"id": case["id"], "feature": case["feature"], "turns": turns, "commits": commits, "drafts": drafts,
                   "tape_misses": tape.misses, "pngs": sorted(str(p) for p in case_dir.glob("*.png"))}
-        result["checks"] = check(case, result, public)
+        result["checks"] = check(case, result, public, products, intake)
         return result
     finally:
         repo.cleanup()
@@ -417,7 +420,7 @@ def run_case(case, mode, out_dir, budget=None, preview=False):
 
 
 # -- checks ------------------------------------------------------------------------------------------------------------
-def check(case, result, public):
+def check(case, result, public, products, intake):
     """[(check id, passed, detail)]. Default rules for every case, then the case's own."""
     out = []
     want = case.get("checks", {})
@@ -445,6 +448,29 @@ def check(case, result, public):
         out.append(("public_lacks:" + s, s.lower() not in public.lower(), "public catalog must not hold " + json.dumps(s)))
     for s in want.get("public_has", []):
         out.append(("public_has:" + s, s.lower() in public.lower(), "public catalog must hold " + json.dumps(s)))
+    if "published_product" in want:
+        expected = want["published_product"]
+        matches = [p for p in products if p.get("name") == expected["name"]]
+        out.append(("published_product", len(matches) == 1 and matches[0].get("sellingPrice") == expected["sellingPrice"],
+                    "published product must have the edited selling price " + json.dumps(expected)))
+    if "private_intake" in want:
+        for key, value in want["private_intake"].items():
+            out.append(("private_intake:" + key, intake.get(key) == value,
+                        "saved private intake must match " + key + "=" + json.dumps(value)))
+    if "draft_public_lacks" in want:
+        replies = result["turns"][-1]["replies"]
+        marker = "All website card text:\n"
+        cards = [s.split(marker, 1)[1].split("\nNothing changes until your yes.", 1)[0]
+                 for s in replies if marker in s and "\nNothing changes until your yes." in s]
+        proposed = [d for d in result["drafts"] if d["state"] == "proposed"]
+        ops = [[{**op, "args": {k: v for k, v in op.get("args", {}).items() if k != "photo"}}
+                for op in json.loads(d["ops_json"])] for d in proposed]
+        out.append(("draft_public_exists", len(cards) == 1 and bool(ops), "expected a staged website card and proposed draft"))
+        staged = json.dumps(ops, ensure_ascii=False).lower()
+        for s in want["draft_public_lacks"]:
+            out.append(("draft_public_lacks:" + s, len(cards) == 1 and bool(ops) and
+                        s.lower() not in cards[0].lower() and s.lower() not in staged,
+                        "staged website card and draft must not contain " + json.dumps(s)))
     if result["tape_misses"]: out.append(("tape", False, f"{result['tape_misses']} model call(s) not on the tape"))
     known = set(case.get("known", {}))
     return [{"id": c, "ok": ok, "detail": d, "known": c in known} for c, ok, d in out]
@@ -514,7 +540,8 @@ def main(argv=None):
         bad, fixed = verdict(r)
         bad_total, fixed_total = bad_total + len(bad), fixed_total + len(fixed)
         results.append(r)
-        print(f"{case['id']}: {'ok' if not bad else 'FAIL ' + ', '.join(c['id'] for c in bad)}"
+        known_bad = [c for c in r["checks"] if not c["ok"] and c["known"]]
+        print(f"{case['id']}: {'ok' if not bad and not known_bad else 'FAIL ' + ', '.join(c['id'] for c in bad) if bad else 'known failure: ' + ', '.join(c['id'] for c in known_bad)}"
               f"{' fixed: ' + ', '.join(c['id'] for c in fixed) if fixed else ''}", flush=True)
     name = args.part or ("results.json" if not args.case or len(args.case) != 1 else f"results-{args.case[0]}.json")
     (out / name).write_text(json.dumps(results, indent=1, ensure_ascii=False) + "\n", "utf-8")

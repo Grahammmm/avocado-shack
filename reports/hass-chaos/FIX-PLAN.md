@@ -1,8 +1,8 @@
 # HASS-CHAOS-1 fix plan (ordered, card-ready)
 
 Source: [CHAOS-REPORT.md](CHAOS-REPORT.md). Each item is one card, at most 3 h. Builder for code: **sol-escalation**. Each item gets ONE verify child: **sonnet-coder-gopus**.
-Acceptance for every item: (a) the named chaos cases pass. Remove their `known` entries in `hass/tests/chaos/cases.json`; the runner prints `fixed:` for them. Re-record with `--record` on the private host only when the model call sequence changes. (b) `python3 -B -m unittest hass.tests.test_chaos_suite` stays green. (c) `python3 -B hass/acceptance.py` gives fail 0. One PR per card, `git commit -s`.
-Waves are file-disjoint: cards in one wave can run in parallel; a later wave starts after the earlier wave merges.
+Acceptance for every item: (a) the named chaos cases pass, including checks marked `known`; the runner prints `fixed:` when they start passing. Builders do not edit the shared `hass/tests/chaos/cases.json`: after each wave merges, one integration owner serially removes the now-passing `known` entries and adds requested cases before the next wave starts. Re-record with `--record` on the private host only when the model call sequence changes. (b) `python3 -B -m unittest hass.tests.test_chaos_suite` stays green. (c) `python3 -B hass/acceptance.py` gives fail 0. One PR per card, `git commit -s`.
+Waves are file-disjoint: cards in one wave can run in parallel; a later wave starts after the earlier wave and its fixture integration merge. Test files must also be disjoint; each card owns only its named test files or new card-specific test files.
 
 ## Wave 0: covered by HASS-LIVE-FIX-2 (t_4fbdc5f2, running now). Do not duplicate.
 - **COVERED-1** "this is from miners" source edit plus no paste of instructions. HASS-LIVE-FIX-2 item 1. Add chaos case `edit-source-miners` (check `t2.no_echo` plus lacks) to its acceptance. The general paste rule is **F1 below** and goes beyond that one message.
@@ -10,12 +10,13 @@ Waves are file-disjoint: cards in one wave can run in parallel; a later wave sta
 - **COVERED-3** store-style picture (gpt-image-2) instead of the raw photo. Item 3.
 - **COVERED-4** 118 s photo reply measurement plus INSTALL note. Item 4. The measurements below feed it.
 
-## Wave 1 (start after HASS-LIVE-FIX-2 merges; F1 touches the same edit path)
+## Wave 1a (start after HASS-LIVE-FIX-2 merges; F1 touches the same edit path)
 ### HASS-FIX-F1: never paste owner chatter into the public listing (S1)
 - Goal: while a listing waits, a message that is not a recognised field edit never changes the description. Examples: "no wait", "what time do we close sunday", "looks good yes please!", "yes 0846x", an instruction sentence. Instead: a near-yes ("looks good", "yes please") gets "Reply yes <code> to publish"; "no wait" / "undo" gets "Nothing is published. Keep it, change something, or say no <code>"; a question gets a short answer or the interpreter, with the draft left unchanged; a mistyped code gets the no-target reply naming the waiting code. Only an explicit description edit ("add: …", "description: …", "say it's …") appends text.
 - Owned files: `hass/skills/intake_simple.py` (edit), `hass/skills/dispatch.py` (`_simple_answer` only), `hass/skills/item_intake.py` (`takes_answer` keyword gate only), tests `hass/tests/test_intake_simple*.py`.
 - Acceptance cases: `edit-no-wait`, `edit-unrelated-question-mid-draft` (t2), `approve-yes-please`, `approve-typo-code`, `edit-source-miners`, plus F17: while asked for a name, "yes zzzz" must not become the name (add a case).
 
+## Wave 1b (after F1 and its fixture integration merge; both cards own item_intake.py)
 ### HASS-FIX-F2: read the product name from a text that also has the price (S2)
 - Goal: "add persimmins fuyu $3.50 a lb", "ADD BLOOD ORANGES $2.50 LB", voice run-ons and "add organic local strawberries best ever $6 a basket" each give ONE listing with the name, price and unit. Remove only the money/stock span from the clause, never the whole clause. Fix typos only by the owner's later edit; never invent a name.
 - Owned files: `hass/skills/item_intake.py` (`caption_answers`), `hass/conversation.py` (`_read_intake` only), tests `hass/tests/test_item_intake*.py`.
