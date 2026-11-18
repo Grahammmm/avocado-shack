@@ -1078,10 +1078,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone(): return {}
         req = self.requests.get(msg.chat, self._now())
         if req and not self.dispatch.simple_intake(req): return {}
-        if msg.attachments == 1:
-            public, facts = item_intake.caption_answers(msg.text.replace("\ufffc", ""))
-            if not public and "price" in facts and "cost" in facts:
-                return {}  # complete typed caption; no private finance model call needed
+        _, facts = item_intake.caption_answers(msg.text.replace("\ufffc", ""))
+        if {"price", "cost", "qty"} & facts.keys():
+            return {}  # a typed fact needs no private finance model call (including zero)
         self.stage("finance-start", msg.provider_id)
         try: return self.answer_reader.fields(msg.text)
         except Exception: return {}  # a failed reader leaves the deterministic parser, never an inferred value
