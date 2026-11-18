@@ -1192,7 +1192,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         late = cutoff != now and self._forwarded_late(msg)  # HASS-SEC-2 (L5): forwarded long after it was sent
         if late: cutoff = now  # ... judged when it arrived, never at its send time
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog")
+        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog", "shelf")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         req = self.requests.get(msg.chat, now) if self.dispatch else None
         intake_answer = bool(self.dispatch and getattr(self.dispatch, "simple_intake", lambda req: False)(req) and (
@@ -2284,6 +2284,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if verb == "hidden": return self._hidden()
         if verb == "listing": return self._listing(code)
         if verb == "photos": return self._photos_to_take()
+        if verb == "shelf": return self._shelf(code, now)  # AV1052-05
         if verb == "backlog": return self._backlog_list()  # SKILLS-FW-3
         if verb == "history" and code is not None: return self._history_search(code)
         if verb == "again": return self._again(msg, now, code)  # AV2152-03

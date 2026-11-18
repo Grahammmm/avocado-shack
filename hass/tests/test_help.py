@@ -37,7 +37,7 @@ class HelpTextTests(unittest.TestCase):
         self.assertEqual(len({verb(ex) for _, ex in pairs}), len(pairs) - 3)  # one line per verb; AV1222-11: post has two examples on its one line (AV1937-10: a product, then a maker); SKILLS-FW-3: forget has two (a note, backlog.3)
 
     def test_limits_and_plain_text(self):
-        self.assertLessEqual(len(LINES), 25)  # earlier lines: photos to take, listing, hidden, post hike, cost, show, report, post, margin; SKILLS-FW-3: + the backlog line; AV2152-03: + the again line
+        self.assertLessEqual(len(LINES), 26)  # earlier lines: photos to take, listing, hidden, post hike, cost, show, report, post, margin; SKILLS-FW-3: + the backlog line; AV2152-03: + the again line; AV1052-05: + the shelf line
         for line in LINES:
             self.assertLessEqual(len(line), 92, line)  # plain-word commands now share lines; longest is the opening example
             self.assertFalse(set(line) & set("*_`#"), line)  # plain text, no markdown
@@ -65,7 +65,7 @@ class HelpTextTests(unittest.TestCase):
                 if variant.endswith("?") and variant.count("?") > 1: continue
                 with self.subTest(text=variant):
                     self.assertEqual(conversation.parse_command(variant), ("help", None))
-        self.assertEqual(commands.COMMAND_RE.groups, 23)  # no capture group added
+        self.assertEqual(commands.COMMAND_RE.groups, 25)  # no capture group added (AV1052-05: shelf is groups 24/25)
         self.assertEqual(conversation.parse_command("history eggs"), ("history", "eggs"))
         self.assertEqual(conversation.parse_command("show a1b2"), ("show", "a1b2"))
         self.assertEqual(conversation.parse_command("post eggs"), ("post", "eggs"))

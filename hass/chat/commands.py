@@ -27,7 +27,8 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(listing)(?:\s+(\S+(?:\s+\S+){0,5}))?"  # AV1622-09 (H17): groups 18/19; multiword names need a catalog check
                         r"|(photos to take)"  # AV0222-04 (H10/H17): group 20
                         r"|(backlog)"  # SKILLS-FW-3: group 21 (what I could not do yet; read-only)
-                        r"|(again)(?:\s+((?s:.*)))?")  # AV2152-03 (H05/H16): groups 22/23; the code is checked by _again, never guessed
+                        r"|(again)(?:\s+((?s:.*)))?"  # AV2152-03 (H05/H16): groups 22/23; the code is checked by _again, never guessed
+                        r"|(shelf)(?:\s+(.*))?")  # AV1052-05 (H17): groups 24/25; one line, the shelf is checked by _shelf
 
 HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: " + q('"Stop showing the eggs as sold out"') + ".",  # AV1537-03, test_help
     "Other things you can say:",
@@ -47,6 +48,7 @@ HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: 
     q("margin Hass avocado at 35%") + " - a price idea or a price check",
     q("post Hass avocado") + " or " + q("post maker fixture-farm") + " - a caption to copy",  # AV1937-10: one post line; nothing is posted, no placeholders
     q("listing Etto") + " - what's shown for one thing; " + q("hidden") + " lists what's hidden",
+    q("shelf vegetables") + " - read a shelf",  # AV1052-05
     q("show") + " and a word from the change - repeat a waiting change",
     q("help") + " - this list"))
 HELP_TEXT = HELP_TEXT.replace(q("show") + " and a word from the change - repeat a waiting change\n",
@@ -133,6 +135,7 @@ def parse_command(text: str, *, listing_names=False):
     if norm in UNDO_PHRASES: return "undo", None  # AV0222-07: the same as a bare undo
     match = COMMAND_RE.fullmatch(norm)
     if not match: return None
+    if match[24]: return "shelf", (match[25] or "").strip()  # AV1052-05: whole trimmed rest, lower-cased; _shelf resolves it
     if match[22]: return "again", (match[23] or "").strip()  # AV2152-03: the rest as sent (lower-cased); _again accepts only a code
     if match[21]: return "backlog", None  # SKILLS-FW-3
     if match[20]: return "photos", None  # AV0222-04
