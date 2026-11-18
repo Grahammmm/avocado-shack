@@ -27,6 +27,13 @@ class CompareTests(base.EvalTestCase):
     def test_four_outcomes_use_after_reason_in_case_order(self):
         after = self.mk(e01={"unsupported": CANARY}, e25={"question": CANARY}, e06={"unsupported": CANARY})
         after = dict(reversed(list(after.items())))  # reply-file order must not matter
+        with mock.patch.object(ev, "score", wraps=ev.score) as spy:
+            ev.compare(self.cases, self.replies, after, base.REGISTRY)
+        self.assertEqual(len(spy.call_args_list), 2)
+        for call, replies in zip(spy.call_args_list, (self.replies, after)):
+            self.assertIs(call.args[0], self.cases)
+            self.assertIs(call.args[1], replies)
+            self.assertIs(call.args[2], base.REGISTRY)
         code, out, err = self.cmp(self.replies, after)
         self.assertEqual((code, err, out.count("\n")), (1, "", 1))
         self.assertEqual(json.loads(out), {
