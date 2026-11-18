@@ -30,7 +30,7 @@ class PhotosParseTests(unittest.TestCase):
             self.assertIsNone(conversation.parse_command(text), text)
         self.assertEqual(conversation.parse_command("hidden"), ("hidden", None))
         self.assertEqual(conversation.parse_command("listing Etto"), ("listing", "Etto"))
-        self.assertIn('photos to take - the products that still need a photo', voice.plain(conversation.HELP_TEXT).splitlines())
+        self.assertIn('photos to take - the products that still need a photo', voice.plain(conversation.help_detail("photos to take")).splitlines())  # AV1052-12
 
 
 class PhotosTests(StoreMixin, ConversationTestCase):

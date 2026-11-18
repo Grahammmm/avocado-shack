@@ -267,7 +267,8 @@ class Findings(ConversationTestCase):
     def test_help_uses_names_not_ids(self):
         help_text = self.one("help")
         for bad in ("photo-product-001", "hike-2026", "<id>", "<$>", "<code>"): self.assertNotIn(bad, help_text)
-        self.assertIn("cost Hass avocado: 24 for 12", help_text)
+        self.assertIn("cost", help_text)  # AV1052-12: the index names it; its example is in `help cost`
+        self.assertIn("cost Hass avocado: 24 for 12", self.one("help cost"))
 
     def test_photos_to_take_is_a_short_friendly_list(self):
         reply = self.one("photos to take")

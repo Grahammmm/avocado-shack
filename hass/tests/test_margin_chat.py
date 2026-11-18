@@ -159,7 +159,7 @@ class MarginChatTests(StoreMixin, ConversationTestCase):
         self.assertEqual(CountingInterpreter.calls, 1)
 
     def test_help_has_the_margin_line_and_its_example_runs(self):
-        [line] = [ln for ln in voice.plain(conversation.HELP_TEXT).splitlines() if ln.startswith("margin ")]
+        [line] = voice.plain(conversation.help_detail("margin")).splitlines()  # AV1052-12: the full line is in `help margin`
         self.assertLessEqual(len(line), 70)
         self.assertEqual(line, "margin Hass avocado at 35% - a price idea or a price check")  # AV1222-10: the product form
         self.assertTrue(self.margin("margin 24 for 12 at 35%").endswith(NOTE))

@@ -134,6 +134,17 @@ class CommandsDocTest(unittest.TestCase):
                        "the site changed since <code>; send the change again", "any photo draft", "works while paused", "needs `yes <new code>`"):
             self.assertIn(phrase, cell)
 
+    def test_help_detail_row(self):
+        """AV1052-12: `help <command>` has its own row, whose example parses as help with that command's name."""
+        [(send, example, line)] = [r for r in self.table if r[0].startswith("`help <command>`")]
+        self.assertEqual(conv.parse_command(re.findall(r"`([^`]+)`", example)[0]), ("help", "undo"))
+        cell = " ".join(line.split())
+        for phrase in ("Unknown command. Send help with one of:", "`help yes` approves nothing", "never goes to the model", "works while paused"):
+            self.assertIn(phrase, cell)
+        for word in ("stop changes", "photos to take"):  # multiword names the plain-word scan cannot find
+            self.assertEqual(conv.parse_command(f"help {word}"), ("help", word))
+        self.assertEqual(problems([r for r in self.table if not r[0].startswith("`help <command>`")], self.verbs, self.words), [])  # help stays covered by its own bare row
+
     def test_commands_note_section(self):
         """AV2152-07: the prose after the table describes the optional hike.cancel note (it adds no parser verb)."""
         doc = " ".join(DOC.read_text("utf-8").split())
