@@ -71,7 +71,10 @@ class ShelfCase(ConversationTestCase):
 
     def checked(self, day):
         path = self.store_file()
-        path.write_text(json.dumps({**json.loads(path.read_text("utf-8")), "selection_checked_on": day}), "utf-8")
+        data = json.loads(path.read_text("utf-8"))
+        if day is None: data.pop("selection_checked_on", None)
+        else: data["selection_checked_on"] = day
+        path.write_text(json.dumps(data), "utf-8")
         git(self.repo.wt, "commit", "-qam", f"checked {day}")  # the writer worktree is clean at each draft
         self.base = self.count()
 
@@ -152,16 +155,19 @@ class AskThenYesTests(ShelfCase):
 class StaleCheckTests(ShelfCase):
     def test_a_check_older_than_today_is_treated_the_same(self):
         self.checked("2026-10-30")
-        self.ask_and_get_question()
-        self.assertEqual(self.say("yes"), "proposed")
+        self.assertEqual(self.say(SOLD_OUT), "proposed")
+        self.assertIn("one thing to double-check", self.replies()[0])
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.store()["selection_checked_on"], TODAY)
+        self.assertEqual(self.store()["selection_checked_on"], "2026-10-30")
         self.assertEqual(self.product()["available_on"], TODAY)
 
     def test_a_check_more_than_a_week_old_is_treated_the_same(self):
         self.checked("2026-09-01")
-        self.ask_and_get_question()
-        self.assertEqual(self.say("yes"), "proposed")
+        self.assertEqual(self.say(SOLD_OUT), "proposed")
+        self.assertIn("one thing to double-check", self.replies()[0])
+        self.assertEqual(self.say("yes"), "approved")
+        self.assertEqual(self.store()["selection_checked_on"], "2026-09-01")
+        self.assertEqual(self.product()["available_on"], TODAY)
 
     def test_a_check_dated_after_today_says_the_date_looks_wrong_and_asks_nothing(self):
         self.checked("2026-11-05")
@@ -181,14 +187,12 @@ class SameValueNextDayTests(ShelfCase):
         self.assertEqual(self.product()["available_on"], TODAY)
         self.now += timedelta(days=1)  # next day: the word and its date are both yesterday's
         self.replies()
-        self.assertEqual(self.say(SOLD_OUT), "question")
-        self.assertEqual(self.replies(), [Q_SHELF])
-        self.assertEqual(self.say("yes"), "proposed")
-        self.assertEqual([c["op"] for c in json.loads(self.drafts()[-1]["ops_json"])],
-                         ["store.confirm_selection", "product.set_availability"])
-        self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.product()["available_on"], "2026-11-03")
-        self.assertEqual(self.store()["selection_checked_on"], "2026-11-03")
+        self.assertEqual(self.say(SOLD_OUT), "not-drafted")
+        self.assertEqual(self.replies(), ["That's already how it is, so nothing changed."])
+        self.assertEqual(self.product()["available_on"], TODAY)
+        self.assertEqual(self.store()["selection_checked_on"], TODAY)
+        self.assertEqual(self.open_asks(), [])
+
 
 
 class TodaysCheckTests(ShelfCase):
@@ -240,7 +244,7 @@ class OtherAnswersTests(ShelfCase):
         self.checked(TODAY)
         waiting, _ = self.propose(HOURS)
         self.checked_ok = True
-        self.checked("2026-10-31")  # make the next change need the check again
+        self.checked(None)  # make the next change need the check again
         self.assertEqual(self.say(SOLD_OUT), "question")
         self.replies()
         self.assertEqual(self.say("no"), "shelf-no")
@@ -261,7 +265,7 @@ class OtherAnswersTests(ShelfCase):
     def test_a_yes_does_not_approve_a_waiting_draft_while_the_question_is_open(self):
         self.checked(TODAY)
         waiting, _ = self.propose(HOURS)
-        self.checked("2026-10-31")
+        self.checked(None)
         self.ask_and_get_question(waiting=1)
         self.assertEqual(self.say("yes"), "proposed")
         self.assertEqual([(d["state"]) for d in self.drafts()], ["proposed", "proposed"])
@@ -270,10 +274,10 @@ class OtherAnswersTests(ShelfCase):
     def test_a_yes_with_a_code_is_an_approval_not_the_answer(self):
         self.checked(TODAY)
         waiting, _ = self.propose(HOURS)
-        self.checked("2026-10-31")
+        self.checked(None)
         self.ask_and_get_question(waiting=1)
         self.assertEqual(self.say(f"yes {waiting['code']}"), "approved")
-        self.assertEqual(self.store()["selection_checked_on"], "2026-10-31")  # the check was not marked
+        self.assertNotIn("selection_checked_on", self.store())  # the check was not marked
         self.assertNotIn("available", self.product())
 
     def test_a_different_answer_is_the_next_change_and_the_original_is_not_silently_made(self):
@@ -412,7 +416,7 @@ class ReviseTests(ShelfCase):
     def test_a_change_that_revises_a_waiting_draft_replaces_it_after_the_yes(self):
         self.checked(TODAY)
         waiting, _ = self.propose(OTHER)
-        self.checked("2026-10-31")
+        self.checked(None)
         self.interp.mapping["make that sold out instead"] = {"ops": _ops(("product.set_availability", {"id": "photo-product-016", "available": "no"}))["ops"],
                                                               "revises": waiting["code"]}
         self.assertEqual(self.say("make that sold out instead"), "question")

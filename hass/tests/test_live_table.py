@@ -125,7 +125,7 @@ class RealDrafts(unittest.TestCase):
         name = "product.set_availability_all"
         self.assertIn(name, policy.PRIVATE)
         self.assertNotIn(name, policy.LIVE)
-        reasons = self.refused(op(name, shelf="vegetables", available="yes"))
+        reasons = self.refused(op("store.confirm_selection"), op(name, shelf="vegetables", available="yes"))
         self.assertIn(f"not live: {name}", reasons)
         text = policy.refusal(reasons)
         self.assertIn("changes availability for a shelf or maker", text)
