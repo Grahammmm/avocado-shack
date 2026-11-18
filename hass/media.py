@@ -21,7 +21,7 @@ before that lock is released; so while an unwind runs no cooperating writer hold
 replace or remove a file there. Writers that bypass these functions (other code or programs, or a descriptor opened
 outside this protocol) are out of scope; against them the unwind only fails safe: a file it cannot prove unchanged is kept.
 """
-import argparse, fcntl, hashlib, json, os, re, secrets, stat, sys, tempfile, zlib  # noqa: E401
+import argparse, fcntl, hashlib, json, logging, os, re, secrets, stat, sys, tempfile, zlib  # noqa: E401
 from datetime import datetime
 from pathlib import Path
 
@@ -204,7 +204,8 @@ def store_originals(root, items, *, received_at: str, source: str) -> list:
     item. On a refusal or a write fault at item n, only the originals and sidecars THIS call created (matched by their recorded
     device and inode) are removed, never a duplicate or sidecar that was already there; BatchRefused names position n (1-based)
     and .kept any file the unwind kept because it could not prove it unchanged. Any other error removes the same files and is
-    raised as it was. The root lock is held from the first photo until the unwind has finished."""
+    re-raised with a note per kept path (logged instead if the exception cannot take notes). The root lock is held
+    from the first photo until the unwind has finished."""
     created, out, lock = [], [], []  # lock: the root directory fd holding an advisory flock for the whole batch (writes and unwind)
     try:
         try:
@@ -212,8 +213,11 @@ def store_originals(root, items, *, received_at: str, source: str) -> list:
         except (Refused, OSError) as exc:
             kept = _unwind(created)
             raise BatchRefused(exc.code if isinstance(exc, Refused) else "corrupt-store", len(out) + 1, kept) from None
-        except BaseException:
-            _unwind(created)
+        except BaseException as exc:
+            for path in _unwind(created):
+                note = f"Batch unwind kept: {path}"
+                try: BaseException.add_note(exc, note)
+                except Exception: logging.getLogger(__name__).warning(note)  # e.g. a read-only __notes__
             raise
     finally:
         for fd in lock: os.close(fd)  # closing releases the flock

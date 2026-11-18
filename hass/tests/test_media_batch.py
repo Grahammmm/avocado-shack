@@ -169,6 +169,28 @@ class StoreOriginalsTests(unittest.TestCase):
         with mock.patch.object(media, "store_original", odd), self.assertRaises(RuntimeError): self.store([pic(1), pic(2)])
         self.assertEqual(files(self.root), [])
 
+    def test_iterator_error_reports_restored_and_moved_files(self):
+        error = ValueError("iterator failed")
+
+        def items():
+            yield pic(1)
+            raise error
+
+        def unreadable(moved, *args):
+            if origin(moved).suffix == ".jpg":
+                origin(moved).write_bytes(b"new arrival")  # only the sidecar can be put back
+            raise OSError(errno.EIO, "read error")
+
+        with mock.patch.object(media, "_still_written", unreadable), self.assertRaises(ValueError) as cm:
+            self.store(items())
+        self.assertIs(cm.exception, error)
+        self.assertEqual(str(error), "iterator failed")
+        sidecar, = self.root.rglob("*.json")
+        moved, = self.root.rglob(".*.jpg.unwind-*")
+        self.assertEqual(moved.read_bytes(), pic(1))
+        self.assertCountEqual(getattr(error, "__notes__", ()),
+                              [f"Batch unwind kept: {path}" for path in (sidecar, moved)])
+
     def test_the_many_reply_is_built_from_the_constant(self):
         self.assertEqual(media.MAX_PHOTOS_PER_MESSAGE, 4)
         self.assertEqual(media.REPLIES["many"], "Please send up to 4 photos per message; nothing was saved.")
