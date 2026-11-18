@@ -222,7 +222,8 @@ class RunnerTest(unittest.TestCase):
                          "test_browser_freshness", "test_publish"))
         self.assertEqual(acceptance.MAP["H02"], ("test_editor", "test_maker_product_batch"))
         self.assertEqual(acceptance.MAP["H03"], ("test_catalog_ops", "test_clear_availability",
-                         "test_product_new", "test_maker_hide_products", "test_maker_optional_url"))
+                         "test_product_new", "test_maker_hide_products", "test_maker_optional_url",
+                         "test_product_default_brand"))
         self.assertEqual(acceptance.MAP["H12"], ("test_attachment_reply", "test_photo_draft",
                          "test_photo_on_product", "test_photo_new_product", "test_photo_home_image",
                          "test_photo_batch", "test_media_batch"))
@@ -237,7 +238,9 @@ class RunnerTest(unittest.TestCase):
                          "test_preview_cancel_note"))
         self.assertEqual(acceptance.MAP["H05"], ("test_conversation", "test_near_approval",
                          "test_unknown_approval_code", "test_again", "test_interpreter_prompt_shelf_maker",
-                         "test_interpreter_prompt_descriptions", "test_claims_health_awards"))
+                         "test_interpreter_prompt_descriptions", "test_claims_health_awards",
+                         "test_interpreter_no_undo", "test_field_words", "test_question_missing_fields",
+                         "test_named_records", "test_interpreter_aliases", "test_social_message"))
         self.assertEqual(acceptance.MAP["H06"], ("test_preview", "test_undo", "test_history_search",
                          "test_store_field_undo"))
         self.assertEqual(acceptance.MAP["H13"], ("test_store_ops", "test_store_intro",
@@ -314,6 +317,28 @@ class RunnerTest(unittest.TestCase):
                 "H06": ("test_history_search", "test_store_field_undo"),
                 "H12": ("test_photo_batch", "test_media_batch"),
                 "H13": ("test_notice_start", "test_club_intro")}
+        for id_, mods in want.items():
+            rec = Recorder()
+            rows, code, probs = acceptance.run({id_: acceptance.MAP[id_]}, rec, expected_ids=(id_,))
+            self.assertEqual((code, probs), (0, []))
+            self.assertEqual(rec.names, ["hass.tests." + m for m in acceptance.MAP[id_]])
+            self.assertEqual(len(rec.names), len(set(rec.names)))
+            self.assertEqual([n for n in rec.names if n[len("hass.tests."):] in mods],
+                             ["hass.tests." + m for m in mods])
+
+    def test_av0007_modules_selected_once_in_order(self):
+        class Recorder(unittest.TestLoader):
+            def __init__(self):
+                super().__init__()
+                self.names = []
+
+            def loadTestsFromName(self, name, module=None):
+                self.names.append(name)
+                return unittest.TestSuite([unittest.FunctionTestCase(lambda: None)])
+
+        want = {"H03": ("test_product_default_brand",),
+                "H05": ("test_interpreter_no_undo", "test_field_words", "test_question_missing_fields",
+                        "test_named_records", "test_interpreter_aliases", "test_social_message")}
         for id_, mods in want.items():
             rec = Recorder()
             rows, code, probs = acceptance.run({id_: acceptance.MAP[id_]}, rec, expected_ids=(id_,))

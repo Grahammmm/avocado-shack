@@ -2641,3 +2641,117 @@ Checks at PR head a8816dbb2aafbac7f7a0b12905a9315b5b954184: `python3 -B -m unitt
 Limits: H25 stays a release step. The spec's module names did not exist; the real modules were mapped.
 
 Issue #2 (photo and voice trial): AV1622-01 to AV1622-13 add no new evidence; restoring a home photo is not a photo or voice trial.
+
+## H12/H13: photo answered "home page" (AV1937-01) — November 14, 2026
+
+Branch rb/av1937-01 from origin/main (AV1937-01, issue #2, PR #832: merged as d9824f6448d687f735168b0b3960392a3da4773a). For Michael: if you answer a photo question with "use it on the home page", the photo becomes the home-page image; a second place in the same answer is refused with "One photo can go in one place; say which."
+
+Checks at PR head e6cba5a94cf656471b1a21066e61c3022564ebb4: `python3 -B -m unittest hass.tests.test_photo_home_image hass.tests.test_photo_new_product hass.tests.test_interpreter_prompt` — the PR records three acceptance groups (72, 109 and 116 tests, OK, 2 skips) but not this exact command line; PREPUSH-TESTS NOT-RUN.
+
+Limits: Photo recognition, new home ops and other layout slots are not touched; the interpreter prompt rules-size pin was raised from 9000 to 9200 bytes.
+
+## H03: a maker and its first product in one draft (AV1937-02) — November 4, 2026
+
+Branch rb/av1937-02 from origin/main (AV1937-02, issue #1, PR #371: merged as aefc4320382064ffd079a8d1839440888312248d). For Michael: one message can add a new maker and that maker's first product, in that order; a refused maker stops the product too.
+
+Checks at PR head 7c3eb4e1e607046240fb0857f9bf13a9e5a32864: `python3 -B -m unittest hass.tests.test_maker_product_batch hass.tests.test_editor hass.tests.test_catalog_ops hass.tests.test_catalog_dupes hass.tests.test_undo hass.tests.test_undo_twice hass.tests.test_undo_product_restore` — 65 tests, OK; PREPUSH-TESTS NOT-RUN (host busy).
+
+Limits: A product may only name a maker added earlier in the same draft; there are no general batch transactions and nothing is physically deleted.
+
+## H03: stop a maker with its products (AV1937-03) — November 5, 2026
+
+Branch rb/av1937-03 from origin/main (AV1937-03, issue #1, PR #431: merged as 7b6b299f100d518efe4ee3f5cdb2ee99677b88d8). For Michael: "we stopped carrying" a maker hides the maker and all its active products in one approved change, and one undo brings them back; without that wording the old refusal naming the products stays.
+
+Checks at PR head 9f60a31bd13491e6c5f3b6eb1221d10f101697bf: `python3 -B -m unittest hass.tests.test_maker_hide_products` — 10 tests, OK; the catalog and undo group also passed; PREPUSH not run.
+
+Limits: Nothing is ever deleted; held products are left alone and `maker.restore` does not bring products back.
+
+## H03: a maker without a website (AV1937-04) — November 5, 2026
+
+Branch rb/av1937-04 from origin/main (AV1937-04, issue #1, PR #446: merged as f36e206bdf40a2c99d9a80f32173ac38ed7b958c). For Michael: a maker can be added with no website, and the shop card then shows the story and place without a Visit link; a website you do give must still be a public https address.
+
+Checks at PR head 750b65c3e9ea5716aa56c52f4a752b9307befb85: `python3 -B -m unittest hass.tests.test_maker_optional_url` — 7 tests, OK, with the spec groups (100 and 186 tests) and `hass.tests.test_preview_maker` (8 tests) also OK; PREPUSH-TESTS NOT-RUN; `storefront-mockup/catalog-only-qa.cjs` was not run locally.
+
+Limits: The 26 current makers and links are unchanged, and clearing a baseline maker's website stays blocked.
+
+## H04: repeat a real hike (AV1937-05) — November 4, 2026
+
+Branch rb/av1937-05 from origin/main (AV1937-05, issue #1, PR #378: merged as eddb30d037a9301f73cc82790e0ee62a1c079795). For Michael: "same hike again on Dec 6 at 9" drafts a new scheduled hike from a real earlier one, copying its details but never its guests, and undo cancels it.
+
+Checks recorded in PR #378 at head 34e43eaad616e504ae49a28b725b4fe4cdbd762e: `python3 -B -m unittest hass.tests.test_hike_repeat hass.tests.test_hike_repeat_claims` — 33 tests, OK; PREPUSH-TESTS NOT-RUN (host busy).
+
+Limits: No recurring series, no guest transfer and no RSVP database read; a route idea or the sample hike is refused as a source.
+
+## H05: whole maker and route text in the prompt (AV1937-06) — November 14, 2026
+
+Branch rb/av1937-06 from origin/main (AV1937-06, issue #1, PR #843: merged as 252bf3a8db79280566e893bbc2ba5e1673b81df0). For Michael: "add goat cheese to the Etto story" now works on the whole existing story, because the full maker story and route description are shown to the interpreter.
+
+Checks at PR head 2cbd9c21c492da6481b34446e64fa1d9d89e623f: `python3 -B -m unittest hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_community hass.tests.test_interpreter_prompt_store hass.tests.test_interpreter_prompt_shapes hass.tests.test_interpreter_today hass.tests.test_pending_ops hass.tests.test_interpreter_local hass.tests.test_interpreter_local_strict hass.tests.test_interpreter_request_encode hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_out hass.tests.test_interpreter_cap hass.tests.test_interpreter_prompt_text` — 156 tests, OK; PREPUSH-TESTS NOT-RUN (budget used up).
+
+Limits: No model-quality claim; the prompt byte cap is unchanged, so long texts are replaced by an omitted marker in a fixed order and the interpreter must ask rather than send it.
+
+## H13/H17: status and report show the home notice (AV1937-07) — November 14, 2026
+
+Branch rb/av1937-07 from origin/main (AV1937-07, issue #1, PR #844: merged as 45bebf95de739a3b5be2e14e9bd16f3a3eb37f5b). For Michael: `status` and `report` say what the home-page notice is and its last day, or that it ended and is no longer shown; with no notice there is no line.
+
+Checks at PR head 998b847da2621d0575cc4cb8755617497477732a: `python3 -B -m unittest hass.tests.test_status_notice hass.tests.test_report_command` — 15 tests, OK; a second group of ten status, help and conversation modules passed (OK, 4 skipped); PREPUSH-TESTS NOT-RUN.
+
+Limits: Read-only; it never creates or clears a notice and never changes how the home page looks.
+
+## Site: only the first hike says THE NEXT HIKE (AV1937-08) — November 5, 2026
+
+Branch rb/av1937-08 from origin/main (AV1937-08, issue #1, PR #447: merged as 8775eb44cc7edcd3e55c68781e91a4fb643dfd8f). For Michael: with several upcoming hikes only the earliest scheduled card says THE NEXT HIKE, later ones say COMING UP and cancelled ones stay CANCELLED.
+
+Checks at PR head 4a505dc37ddd5265f37a54b6addbcdff056bcac3: `python3 -B -m unittest hass.tests.test_hike_ics hass.tests.test_qa_env hass.tests.test_preview_hike_results hass.tests.test_preview_target_shapes hass.tests.test_preview_viewports hass.tests.test_publish` — 56 tests, OK; `storefront-mockup/community-qa.py` against a loopback server — Community UI passed; the edited `storefront-mockup/community-ui-qa.cjs` was not run locally; PREPUSH-TESTS not run.
+
+Limits: Label change only; dates, time zones, ordering and the sample invitation label are unchanged and nothing was published.
+
+## F07: Meet the maker caption draft (AV1937-09) — November 6, 2026
+
+Branch rb/av1937-09 from origin/main (AV1937-09, issue #1, PR #475: merged as 11d6522bda0a8c378520e05926bdad9d4a8c2b08). For Michael: `social_draft.py --maker KEY` prints a local Meet the maker caption with the story as written and the active product count; unknown, hidden or incomplete makers are refused.
+
+Checks at PR head 4c18fc34105879e3aab4bb637e2f6c6f2702fc95: `python3 -B -m unittest hass.tests.test_social_draft_maker hass.tests.test_social_draft hass.tests.test_social_draft_inputs hass.tests.test_social_draft_tags hass.tests.test_social_draft_fullwidth hass.tests.test_social_draft_shapes hass.tests.test_social_draft_text hass.tests.test_social_draft_hike` — 78 tests, OK; PREPUSH-TESTS NOT-RUN.
+
+Limits: Draft only; nothing is posted, scheduled or stored, and there is no photo or link.
+
+## F07: post maker in chat (AV1937-10) — November 14, 2026
+
+Branch rb/av1937-10 from origin/main (AV1937-10, issue #1, PR #846: merged as ddeda1e2e03f990ee5594fa465d174bc708263e4). For Michael: sending `post maker <key>` replies with the caption to copy yourself, or says plainly why there is none.
+
+Checks at PR head dc30052007fdc671f06beb71b8121a8fc2b864e5: `python3 -B -m unittest hass.tests.test_post_maker_command hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_conversation` — the PR records 132 tests, OK, for a longer twelve-module group, plus 88 and 27 in two more; PREPUSH-TESTS NOT-RUN.
+
+Limits: Read-only and works while paused; nothing is posted, scheduled or stored, and no interpreter call is made.
+
+## Docs: entry points match merged main (AV1937-11) — November 4, 2026
+
+Branch rb/av1937-11 from origin/main (AV1937-11, issue #3, PR #376: merged as 992fda95d30d529981592b28a50cec59e1fcc97e). For Michael: the main README, the Hass README and HERMES_START now say what already works on sample data and what is still open.
+
+Checks at PR head a8d932458aa98c2474b793006ef450664331c7f4: `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_publish` — 20 tests, OK; `hass.tests.test_set_photo_site_read` — 7 tests, OK; `git diff --check` clean; PREPUSH-TESTS NOT-RUN.
+
+Limits: Docs only; no issue or milestone is marked complete, and nothing says forms, email or the live channel are working.
+
+## H09: interpreter eval set v7 (AV1937-12) — November 17, 2026
+
+Branch rb/av1937-12 from origin/main (AV1937-12, issue #1, PR #996: merged as 45db64e5ef5ca43597730a80ced32c79b8df6eda). For Michael: the practice questions for the interpreter now include a home-page photo, a new maker with a product, a stopped maker, a maker with no website, a repeated hike and a partial story edit; the count goes from 80 to 86.
+
+Checks at PR head c318868ce3883c3c49d30dde73466654f458305d: `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_compare hass.tests.test_interpreter_eval_modes hass.tests.test_interpreter_eval_diagnostics` — the PR records 123 tests, OK, for these modules plus neighbours; PREPUSH-TESTS NOT-RUN.
+
+Limits: Synthetic replies are not model output, so this makes no model-quality claim; scoring and prompt are unchanged.
+
+## H25: phone guide examples (AV1937-13) — November 17, 2026
+
+Branch rb/av1937-13 from origin/main (AV1937-13, issue #3, PR #1001: merged as ab7d6c903f0e9aed623d4792193437cf7abcb290). For Michael: the phone guide has six more tested example messages (home-page photo, new maker, no website, stop a maker, repeat a hike, `post maker`), still 110 lines.
+
+Checks at PR head 57d16d94ad36da0a693d7b1fc2d88c93507dd118: `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_limits_doc hass.tests.test_commands_doc` — 39 tests, OK; `git diff --check` clean; PREPUSH-TESTS NOT-RUN.
+
+Limits: Docs and doc checks only; the maker stop has no cap of its own and the guide names the inherited bound `live_policy.MAX_RECORDS` (10).
+
+## H25: acceptance map for AV1937 modules (AV1937-14) — November 17, 2026
+
+Branch rb/av1937-14 from origin/main (AV1937-14, issue #3, PR #994: merged as ae8bfdc6f258365889d17de2184197a6c8a4126e). For Michael: the acceptance run now includes the tests for AV1937-01 to -10, and the next-hike label is checked by running the real site script.
+
+Checks at PR head 45e729e95cc93308490b8517f9b8b9df8a8d6f4c: `python3 -B -m unittest hass.tests.test_acceptance_runner hass.tests.test_hike_ics` — the PR records four acceptance commands (68 and 92 tests, OK) and `python3 hass/acceptance.py --only H25` reporting not covered; PREPUSH-TESTS NOT-RUN.
+
+Limits: H25 stays a release step. The spec's name `test_maker_product_one_draft` did not exist; the real module `test_maker_product_batch` was mapped.
+
+Issue #2 (photo and voice trial): AV1937-01 adds a photo-to-home-page path on sample data only; a live photo or voice trial is not shown here. Issue grouping is in each section's first paragraph, as in earlier roll-ups.
