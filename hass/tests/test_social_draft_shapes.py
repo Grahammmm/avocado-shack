@@ -58,7 +58,7 @@ class SocialDraftShapeTests(unittest.TestCase):
         for alt in ("Fresh loaf #bread", "Photo by @shop", "#1 loaf", "by @_shop", "Loaf #pan"):
             with self.subTest(alt=alt):
                 out = self.build("p1", product("p1", imageAlt=alt))
-                self.assertEqual(out, {"draft": True, "image": "assets/products/p1.webp", "alt": "Sourdough",
+                self.assertEqual(out, {"draft": True, "illustration": True, "image": "assets/products/p1.webp", "alt": "Sourdough",
                                        "caption": HAPPY_CAPTION})
 
     def test_plain_image_alt_is_used_as_is(self):
@@ -77,12 +77,12 @@ class SocialDraftShapeTests(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(social_draft.main(["p1"], self.root / "content", self.site), 0)
-        expected = {"draft": True, "image": "assets/products/p1.webp", "alt": "Sourdough", "caption": HAPPY_CAPTION}
+        expected = {"draft": True, "image": "assets/products/p1.webp", "alt": "Sourdough", "caption": HAPPY_CAPTION, "illustration": True}
         self.assertEqual(out.getvalue(), json.dumps(expected, ensure_ascii=False, indent=2) + "\n")
 
     # RF2205-12: a container or other non-text category is treated like a null or unknown one (no category tag).
     BAD_CATEGORIES = ([], {}, ["dairy"], {"name": "dairy"}, [["dairy"]], {"a": {"b": 1}})
-    OK = {"draft": True, "image": "assets/products/p1.webp", "alt": "Sourdough"}
+    OK = {"draft": True, "illustration": True, "image": "assets/products/p1.webp", "alt": "Sourdough"}
 
     def shack_only(self):
         return HAPPY_CAPTION.replace(" #Bread", "")
