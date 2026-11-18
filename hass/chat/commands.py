@@ -49,6 +49,7 @@ HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: 
     q("post Hass avocado") + " or " + q("post maker fixture-farm") + " - a caption to copy",  # AV1937-10: one post line; nothing is posted, no placeholders
     q("listing Etto") + " - what's shown for one thing; " + q("hidden") + " lists what's hidden",
     q("shelf vegetables") + " - read a shelf",  # AV1052-05
+    q("look") + " - a fresh picture of the website; add hike or a product",  # AV1922-01
     q("show") + " and a word from the change - repeat a waiting change",
     q("help") + " - this list"))
 HELP_TEXT = HELP_TEXT.replace(q("show") + " and a word from the change - repeat a waiting change\n",
@@ -127,10 +128,26 @@ def _post_maker(text: str):
     return "post", "maker " + key
 
 
+LOOK_RE = re.compile(r"look(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)  # AV1922-01: whole words only
+LOOK_MAX = 60  # = FIND_TEXT_MAX: longest product query
+
+
+def _look(text: str):
+    """AV1922-01 (H06/H17): ("look", "") for a bare look, ("look", "<rest>") with the rest in its own case (outer white space and a
+    final . or ! trimmed), or ("look", None) for a malformed rest (a line break, control character or more than 60 characters):
+    the usage reply, never the model. Anything else (looks, look-alike words) is None."""
+    found = LOOK_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip()))
+    if not found: return None
+    rest = (found[1] or "").strip()
+    if any(unicodedata.category(c) in ("Cc", "Zl", "Zp") for c in rest) or len(rest) > LOOK_MAX: return "look", None
+    return "look", rest
+
+
 def parse_command(text: str, *, listing_names=False):
     """("undo", code or None) or (history|status|pause|resume|help, None) when the whole message is that command;
     otherwise None."""
     if maker := _post_maker(text): return maker  # AV1937-10: before the general punctuation rule, which would cut a key's . or !
+    if look := _look(text): return look
     norm = re.sub(r"[.!]+$", "", text.strip().lower())
     if norm in UNDO_PHRASES: return "undo", None  # AV0222-07: the same as a bare undo
     match = COMMAND_RE.fullmatch(norm)
@@ -190,7 +207,7 @@ def parse_memory(text: str):
     return ("memory", None, None) if match and match[5] else None
 
 
-READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "backlog"}
+READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "backlog", "look"}
 
 
 def _asked(text: str):

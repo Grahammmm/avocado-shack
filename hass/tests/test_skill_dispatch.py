@@ -631,14 +631,14 @@ class QueuedCallsTests(SkillCase):
         look = toy("shop.look", "look at the shop", (), lambda s, c: [], edits=(), preview="none", approval="none",
                    live_class="read-only", undo=Undo("none", "none"))
         self.conv.dispatch.registry = registry_of(HIKE_ADD, look)
-        self.script("look and add", {"calls": [{"skill": "shop.look", "slots": {}}, {"skill": "hike.add", "slots": MILL}], "revises": None})
-        self.assertEqual(self.say("look and add"), "backlog")  # a read-only call in a batch is written down, as before
+        self.script("inspect and add", {"calls": [{"skill": "shop.look", "slots": {}}, {"skill": "hike.add", "slots": MILL}], "revises": None})
+        self.assertEqual(self.say("inspect and add"), "backlog")  # a read-only call in a batch is written down, as before
         self.assertEqual(self.drafts(), [])
         self.assertNotIn("shop.look", dispatch.READ_ONLY_LONG)
         with mock.patch.dict(dispatch.READ_ONLY, {"shop.look": lambda s, c: "x" * 700}):
-            self.script("look", skill_reply("shop.look"))
+            self.script("inspect", skill_reply("shop.look"))
             with self.assertRaisesRegex(voice.VoiceError, "too long for one message"):  # an everyday answer may not run long
-                self.say("look")
+                self.say("inspect")
         self.assertIsNone(dispatch.Ctx(None, None, {}, [], None).site_dir)  # the old constructor still works
         self.assertEqual(self.conv.dispatch._ctx(self.now, []).site_dir, self.repo.wt / "storefront-mockup")
         self.nothing_written()
