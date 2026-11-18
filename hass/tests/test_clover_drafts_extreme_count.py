@@ -27,6 +27,18 @@ class ExtremeCountTests(unittest.TestCase):
                     d.build_received(oil, bad, CFG)
                 self.assertLess(len(str(cm.exception)), 120)
 
+    def test_refusal_preserves_caller_decimal_flags(self):
+        oil = till()["FAKEITEM00001"]
+        for builder in (d.build_set_stock, d.build_received):
+            for already_flagged in (False, True):
+                with self.subTest(builder=builder.__name__, already_flagged=already_flagged), decimal.localcontext() as ctx:
+                    ctx.clear_flags()
+                    ctx.flags[decimal.Rounded] = already_flagged
+                    before = ctx.flags.copy()
+                    with self.assertRaisesRegex(d.DraftRefused, "too high"):
+                        builder(oil, "1e100", CFG)
+                    self.assertEqual(ctx.flags, before)
+
     def test_ordinary_limit_and_control_unchanged(self):
         oil = till()["FAKEITEM00001"]
         with self.assertRaisesRegex(d.DraftRefused, "100001 looks too high for one item"):

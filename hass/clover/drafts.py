@@ -12,7 +12,7 @@ be the one the draft was made from (`is_stale`), and an undo refuses to overwrit
 import hashlib
 import json
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext
 
 from hass.clover import sku as skumod
 from hass.clover.mapper import (CATEGORIES, MapError, clean_name, create_payload, format_money, format_quantity, norm_name, pct_change,
@@ -102,7 +102,8 @@ def _qty(value, item, config):
         raise DraftRefused("A count cannot be less than 0.")
     if q > config.max_stock:
         try:
-            shown = f"{format_quantity(q)} "
+            with localcontext():  # display must not change the caller's decimal flags
+                shown = f"{format_quantity(q)} "
         except InvalidOperation:  # too large to display: refuse without echoing it
             shown = "That count "
         raise DraftRefused(f"{shown}looks too high for one item. Check the number and send it again.")
