@@ -3,30 +3,21 @@
  "calls": [
   {
    "turn": 1,
-   "method": "interpret",
+   "method": "answer.fields",
    "result": {
-    "ops": [
-     {
-      "op": "product.add",
-      "args": {
-       "name": "Hachiya persimmons",
-       "brand": "From the market",
-       "category": "fruit",
-       "description": "A sweet, soft fruit for the bowl. Eat it fresh, or let it sit beside a piece of cheese and a little bread."
-      }
-     }
-    ],
-    "revises": null
+    "price_cents": 350,
+    "cost_cents": null,
+    "quantity": null
    },
    "attrs": {
     "last_error": null,
-    "last_backend": "openai",
-    "last_fallback": true,
-    "last_primary_error": "codex-local",
-    "last_seconds": 14.141,
-    "last_model": "qwen3.8:27b-thinkingcap-q6"
+    "last_backend": null,
+    "last_fallback": false,
+    "last_primary_error": null,
+    "last_seconds": null,
+    "last_model": null
    },
-   "seconds": 14.141,
+   "seconds": 2.714,
    "route": "qwen"
   }
  ]
