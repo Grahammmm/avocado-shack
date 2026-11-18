@@ -101,7 +101,11 @@ def _qty(value, item, config):
     if not q.is_finite() or q < 0:
         raise DraftRefused("A count cannot be less than 0.")
     if q > config.max_stock:
-        raise DraftRefused(f"{format_quantity(q)} looks too high for one item. Check the number and send it again.")
+        try:
+            shown = f"{format_quantity(q)} "
+        except InvalidOperation:  # too large to display: refuse without echoing it
+            shown = "That count "
+        raise DraftRefused(f"{shown}looks too high for one item. Check the number and send it again.")
     if item.price_type != "PER_UNIT" and q != q.to_integral():
         raise DraftRefused(f"{item.name} is counted in whole items, so {format_quantity(q)} is not a count I can set.")
     if q != q.quantize(Decimal("0.001")):
