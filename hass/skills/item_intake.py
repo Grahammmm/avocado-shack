@@ -2,9 +2,8 @@
 
 With itemIntake enabled, dispatch + intake_simple build one editable catalog preview
 instead of interviewing the owner. Typed quantity/cost/price are separated from public
-copy before any interpreter call, retained with the open request, and saved privately
-only after the existing owner approval applies the listing. The catalog has no price
-field; those amounts never enter its ops, generated files or screenshot.
+copy before any general interpreter call and retained with the open request.
+Only the selling price goes on the catalog card; cost and quantity stay private.
 
 The pure single-answer helpers remain for bounded parsing and existing skill-toolkit
 consumers. They are not the production conversation flow. Photo claims need no separate
@@ -122,10 +121,11 @@ def caption_answers(caption, extracted=None):
     """
     public, answers, conflicts = [], {}, set()
     model = commerce_answers(extracted)
-    for part in re.split(r"[,;\n]+|\s+and\s+(?=(?:(?:I\s+)?(?:will\s+)?)?(?:sell|selling|bought|paid|\d)\b)", caption, flags=re.I):
-        text = re.sub(r"^(?:I\s+)?(?:will\s+)?", "", part.strip().rstrip(".!"), flags=re.I)
+    for part in re.split(r"[,;\n]+|\s+and\s+(?=(?:I\s+)?(?:will\s+)?(?:sell|selling|bought|paid|\d)\b)"
+                         r"|(?<=\d)[.!]\s+(?=(?:I\s+)?(?:will\s+)?sell(?:ing)?\b)", caption, flags=re.I):
+        text = re.sub(r"^(?:I\s+)?(?:will\s+)?(?:just\s+(?=bought\b))?", "", part.strip().rstrip(".!"), flags=re.I)
         got = {}
-        purchase = re.fullmatch(r"bought\s+(\d+)(?:\s+of\s+(?:these|them))?\s+at\s+(.+)", text, re.I)
+        purchase = re.fullmatch(r"bought\s+(\d+)(?:\s+of\s+(?:these|them))?\s+(?:at|for)\s+(.+)", text, re.I)
         money = re.fullmatch(r"(?:bought|paid|cost|sell|selling|price|retail)(?:\s+(?:it|them))?(?:\s+(?:for|at))?\s*:?\s+(.+)", text, re.I)
         qty = re.fullmatch(r"(?:(bought|got|have|stock|qty|quantity)\s*:?\s*)?(\d+(?:\.\d+)?)(?:\s+(of them|of these|each|[a-z]+))?", text, re.I)
         if purchase:
@@ -138,7 +138,7 @@ def caption_answers(caption, extracted=None):
             if parsed: got.update(qty=parsed[0], qty_unit=parsed[1])
             elif unit in UNIT_WORDS and _parse_count(qty[2]) == 0:
                 got.update(qty=0, qty_unit=UNIT_WORDS[unit])
-        elif re.fullmatch(r"\$\d+(?:\.\d{1,2})?(?:/(?:lb|each)|\s+per\s+(?:lb|pound|item|each))?", text, re.I):
+        elif re.fullmatch(r"\$\d+(?:\.\d{1,2})?(?:/(?:lb|each)|\s+(?:each|per\s+(?:lb|pound|item|each)))?", text, re.I):
             value = _parse_money(text)
             if value is not None: got["price"] = value
         elif match := re.fullmatch(r"(\d+)\s+(lb|pounds?|items?|each)\s+in\s+stock", text, re.I):
@@ -154,7 +154,7 @@ def caption_answers(caption, extracted=None):
         if "qty" in got and (type(got["qty"]) is not int or not 0 <= got["qty"] <= 100000):
             got.pop("qty")
             got.pop("qty_unit", None)
-        if money and text.lower().endswith("each"): got["sold_by"] = "item"
+        if "price" in got and text.lower().endswith(" each"): got["sold_by"] = "item"
         for key, value in got.items():
             if key in answers and answers[key] != value: conflicts.add(key)
             answers[key] = value

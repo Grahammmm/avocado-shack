@@ -8,11 +8,17 @@ from pathlib import Path
 from unittest import mock
 
 from hass import live_policy, media, photo_polish, preview, product_claims
+from hass import statebackup
 from hass.content_model import REPO_ROOT
+from hass.interpret_check import PRICE_REPLY
 from hass.ops import photos, Refused
+from hass.skills import testkit
 from hass.tests import test_item_add_dispatch as base
 from hass.tests.test_intake_simple import DETAILS
 from hass.tests.test_label_reader import reader, recorded
+
+
+GLUE_CAPTION = 'Just bought 50 of these for $1. I will sell at $2'
 
 
 class PublishGate(unittest.TestCase):
@@ -59,6 +65,39 @@ class PublishGate(unittest.TestCase):
         self.assertEqual(saved['description'], product['description'])
         self.assertEqual(saved['image'], product['image'])
         self.assertNotIn('labelSource', (chat.kit.wt / 'storefront-mockup/catalog-products.js').read_text())
+
+    def test_exact_glue_caption_is_one_listing_and_each_updates_the_same_code(self):
+        chat = self.chat()
+        # The legacy reader can refuse the price if the finance caption leaks to it.
+        chat.script(GLUE_CAPTION, {'question': PRICE_REPLY})
+        disposition, said = chat.say(GLUE_CAPTION, base.JAR)
+        self.assertEqual(disposition, 'proposed', said)
+        code, = [row['code'] for row in chat.drafts()]
+        for words, price in ((None, '2.00'), ('$2 each', '2.00 each')):
+            if words:
+                disposition, said = chat.say(words)
+            self.assertEqual(disposition, 'proposed', said)
+            reply, = said
+            self.assertIn('Price: $' + price, reply.splitlines())
+            self.assertIn('Private (not shown on the website): cost $1.00, quantity 50', reply)
+            self.assertIn('yes ' + code, reply)
+            self.assertTrue(chat.out.sent[-1]['attachments'])
+            product, draft = self.product(chat)
+            self.assertEqual(product['sellingPrice'], price)
+            self.assertNotIn('$1', product['description'])
+            self.assertEqual(live_policy.check(draft), [])
+        self.assertEqual(chat.asked, [])
+        self.assertEqual(len(chat.drafts()), 1)
+        self.assertEqual(chat.commits(), 0)
+
+    def test_photo_label_does_not_replace_an_older_unsent_reply(self):
+        chat = self.chat()
+        earlier = 'An earlier reply still waiting to go out.'
+        chat.conv.outbox.add(testkit.CHAT, earlier)
+        disposition, (first, listing) = chat.say(GLUE_CAPTION, base.JAR)
+        self.assertEqual(disposition, 'proposed')
+        self.assertEqual(first, earlier)
+        self.assertIn("Here's the listing:", listing)
 
     def test_food_organic_label_is_quoted_but_owner_health_phrase_dropped_only(self):
         chat = self.chat({'name': 'Jam', 'brand': 'Test kitchen', 'category': 'pantry',
@@ -189,20 +228,48 @@ class PublishGate(unittest.TestCase):
             self.assertEqual(chat.commits(), 1)
             self.assertEqual((chat.kit.wt / key).read_bytes(), wanted)
 
-    def test_render_failure_attaches_photo_and_never_contradicts_policy_on_retry(self):
+    def test_render_failure_answers_once_and_explicit_retry_rechecks_policy(self):
         chat = self.chat()
         chat.conv.previewer.capture = mock.Mock(return_value={'ok': False, 'png': None, 'error': "Cannot find module 'playwright'"})
         _, said = chat.say('sell for $2', base.JAR)
         self.assertIn("couldn't render the website card", said[0])
         self.assertTrue(chat.out.sent[-1]['attachments'])
-        self.assertIn('yes ' + chat.live()['draft_code'], said[0])
-        chat.conv._live_reasons = lambda draft: ['protected sentences: contact']
+        code, = [row['code'] for row in chat.drafts()]
+        self.assertIn('yes ' + code, said[0])
         chat.now += base.timedelta(seconds=31)
-        chat.conv.retry_previews()
-        chat.conv.flush(chat.out)
-        self.assertIn("can't put this", chat.out.sent[-1]['text'])
-        self.assertNotIn('yes ' + chat.live()['draft_code'], chat.out.sent[-1]['text'])
-        self.assertEqual(chat.conv.db.execute('SELECT COUNT(*) FROM preview_retry').fetchone()[0], 0)
+        self.assertEqual(chat.conv.retry_previews(), 0)
+        self.assertEqual(chat.conv.flush(chat.out), 0)
+        chat.conv._live_reasons = lambda draft: ['protected sentences: contact']
+        _, (retried,) = chat.say('?')
+        self.assertIn("can't put this", retried)
+        self.assertNotIn('yes ' + code, retried)
+
+    def test_fallback_picture_survives_backup_verify_and_restore(self):
+        chat = self.chat()
+        chat.conv.previewer = mock.Mock()
+        chat.conv.previewer.capture.return_value = {'ok': False, 'png': None, 'error': 'Please update your version of Node.js.'}
+        disposition, (said,) = chat.say(GLUE_CAPTION, base.JAR)
+        self.assertEqual(disposition, 'proposed')
+        self.assertIn("couldn't render the website card", said)
+        attached, = chat.out.sent[-1]['attachments']
+        path = Path(attached)
+        data = path.read_bytes()
+        self.assertEqual(path.name, hashlib.sha256(data).hexdigest() + '.jpg')
+        state = chat.conv.sdir
+        out = state.parent / 'fallback-backups'
+        out.mkdir(mode=0o700)
+        backed = statebackup.create(state, out)
+        self.assertEqual(backed['result'], 'ok', backed)
+        backup = Path(backed['backup'])
+        rel = path.relative_to(state)
+        self.assertEqual((backup / rel).read_bytes(), data)
+        self.assertEqual(statebackup.verify(backup)['result'], 'ok')
+        drill = state.parent / 'fallback-drill'
+        testkit._git(chat.kit.repo.main, 'worktree', 'add', '-b', 'hass/fallback-drill', str(drill))
+        restored = state.parent / 'restored-state'
+        result = statebackup.restore(backup, restored, drill)
+        self.assertEqual(result['result'], 'ok', result)
+        self.assertEqual((restored / rel).read_bytes(), data)
 
     def test_text_only_persimmons_generate_illustration_without_private_finances(self):
         chat = self.chat()
@@ -269,6 +336,7 @@ class PublishGate(unittest.TestCase):
                 self.assertIn('Private (not shown on the website): cost $1.75, quantity 40 lb', said[0].splitlines())
                 self.assertIn('generated illustration', said[0])
                 self.assertIn('All website card text:', said[0])
+                self.assertIn('$3.50 ' + shown, said[0].split('All website card text:', 1)[1])
                 self.assertNotIn("couldn't render", said[0])
                 self.assertIn('yes ' + code, said[0])
                 with Image.open(chat.out.sent[-1]['attachments'][0]) as image:
