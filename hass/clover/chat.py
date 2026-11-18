@@ -135,7 +135,7 @@ class TillDesk:
 
         "is <x> sold out" is ("sold_out", query), never ("in_stock", query): its yes/no is the opposite of "is <x> in stock"."""
         t = _clean(text)
-        if not t or len(t) > 200 or "\n" in (text or "").strip():
+        if not t or len(t) > 200 or len((text or "").strip().splitlines()) > 1:   # any line boundary (CR, VT, FF, NEL, U+2028...), not just LF
             return None
         if LOW.fullmatch(t):
             return ("low",)
