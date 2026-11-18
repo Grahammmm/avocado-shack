@@ -158,6 +158,25 @@ class PublishGate(unittest.TestCase):
         self.assertEqual(len(chat.drafts()), 1)
         self.assertEqual(chat.commits(), 0)
 
+    def test_listing_edit_during_supplier_clarification_changes_only_name(self):
+        chat = self.chat()
+        chat.say(LIVE_GLUE_CAPTION, base.JAR)
+        original, draft = self.product(chat)
+        code = chat.live()['draft_code']
+        disposition, (question,) = chat.say('this is from Miners or Ridge Farm')
+        self.assertEqual(disposition, 'question')
+        self.assertEqual(question, 'What supplier name should the source line show?')
+        disposition, (said,) = chat.say('name Super Glue')
+        self.assertEqual(disposition, 'proposed', said)
+        product, revised = self.product(chat)
+        self.assertEqual(product['name'], 'Super Glue')
+        self.assertEqual(product.get('supplier'), original.get('supplier'))
+        self.assertNotIn('From name Super Glue', said)
+        self.assertEqual(chat.live()['draft_code'], code)
+        self.assertNotEqual(revised['draft_hash'], draft['draft_hash'])
+        self.assertEqual(len(chat.drafts()), 1)
+        self.assertEqual(chat.commits(), 0)
+
     def test_label_read_has_no_pending_reply_even_with_finance_fallback(self):
         from types import SimpleNamespace
         for text, model_calls in ((LIVE_GLUE_CAPTION, 0), ('$1/sell $2', 0),
