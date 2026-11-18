@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
-from hass import conversation, editor, social_draft
+from hass import conversation, editor, social_draft, voice
 from hass.content_model import load_content
 from hass.tests.test_commands_doc import DOC, rows, verb
 from hass.tests.test_conversation import GROUP, SETTINGS, STRANGER, T0, ConversationTestCase
@@ -209,11 +209,9 @@ class PostMakerTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.replies(), [])
 
     def test_help_and_commands_maker_example(self):
-        lines = [ln for ln in conversation.HELP_TEXT.splitlines() if "post" in ln.lower().replace("\ue000", "")]
-        [line] = lines
-        plain = line.replace("\ue000", "").replace("\ue001", "")
-        self.assertLessEqual(len(plain), 70)
-        self.assertEqual(plain, "post Hass avocado or post maker fixture-farm - a caption to copy")
+        plain = voice.plain(conversation.help_detail("post"))  # AV1052-12: the full post lines are in `help post`
+        self.assertEqual(plain, "post Hass avocado - a caption to copy for a product\npost maker fixture-farm - a caption to copy for a maker")
+        for line in plain.splitlines(): self.assertLessEqual(len(line), 70)
         for bad in ("<id>", "<$>", "<code>"): self.assertNotIn(bad, plain)
         [(_, example, row)] = [r for r in rows(DOC.read_text("utf-8")) if r[0].startswith("`post maker")]
         self.assertEqual(verb(re.findall(r"`([^`]+)`", example)[0]), "post")
