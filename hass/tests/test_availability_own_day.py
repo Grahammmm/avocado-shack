@@ -14,6 +14,7 @@ from hass.content_model import validate_products
 from hass.tests.test_browser_freshness import browser_words
 from hass.tests.test_catalog_ops import CatalogTestCase
 from hass.tests.test_selection_checked import DatedRepo
+from hass.tests import test_skills_reports as report_cases
 
 CHECK, SET, ALL = "store.confirm_selection", "product.set_availability", "product.set_availability_all"
 MON = date(2026, 11, 2)  # the full shelf check
@@ -101,6 +102,15 @@ class OwnDayTests(CatalogTestCase):
                 self.assertEqual(self.words(day)[self.a], word)
                 self.assertEqual(self.labels(day)[self.a], word)
                 self.assertEqual(self.facts(day)["limited_names"].count(self.product(self.a)["name"]), counted)
+
+    def test_named_report_uses_word_day_not_full_check_day(self):
+        own = MON + timedelta(days=2)
+        content = report_cases.content([report_cases.prod("eggs", "no", on=own.isoformat())], checked=MON.isoformat())
+        for age, word in ((0, "sold out"), (7, "sold out"), (8, "not confirmed")):
+            day = own + timedelta(days=age)
+            with self.subTest(age=age):
+                answer = report_cases.PLAIN(report_cases.said(content, "how many eggs do we have", today=day))
+                self.assertEqual(answer.split("\n")[0], report_cases.NO_COUNTS + "eggs: " + word)
 
     def test_validation_accepts_own_day_after_check_but_never_future(self):
         self.r.run((CHECK, {}))
