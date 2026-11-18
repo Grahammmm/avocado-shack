@@ -6,11 +6,12 @@ Run: python3 -m unittest hass.tests.test_bridge_photos_size -v"""
 import unittest
 
 from hass.bridge import BridgeError
-from hass.tests.test_bridge_photos import JPG, PASSWORD, FakeTransport, PhotosTests, _meta
+from hass.tests import test_bridge_photos as _bp
+from hass.tests.test_bridge_photos import JPG, PASSWORD, FakeTransport, _meta
 
 
 class SizeMismatchTests(unittest.TestCase):
-    setUp, photos, fails = PhotosTests.setUp, PhotosTests.photos, PhotosTests.fails  # helpers only, not its tests
+    setUp, photos, fails = _bp.PhotosTests.setUp, _bp.PhotosTests.photos, _bp.PhotosTests.fails  # helpers only, not its tests
 
     def mismatch(self, items, files, n=1):
         exc = self.fails(fake := FakeTransport(meta=_meta(*items), files=files), "size-mismatch", n=n)
@@ -67,7 +68,7 @@ class SizeMismatchTests(unittest.TestCase):
 
 
 class MessageGuidControlTests(unittest.TestCase):
-    setUp, photos = PhotosTests.setUp, PhotosTests.photos
+    setUp, photos = _bp.PhotosTests.setUp, _bp.PhotosTests.photos
 
     def test_control_characters_refused_before_any_call(self):
         fake = FakeTransport()

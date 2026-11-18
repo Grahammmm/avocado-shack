@@ -14,12 +14,11 @@ from hass.tests.test_social_draft import product
 
 CANNOT = inputs.CANNOT
 HAPPY_CAPTION = inputs.HAPPY_CAPTION
-T = inputs.SocialDraftInputTests
 
 
 class SocialDraftShapeTests(unittest.TestCase):
     # Borrow the helpers without subclassing, so the borrowed tests do not run twice.
-    setUp, load, build, tree, run_cli, rewrite = T.setUp, T.load, T.build, T.tree, T.run_cli, T.rewrite
+    setUp, load, build, tree, run_cli, rewrite = inputs.SocialDraftInputTests.setUp, inputs.SocialDraftInputTests.load, inputs.SocialDraftInputTests.build, inputs.SocialDraftInputTests.tree, inputs.SocialDraftInputTests.run_cli, inputs.SocialDraftInputTests.rewrite
 
     def set_products(self, products):
         self.load(product("p1"))  # photo, makers, community and store in place
