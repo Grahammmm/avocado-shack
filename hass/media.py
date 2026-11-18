@@ -12,6 +12,14 @@ web_copy(root, sha256) (H10 part 2) writes root/web/<sha[:2]>/<sha>.<ext>: the s
 block that can carry location, device or time removed by JPEG segment / PNG chunk filtering (pixels byte-identical,
 no image library). Pixels are never rotated or re-encoded: a JPEG whose EXIF Orientation is 2-8 keeps that one value in a
 fresh EXIF segment holding nothing else (ORIENT_APP1); a PNG with an eXIf rotation tag is refused.
+
+Writer protocol (the invariant the batch unwind relies on): the media root is private to the Hass service user (0700,
+created by Hass), and the only writers of originals/ and web/ are the functions in this module. Each of them
+(store_original, store_originals with its sidecars and its unwind, web_copy) holds the same exclusive flock on the root
+directory (_lock_root) for its whole write-or-unwind span, and every writable descriptor it opens is fsynced and closed
+before that lock is released; so while an unwind runs no cooperating writer holds a writable descriptor or can create,
+replace or remove a file there. Writers that bypass these functions (other code or programs, or a descriptor opened
+outside this protocol) are out of scope; against them the unwind only fails safe: a file it cannot prove unchanged is kept.
 """
 import argparse, fcntl, hashlib, json, os, re, secrets, stat, sys, tempfile, zlib  # noqa: E401
 from datetime import datetime
@@ -54,10 +62,11 @@ class Refused(Exception):
         self.code, self.reply = code, REPLIES[code]
 
 class BatchRefused(Refused):
-    """AV2152-04: store_originals refused (or could not write) the photo at .position (1-based); the batch left no new file."""
-    def __init__(self, code: str, position: int):
+    """AV2152-04: store_originals refused (or could not write) the photo at .position (1-based); the batch left no new file.
+    .kept lists, as paths, any file the unwind could not prove it wrote unchanged and therefore did not remove (empty normally)."""
+    def __init__(self, code: str, position: int, kept=()):
         super().__init__(code)
-        self.position = position
+        self.position, self.kept = position, tuple(kept)
 
 def _prefix(data: bytes):
     return next((kind for kind, magic in KINDS.items() if data.startswith(magic)), None)
@@ -144,18 +153,34 @@ def _aware(value) -> str:
     if dt.tzinfo is None or dt.utcoffset() is None: raise ValueError(msg)
     return value
 
+def _lock_root(base: Path) -> int:
+    """The writer protocol's lock: an open fd of the media root directory holding an exclusive flock (closing it releases).
+    flock belongs to the open file description, so two calls (threads or processes) each opening the root exclude each other."""
+    fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY)
+    try: fcntl.flock(fd, fcntl.LOCK_EX)
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
 def store_original(root, data: bytes, *, received_at: str, source: str, _created=None, _lock=None) -> dict:
-    """Keep data once under its sha256; a repeat returns the existing entry with duplicate=True. (_created: see store_originals.)"""
+    """Keep data once under its sha256; a repeat returns the existing entry with duplicate=True. (_created: see store_originals.)
+    A single call holds the root lock for its own writes; inside store_originals (_lock is the batch's list) the batch's
+    lock is taken on the first photo and held by the batch, never taken twice, so the batch cannot deadlock on itself."""
     if not isinstance(source, str) or not SOURCE_RE.fullmatch(source):
         raise ValueError("source must match ^[a-z0-9-]{1,32}$")
     _aware(received_at)  # before _open_root: a refused time creates nothing
     if not isinstance(data, (bytes, bytearray)): raise TypeError("data must be bytes")
     data = bytes(data)
     base = _open_root(root)
-    if _lock is not None and not _lock:  # a batch: one flock on the media root directory, taken once, so batches never interleave
-        fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY)
-        _lock.append(fd)
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    if _lock is not None:  # a batch: one flock on the media root directory, taken once, so batches never interleave
+        if not _lock: _lock.append(_lock_root(base))
+        return _store_locked(base, data, received_at, source, _created)
+    fd = _lock_root(base)  # a single call: never runs while a batch writes or unwinds
+    try: return _store_locked(base, data, received_at, source, _created)
+    finally: os.close(fd)
+
+def _store_locked(base: Path, data: bytes, received_at: str, source: str, created) -> dict:
     if not data: raise Refused("empty")
     if len(data) > MAX_BYTES: raise Refused("too-large")
     kind = sniff(data)
@@ -168,24 +193,25 @@ def store_original(root, data: bytes, *, received_at: str, source: str, _created
     have = _existing(final)
     if have is not None and hashlib.sha256(have).hexdigest() != sha: raise Refused("corrupt-store")
     duplicate = have is not None
-    if not duplicate: _write_new(final, data, _created)
+    if not duplicate: _write_new(final, data, created)
     if _existing(sidecar) is None:  # also repairs a sidecar lost between the two writes
         meta = {"sha256": sha, "kind": kind, "bytes": len(data), "received_at": received_at, "source": source}
-        _write_new(sidecar, json.dumps(meta, indent=2, sort_keys=True).encode("utf-8") + b"\n", _created)
+        _write_new(sidecar, json.dumps(meta, indent=2, sort_keys=True).encode("utf-8") + b"\n", created)
     return {"sha256": sha, "kind": kind, "bytes": len(data), "path": str(final), "duplicate": duplicate}
 
 def store_originals(root, items, *, received_at: str, source: str) -> list:
     """AV2152-04 (H12): store_original for each of items in order, all or nothing. The caller has already run check_photo on every
     item. On a refusal or a write fault at item n, only the originals and sidecars THIS call created (matched by their recorded
-    device and inode) are removed, never a duplicate or sidecar that was already there; BatchRefused names position n (1-based).
-    Any other error removes the same files and is raised as it was."""
+    device and inode) are removed, never a duplicate or sidecar that was already there; BatchRefused names position n (1-based)
+    and .kept any file the unwind kept because it could not prove it unchanged. Any other error removes the same files and is
+    raised as it was. The root lock is held from the first photo until the unwind has finished."""
     created, out, lock = [], [], []  # lock: the root directory fd holding an advisory flock for the whole batch (writes and unwind)
     try:
         try:
             for data in items: out.append(store_original(root, data, received_at=received_at, source=source, _created=created, _lock=lock))
         except (Refused, OSError) as exc:
-            _unwind(created)
-            raise BatchRefused(exc.code if isinstance(exc, Refused) else "corrupt-store", len(out) + 1) from None
+            kept = _unwind(created)
+            raise BatchRefused(exc.code if isinstance(exc, Refused) else "corrupt-store", len(out) + 1, kept) from None
         except BaseException:
             _unwind(created)
             raise
@@ -193,20 +219,36 @@ def store_originals(root, items, *, received_at: str, source: str) -> list:
         for fd in lock: os.close(fd)  # closing releases the flock
     return out
 
-def _unwind(created) -> None:
+def _unwind(created) -> list:
     """Remove only a file that is still exactly what this batch wrote: a regular file with the recorded device, inode,
-    size and sha256 (a freed inode number is reused at once, so identity alone is not enough). Anything else stays."""
+    size and sha256 (a freed inode number is reused at once, so identity alone is not enough). Anything else stays.
+
+    Runs under the batch's root lock (see the module's writer protocol): no cooperating writer can create, replace or
+    remove a file under the root or still holds a writable descriptor, since each closes its descriptors before it
+    releases the lock. Writers that bypass hass/media.py are out of scope; against them this only fails safe: whatever is
+    not proven unchanged (a mismatch, a symlink or other non-regular entry, any error while checking or removing) is
+    never unlinked, but put back at its path with link (which never overwrites, and links a symlink itself). If the path
+    is occupied by then, the file stays under its .unwind name. Returns the paths of every file kept (not removed)."""
+    kept = []
     for path, dev, ino, size, digest in reversed(created):
         # Move the candidate aside first (atomic, same directory), so nothing can be swapped in at the path between the
-        # check and the removal; only the moved name is ever unlinked. A mismatch is put back with link (never overwrites).
+        # check and the removal; only the moved name is ever unlinked.
         path = Path(path)
         moved = path.with_name(f".{path.name}.unwind-{secrets.token_hex(6)}")
         try: os.rename(path, moved)
-        except OSError: continue
-        try:
-            if _still_written(moved, dev, ino, size, digest): os.unlink(moved)
-            else: _put_back(moved, path)
-        except OSError: pass
+        except FileNotFoundError: continue  # already gone: nothing of ours is left there
+        except OSError:
+            kept.append(path)  # could not move it aside, so it was never checked: it stays where it is
+            continue
+        try: ours = _still_written(moved, dev, ino, size, digest)
+        except OSError: ours = False  # O_NOFOLLOW on a symlink (ELOOP), a read error: not proven unchanged
+        if ours:
+            try:
+                os.unlink(moved)
+                continue
+            except OSError: pass  # not removed: put it back like any other kept file
+        kept.extend(_put_back(moved, path))
+    return kept
 
 def _still_written(moved, dev, ino, size, digest) -> bool:
     fd = os.open(moved, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -215,11 +257,14 @@ def _still_written(moved, dev, ino, size, digest) -> bool:
         if not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (dev, ino) or now.st_size != size: return False
         return hashlib.sha256(fh.read(size + 1)).hexdigest() == digest
 
-def _put_back(moved, path) -> None:
-    """Restore a moved file that was not ours to remove; if something now sits at path, the file stays under its moved name."""
+def _put_back(moved, path) -> list:
+    """Restore a moved entry that was not ours to remove (a symlink is linked as itself); if something now sits at path, or
+    the link fails, it stays under its moved name. Returns the name(s) it is kept under."""
     try: os.link(moved, path, follow_symlinks=False)
-    except FileExistsError: return
-    os.unlink(moved)
+    except OSError: return [moved]
+    try: os.unlink(moved)
+    except OSError: return [path, moved]
+    return [path]
 
 def check_photo(data: bytes) -> str:
     """NB-AV-10 (H12): the kind, after every store_original and web_copy check on the bytes in memory; writes nothing."""
@@ -343,6 +388,11 @@ def web_copy(root, sha256: str) -> dict:
     """Write the metadata-free copy of a stored original once; a repeat returns it with duplicate=True."""
     if not isinstance(sha256, str) or not SHA_RE.fullmatch(sha256): raise ValueError("sha256 must be 64 lowercase hex")
     base = _open_root(root)
+    fd = _lock_root(base)  # the writer protocol: never runs while a batch writes or unwinds
+    try: return _web_copy_locked(base, sha256)
+    finally: os.close(fd)
+
+def _web_copy_locked(base: Path, sha256: str) -> dict:
     folder = base / "originals" / sha256[:2]
     for d in (folder.parent, folder):
         try:
