@@ -88,9 +88,26 @@ def render_md(report, now, reachable=True):
     return "\n".join(lines)
 
 
+def _read_regular(path):
+    """Open without blocking or following a link; only a regular file is read (a FIFO would hang open)."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        raise
+    except OSError:
+        raise cache.CacheUnsafe("products") from None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise cache.CacheUnsafe("products")
+        with os.fdopen(fd, "rb", closefd=False) as handle:
+            return handle.read().decode("utf-8")
+    finally:
+        os.close(fd)
+
+
 def read_inputs(state, worktree):
     """Only local products + private links. An absent link table means no links."""
-    content = json.loads((Path(worktree) / "hass/content/products.json").read_text("utf-8"))
+    content = json.loads(_read_regular(Path(worktree) / "hass/content/products.json"))
     folder = Path(state) / "clover"
     links = {}
     if cache._private_dir(folder, create=False):
