@@ -54,8 +54,14 @@ def _usable(t) -> bool:
 def read(path) -> list:
     """The valid lines of one stage log, in file order; unreadable or malformed lines are skipped."""
     out = []
-    try: text = Path(path).read_text("utf-8", "replace")
+    # Non-blocking open so a FIFO without a writer cannot hang; the open descriptor (not the path) decides regularness.
+    try: fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    except (OSError, ValueError): return out
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode): return out
+        with open(fd, "r", encoding="utf-8", errors="replace", closefd=False) as fh: text = fh.read()
     except OSError: return out
+    finally: os.close(fd)
     # Records end at LF only (read_text already folded CRLF/CR to LF). str.splitlines would also cut at U+0085/U+2028/U+2029,
     # which are legal literal characters inside a JSON string, and the two fragments would both be dropped as malformed.
     for raw in text.split("\n"):
