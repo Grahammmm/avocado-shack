@@ -4,9 +4,11 @@ AVB-12: moved verbatim out of hass/conversation.py, which imports every name bac
 unchanged). The methods run on the Conversation (self is the conversation): they use its store, replies and
 settings exactly as before. Command routing stays in Conversation._command.
 """
-from datetime import datetime
+import os, stat  # noqa: E401
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
-from hass import editor as editor_mod, sitegen, voice
+from hass import editor as editor_mod, preview as preview_mod, sitegen, voice
 from hass.chat.shared import CANT_READ, load_content, LOCAL_TZ, q, STATUS_PLAIN
 from hass.content_model import _text as checked_text, ContentError, HOME_IMAGE_RE, load_and_validate, SHELF_LABELS, shop_today, validate
 from hass.ops import catalog
@@ -23,8 +25,77 @@ LISTING_MANY = "That fits more than one thing. Could you say a bit more of its n
 FIND_MAX, FIND_USAGE = 10, "Tell me a word or two to look for, like " + q("find lion's mane") + "."  # AV1537-04
 
 
+LOOK_OK = "The website now (private preview, phone):"  # AV1922-01
+LOOK_FAIL = "I could not take a picture of the site right now; nothing changed."
+LOOK_USAGE = "Send " + q("look") + ", " + q("look hike") + ", or " + q("look <product id or name>") + "; use " + q("find") + " for ids."
+LOOK_ABSENT = "{id} is not on the site; send " + q("find <words>") + " for ids."
+LOOK_NONE = "No active product matches {id}; send " + q("find <words>") + " for ids."
+LOOK_MANY = "That fits more than one active product; send " + q("look") + " and the id:"
+
+
 class SitePack:
     """Site pack commands, mixed into Conversation."""
+
+    def _look_product(self, content, query):
+        """AV1922-01: ("one", record) for the one active product the query names (exact id first, then name or saved alias),
+        ("absent", id) for an exact id that is hidden or held, ("none", None) or ("many", [records]). Read-only."""
+        active = [p for p in content.products if p.get("status") == "active"]
+        for p in content.products:
+            if p.get("id") == query: return ("one", p) if p.get("status") == "active" else ("absent", query)
+        has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
+        found = catalog.lookup(SimpleNamespace(products=active, makers={}), "product", query,
+                               aliases=self.aliases() if has_memory else None)
+        if "match" in found: return "one", next(p for p in active if p["id"] == found["match"])
+        ids = [c["id"] for c in found["candidates"]]
+        return ("many", [p for p in active if p["id"] in ids]) if ids else ("none", None)
+
+    def _look_path(self, now):
+        """A fresh private screenshot path look-<UTC stamp>.png (microseconds; never an existing name), or None when the
+        screenshots folder is a link or not a folder."""
+        folder = self.sdir / "screenshots"
+        if os.path.lexists(folder) and (os.path.islink(folder) or not os.path.isdir(folder)): return None
+        at = now.astimezone(timezone.utc)
+        for _ in range(1000):
+            path = folder / f"look-{at.strftime('%Y%m%dT%H%M%S%fZ')}.png"
+            if not os.path.lexists(path): return path
+            at += timedelta(microseconds=1)
+        return None
+
+    def _look(self, arg) -> str:
+        """AV1922-01 (H06/H17): a fresh phone-width picture of the private preview as it is now: `look` the home page,
+        `look hike` /hike, `look <product>` that product's card. Same previewer as the proposal pictures, no overlay files,
+        a target from the current writer-worktree content. Read-only: no draft, expiry sweep, interpreter call or usage
+        count; works while paused. Any failure is the one fixed sentence and no picture."""
+        if arg is None:
+            self._reply(LOOK_USAGE, ids_ok=True)
+            return "look"
+        text, photo = LOOK_FAIL, []
+        try:
+            now = self._now()
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+            record, refusal = None, None
+            if not arg: record = {"collection": "store", "after": content.store}
+            elif arg.lower() == "hike": record = {"collection": "events", "key": "", "after": {}}
+            else:
+                kind, found = self._look_product(content, arg)
+                if kind == "one": record = {"collection": "products", "key": found["id"], "after": found}
+                elif kind == "absent": refusal = LOOK_ABSENT.format(id=found)
+                elif kind == "none": refusal = LOOK_NONE.format(id='"' + arg + '"')
+                else:
+                    lines = [f"{p['id']} - {p['name']}" for p in sorted(found, key=lambda p: p["id"])]
+                    refusal = "\n".join([LOOK_MANY] + lines[:FIND_MAX] + (["There are more. Add a word to narrow it down."] if len(found) >= catalog.MAX_CANDIDATES else []))
+            if refusal: text = refusal
+            elif self.previewer is not None:
+                out = self._look_path(now)
+                shot = out and self.previewer.capture({}, preview_mod.target_for(record, shop_today(now)), out, viewports=("phone",))
+                checks = shot.get("checks") if isinstance(shot, dict) else None
+                if (out and shot["ok"] is True and shot.get("png") == str(out) and isinstance(checks, dict) and checks
+                        and all(v is True for v in checks.values()) and stat.S_ISREG(os.lstat(out).st_mode)):
+                    text, photo = LOOK_OK, [str(out)]
+        except Exception:  # noqa: BLE001 - never raise past a chat reply, never show the cause
+            text, photo = LOOK_FAIL, []
+        self._reply(text, photo, long_ok=True, ids_ok=True)
+        return "look"
 
     def _listing_names_something(self, text) -> bool:
         """Like post, a multiword listing needs a known name; unreadable content gets the usual read error."""
