@@ -1,0 +1,77 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "cached"
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": 200,
+    "quantity": null
+   },
+   "route": "cached",
+   "seconds": 0.001,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "cached"
+   },
+   "method": "label",
+   "result": {
+    "category": "general",
+    "colour": "Off-white with a yellow top and a black label",
+    "description": "SUPERGRIP GLUE comes in a tall, rectangular 2 fl oz container with a tapered yellow top and a black label with yellow lettering.",
+    "name": "SUPERGRIP GLUE",
+    "printed_claims": [
+     "Made in USA",
+     "The strongest glue"
+    ],
+    "product_type": "Glue",
+    "size": "2 fl oz"
+   },
+   "route": "cached",
+   "seconds": 0.043,
+   "turn": 1
+  },
+  {
+   "attrs": {},
+   "method": "capture",
+   "result": {
+    "cardText": "From the market\n\nSUPERGRIP GLUE\n\n$2.00\n\nAsk us about the source in store.\n\nNew\n\nSUPERGRIP GLUE comes in a tall, rectangular container with a tapered yellow top and a black label with yellow lettering. 2 fl oz. Off-white with a yellow top and a black label. Made in USA, The strongest glue.\n\nLink to this",
+    "checks": {
+     "description": true,
+     "imageShown": true,
+     "noPageErrors": true,
+     "noPosts": true,
+     "priceShown": true,
+     "productShown": true
+    },
+    "error": null,
+    "ok": true
+   },
+   "route": "browser",
+   "seconds": 2.981,
+   "turn": 1
+  },
+  {
+   "attrs": {},
+   "method": "capture",
+   "result": {
+    "checks": {
+     "description": true,
+     "noPageErrors": true,
+     "noPosts": true,
+     "productShown": true
+    },
+    "error": null,
+    "ok": true
+   },
+   "route": "browser",
+   "seconds": 2.94,
+   "turn": 2
+  }
+ ],
+ "case": "approve-right-code"
+}

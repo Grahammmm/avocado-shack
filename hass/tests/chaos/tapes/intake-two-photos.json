@@ -1,0 +1,72 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": 200,
+    "quantity": null
+   },
+   "route": "qwen",
+   "seconds": 1.111,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": 5.76
+   },
+   "method": "label",
+   "result": {
+    "brand": "Supergrip",
+    "category": "general",
+    "colour": "Off-white bottle with a yellow top and a black label with yellow text",
+    "description": "Supergrip Glue comes in a tall, rectangular 2 fl oz bottle with a yellow top and a black label.",
+    "name": "Supergrip Glue",
+    "printed_claims": [
+     "Made in USA",
+     "The strongest glue"
+    ],
+    "product_type": "Glue",
+    "size": "2 fl oz"
+   },
+   "route": "codex",
+   "seconds": 5.76,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": 4.785
+   },
+   "method": "label",
+   "result": {
+    "category": "general",
+    "description": "The packaging has a light rectangular panel with a dark border and lists GripCo, Ohio, as the distributor.",
+    "warnings": [
+     "Keep away from children."
+    ]
+   },
+   "route": "codex",
+   "seconds": 4.785,
+   "turn": 1
+  }
+ ],
+ "case": "intake-two-photos"
+}

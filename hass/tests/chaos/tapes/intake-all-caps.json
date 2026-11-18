@@ -1,0 +1,24 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": 250,
+    "quantity": null
+   },
+   "route": "qwen",
+   "seconds": 18.189,
+   "turn": 1
+  }
+ ],
+ "case": "intake-all-caps"
+}

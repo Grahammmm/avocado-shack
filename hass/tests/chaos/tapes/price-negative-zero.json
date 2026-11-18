@@ -1,0 +1,41 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": null,
+    "quantity": null
+   },
+   "route": "codex-sub",
+   "seconds": 2.591,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "openai",
+    "last_error": null,
+    "last_fallback": true,
+    "last_model": "qwen3.8:27b-thinkingcap-q6",
+    "last_primary_error": "codex-local",
+    "last_seconds": 2.723
+   },
+   "method": "interpret",
+   "result": {
+    "question": "The website doesn’t show prices. Could you resend the mango request without the price?"
+   },
+   "route": "codex-sub",
+   "seconds": 2.723,
+   "turn": 1
+  }
+ ],
+ "case": "price-negative-zero"
+}
