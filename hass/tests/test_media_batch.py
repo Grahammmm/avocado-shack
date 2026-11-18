@@ -18,6 +18,11 @@ from hass.tests.test_media_web import jpeg, seg
 AT = "2026-11-02T18:00:00+00:00"
 
 
+def origin(moved):
+    """The original path of a file the unwind moved aside to .<name>.unwind-<token>."""
+    return Path(moved).with_name(Path(moved).name[1:].rsplit(".unwind-", 1)[0])
+
+
 def pic(i):
     return jpeg(seg(0xFE, f"batch {i}".encode()))
 
@@ -102,6 +107,50 @@ class StoreOriginalsTests(unittest.TestCase):
             self.store([pic(1), pic(2)])
         self.assertEqual(made[0].read_bytes(), b"someone else's file")
         self.assertFalse(made[1].exists())
+
+    def fail_second_after(self, hook):
+        """Run a two-photo batch whose 2nd photo faults; hook(paths) runs just before the unwind's validation of each file."""
+        made = []
+        real_write, real_check = media._write_new, media._still_written
+
+        def write(final, data, created=None):
+            real_write(final, data, created)
+            made.append(final)
+            if len(made) == 3: raise OSError("fault")  # photo 1 original + sidecar, then photo 2's original
+        with mock.patch.object(media, "_write_new", write), mock.patch.object(media, "_still_written", lambda *a: hook(real_check, *a)):
+            with self.assertRaises(media.BatchRefused): self.store([pic(1), pic(2)])
+        return made
+
+    def test_the_normal_unwind_removes_its_own_files(self):
+        made = self.fail_second_after(lambda real, *a: real(*a))
+        self.assertEqual(len(made), 3)
+        self.assertEqual(files(self.root), [])
+
+    def test_a_file_replaced_at_the_path_after_validation_survives(self):
+        def hook(real, moved, *a):
+            ok = real(moved, *a)  # validated and about to be removed; now someone puts another file at the path
+            origin(moved).write_bytes(b"late arrival")
+            return ok
+        made = self.fail_second_after(hook)
+        for p in made: self.assertEqual(p.read_bytes(), b"late arrival")  # every validated file was removed; the late file stays
+        self.assertEqual([p for p in files(self.root) if ".unwind-" in p], [])
+
+    def test_a_same_inode_rewrite_before_removal_survives(self):
+        def hook(real, moved, *a):
+            with open(moved, "r+b") as fh: fh.write(b"X")  # same inode, same size, other bytes
+            return real(moved, *a)
+        made = self.fail_second_after(hook)
+        for p in made: self.assertEqual(p.read_bytes()[:1], b"X")  # rewritten files are put back, not removed
+        self.assertEqual([p for p in files(self.root) if ".unwind-" in p], [])
+
+    def test_a_mismatch_is_not_put_back_over_a_new_file(self):
+        def hook(real, moved, *a):
+            with open(moved, "r+b") as fh: fh.write(b"X")
+            origin(moved).write_bytes(b"newer")
+            return real(moved, *a)
+        made = self.fail_second_after(hook)
+        for p in made: self.assertEqual(p.read_bytes(), b"newer")  # never clobbered
+        self.assertEqual(len([p for p in files(self.root) if ".unwind-" in p]), 3)  # the changed files stay under their moved names
 
     def test_other_errors_unwind_and_propagate(self):
         with self.assertRaises(ValueError):

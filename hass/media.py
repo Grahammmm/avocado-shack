@@ -13,7 +13,7 @@ block that can carry location, device or time removed by JPEG segment / PNG chun
 no image library). Pixels are never rotated or re-encoded: a JPEG whose EXIF Orientation is 2-8 keeps that one value in a
 fresh EXIF segment holding nothing else (ORIENT_APP1); a PNG with an eXIf rotation tag is refused.
 """
-import argparse, hashlib, json, os, re, stat, sys, tempfile, zlib  # noqa: E401
+import argparse, fcntl, hashlib, json, os, re, secrets, stat, sys, tempfile, zlib  # noqa: E401
 from datetime import datetime
 from pathlib import Path
 
@@ -144,7 +144,7 @@ def _aware(value) -> str:
     if dt.tzinfo is None or dt.utcoffset() is None: raise ValueError(msg)
     return value
 
-def store_original(root, data: bytes, *, received_at: str, source: str, _created=None) -> dict:
+def store_original(root, data: bytes, *, received_at: str, source: str, _created=None, _lock=None) -> dict:
     """Keep data once under its sha256; a repeat returns the existing entry with duplicate=True. (_created: see store_originals.)"""
     if not isinstance(source, str) or not SOURCE_RE.fullmatch(source):
         raise ValueError("source must match ^[a-z0-9-]{1,32}$")
@@ -152,6 +152,10 @@ def store_original(root, data: bytes, *, received_at: str, source: str, _created
     if not isinstance(data, (bytes, bytearray)): raise TypeError("data must be bytes")
     data = bytes(data)
     base = _open_root(root)
+    if _lock is not None and not _lock:  # a batch: one flock on the media root directory, taken once, so batches never interleave
+        fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY)
+        _lock.append(fd)
+        fcntl.flock(fd, fcntl.LOCK_EX)
     if not data: raise Refused("empty")
     if len(data) > MAX_BYTES: raise Refused("too-large")
     kind = sniff(data)
@@ -175,31 +179,47 @@ def store_originals(root, items, *, received_at: str, source: str) -> list:
     item. On a refusal or a write fault at item n, only the originals and sidecars THIS call created (matched by their recorded
     device and inode) are removed, never a duplicate or sidecar that was already there; BatchRefused names position n (1-based).
     Any other error removes the same files and is raised as it was."""
-    created, out = [], []
+    created, out, lock = [], [], []  # lock: the root directory fd holding an advisory flock for the whole batch (writes and unwind)
     try:
-        for data in items: out.append(store_original(root, data, received_at=received_at, source=source, _created=created))
-    except (Refused, OSError) as exc:
-        _unwind(created)
-        raise BatchRefused(exc.code if isinstance(exc, Refused) else "corrupt-store", len(out) + 1) from None
-    except BaseException:
-        _unwind(created)
-        raise
+        try:
+            for data in items: out.append(store_original(root, data, received_at=received_at, source=source, _created=created, _lock=lock))
+        except (Refused, OSError) as exc:
+            _unwind(created)
+            raise BatchRefused(exc.code if isinstance(exc, Refused) else "corrupt-store", len(out) + 1) from None
+        except BaseException:
+            _unwind(created)
+            raise
+    finally:
+        for fd in lock: os.close(fd)  # closing releases the flock
     return out
 
 def _unwind(created) -> None:
     """Remove only a file that is still exactly what this batch wrote: a regular file with the recorded device, inode,
     size and sha256 (a freed inode number is reused at once, so identity alone is not enough). Anything else stays."""
     for path, dev, ino, size, digest in reversed(created):
+        # Move the candidate aside first (atomic, same directory), so nothing can be swapped in at the path between the
+        # check and the removal; only the moved name is ever unlinked. A mismatch is put back with link (never overwrites).
+        path = Path(path)
+        moved = path.with_name(f".{path.name}.unwind-{secrets.token_hex(6)}")
+        try: os.rename(path, moved)
+        except OSError: continue
         try:
-            st = os.lstat(path)
-            if not (stat.S_ISREG(st.st_mode) and (st.st_dev, st.st_ino) == (dev, ino)): continue
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-            with os.fdopen(fd, "rb") as fh:
-                now = os.fstat(fd)
-                if not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (dev, ino) or now.st_size != size: continue
-                if hashlib.sha256(fh.read(size + 1)).hexdigest() != digest: continue
-            os.unlink(path)
+            if _still_written(moved, dev, ino, size, digest): os.unlink(moved)
+            else: _put_back(moved, path)
         except OSError: pass
+
+def _still_written(moved, dev, ino, size, digest) -> bool:
+    fd = os.open(moved, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as fh:
+        now = os.fstat(fd)
+        if not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (dev, ino) or now.st_size != size: return False
+        return hashlib.sha256(fh.read(size + 1)).hexdigest() == digest
+
+def _put_back(moved, path) -> None:
+    """Restore a moved file that was not ours to remove; if something now sits at path, the file stays under its moved name."""
+    try: os.link(moved, path, follow_symlinks=False)
+    except FileExistsError: return
+    os.unlink(moved)
 
 def check_photo(data: bytes) -> str:
     """NB-AV-10 (H12): the kind, after every store_original and web_copy check on the bytes in memory; writes nothing."""
