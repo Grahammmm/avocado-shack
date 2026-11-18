@@ -457,6 +457,13 @@ def check(case, result, public, products, intake):
         for key, value in want["private_intake"].items():
             out.append(("private_intake:" + key, intake.get(key) == value,
                         "saved private intake must match " + key + "=" + json.dumps(value)))
+    if "drafts" in want:  # MAIN-RED: {state: [product names]} of the new-product drafts, and every draft has its own code
+        out.append(("drafts_distinct", len({d["code"] for d in result["drafts"]}) == len(result["drafts"]),
+                    "every draft must have its own code: " + json.dumps([d["code"] for d in result["drafts"]])))
+        for state, names in want["drafts"].items():
+            got = sorted(op["args"].get("name", "") for d in result["drafts"] if d["state"] == state
+                         for op in json.loads(d["ops_json"]) if op.get("op") == "product.add")
+            out.append(("draft_products:" + state, got == sorted(names), f"{state} drafts must add {json.dumps(sorted(names))}, got {json.dumps(got)}"))
     if "draft_public_lacks" in want:
         replies = result["turns"][-1]["replies"]
         marker = "All website card text:\n"
