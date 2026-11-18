@@ -75,6 +75,54 @@
    "turn": 2
   },
   {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": 5.55
+   },
+   "method": "label",
+   "result": {
+    "brand": "Hillside Kitchen",
+    "category": "pantry",
+    "colour": "Burgundy with a gold-coloured lid and an off-white label",
+    "description": "Hillside Kitchen Raspberry Jam comes in a burgundy jar with a gold-coloured lid and an off-white label. The label lists a net weight of 10 oz.",
+    "name": "Raspberry Jam",
+    "printed_claims": [
+     "Organic"
+    ],
+    "product_type": "Jam",
+    "size": "10 oz"
+   },
+   "route": "codex",
+   "seconds": 5.55,
+   "turn": 2,
+   "note": "MAIN-RED: copied verbatim from the recorded tape intake-photo-jam-organic-label (same jam.jpg bytes, same owner text 'raspberry jam $7', recorded live on the private host); the old tape for this case predates HASS-LIVE-FIX-2, which reads a label on every photo"
+  },
+  {
+   "attrs": {},
+   "method": "capture",
+   "result": {
+    "cardText": "Hillside Kitchen\n\nSUPERGRIP GLUE\n\n$7.00\n\nAsk us about the source in store.\n\nNew\n\nSUPERGRIP GLUE comes in a tall, rectangular container with a tapered yellow top and a black label with yellow lettering. 2 fl oz. Off-white with a yellow top and a black label.\n\nLink to this",
+    "checks": {
+     "description": true,
+     "imageShown": true,
+     "noPageErrors": true,
+     "noPosts": true,
+     "priceShown": true,
+     "productShown": true
+    },
+    "error": null,
+    "ok": true
+   },
+   "route": "browser-routed",
+   "seconds": 0.0,
+   "turn": 2,
+   "note": "Captured from this replay's staged overlay with screenshot.cjs and Chromium, using serverless local-file request routing; timing not measured."
+  },
+  {
    "attrs": {},
    "method": "capture",
    "result": {
