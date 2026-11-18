@@ -89,3 +89,7 @@
 {"id": "e88", "reply": {"ops": [{"op": "maker.add", "args": {"key": "Fixture No-Web Farm", "name": "Fixture No-Web Farm", "place": "Fixture Valley", "story": "A fixture farm."}}], "revises": null}}
 {"id": "e89", "reply": {"ops": [{"op": "hike.repeat", "args": {"id": "hike-2026-11-14-point-buchon", "date": "2026-12-06", "time": "09:00"}}], "revises": null}}
 {"id": "e90", "reply": {"ops": [{"op": "maker.edit", "args": {"key": "Etto", "story": "Pasta is not just a vehicle for sauce. Etto makes it in Paso Robles from organic American-grown durum wheat, pushing the dough through bronze dies and drying it slowly. The rough surface holds onto what matters: the sauce you took the trouble to cook. Try it with goat cheese."}}], "revises": null}}
+{"id": "e91", "reply": {"unsupported": "The website doesn't show prices, so I haven't made any change. Could you send it without the price?"}}
+{"id": "e92", "reply": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-001", "available": "no"}}], "revises": null}}
+{"id": "e93", "reply": {"question": "There is no snacks shelf. Which shelf: Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread, Flowers or General?"}}
+{"id": "e94", "reply": {"ops": [{"op": "maker.add", "args": {"key": "Fixture Grove", "name": "Fixture Grove", "place": "Los Osos"}}], "revises": null}}
