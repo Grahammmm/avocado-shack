@@ -33,7 +33,7 @@ OWNER_FACING = {
     "conversation.py": ["_choices", "_waiting_note", "_no_target", "_state_text", "_request", "_photo", "_outcome", "_command", "_handle", "_for_g",
                         "_proposal_reply", "_plain", "_asked_again", "_late", "_delayed", "_handle_message"],
     # AVB-12: the pack commands and the proposal wording moved out of conversation.py into hass/chat/
-    "chat/core_pack.py": ["_history_search", "_show", "_memory", "_memory_words", "_alias", "_alias_lines", "_control", "_status",
+    "chat/core_pack.py": ["_history_search", "_show", "_memory", "_memory_words", "_alias", "_alias_lines", "_control", "_status", "_again",
                           "_reader_failed_lines", "_waiting_lines", "_photo_lines", "_hike_lines"],
     "chat/site_pack.py": ["_find", "_listing", "_photos_to_take", "_hidden"],
     "chat/reports_pack.py": ["_report", "_margin", "_margin_saved", "_post", "_post_hike", "_pick", "_cost"],
@@ -49,7 +49,7 @@ MODULE_CONSTANTS = {  # names of module-level owner text
                         "SOCIAL_REPLY", "UNREADABLE", "HELD_REPLY", "HOSTILE_REPLY", "NEAR_STOP_REPLY", "NEAR_RESUME_REPLY"],
     "chat/shared.py": ["COST_USAGE", "NOTHING", "CANT_READ", "STATUS_PLAIN"],  # AVB-12: moved with their commands
     "chat/commands.py": ["HELP_TEXT"],
-    "chat/core_pack.py": ["HISTORY_USAGE"],
+    "chat/core_pack.py": ["HISTORY_USAGE", "AGAIN_USAGE", "AGAIN_UNDO"],
     "chat/site_pack.py": ["LISTING_USAGE", "LISTING_NONE", "LISTING_MANY", "FIND_USAGE"],
     "chat/reports_pack.py": ["POST_USAGE", "HIKE_USAGE", "HIKE_REFUSALS", "POST_REFUSALS", "POST_CANT", "MARGIN_USAGE"],
     "media.py": ["REPLIES"],

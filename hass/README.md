@@ -122,7 +122,7 @@ RF1650 owner-visible rules: a memory source `owner-approved:<id>` is accepted on
 - A change record that cannot be read is listed by `editor.py history` as `state` `unreadable` with `ops: []`; the other records are unchanged.
 - `undo` (newest applied draft) or `undo <code>` proposes `history.revert`, which needs its own `yes`. It sets back only that change's records, and only while each still holds the value the change wrote (else `conflict: <collection> <key> changed after <change_id>`, no draft). An added product/maker/hike is hidden/cancelled, never deleted. The editor then sets `revertedBy` and the original draft becomes `reverted`. No repository reset, no `git revert`, no community-DB restore.
 - An undo that cancels a hike, moves its start or turns RSVPs off carries the forward op's guest warning and is never refused for it (AV1737-10).
-- Undoing an undo is refused (`<id> is an undo; to bring the change back, ask for it again`); there is no redo, and an unreadable or symlinked draft file is refused too (RF1650-3).
+- Undoing an undo is refused (`<id> is an undo; to bring the change back, use again <code> with the original draft code`); `again <code>` of the original re-drafts it within 7 days of the undo (AV2137-01); an unreadable or symlinked draft file is refused too (RF1650-3).
 
 Browser tests (`hass/tests/test_preview.py`) skip only when `PLAYWRIGHT_MODULE` is unset. On Agent Orange:
 

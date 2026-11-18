@@ -63,14 +63,24 @@ case "$code" in
 esac
 # Isolation (runbook step 8): loopback-only must be VERIFIED and the macOS firewall must be on. Unknown = FAIL (stop, check by hand).
 if command -v lsof >/dev/null 2>&1; then
-  listing="$(lsof -nP -iTCP:"$BB_PORT" -sTCP:LISTEN 2>/dev/null)"
-  if [ -z "$listing" ]; then
-    fail "cannot see a listener on port $BB_PORT to verify loopback-only; check by hand: lsof -nP -iTCP -sTCP:LISTEN"
-  elif printf '%s\n' "$listing" | awk 'NR>1 && $9 !~ /^(127\.0\.0\.1|\[::1\]|localhost):/ {found=1} END {exit !found}'; then
-    fail "port $BB_PORT listens beyond loopback; STOP and do not continue until it is loopback-only (runbook step 8)"
-  else
-    pass "port $BB_PORT is loopback only (as the runbook wants)"
+  listing="$(lsof -nP -iTCP:"$BB_PORT" -sTCP:LISTEN 2>/dev/null)"; lsof_rc=$?
+  verdict=unknown
+  if [ "$lsof_rc" -eq 0 ]; then
+    verdict="$(printf '%s\n' "$listing" | awk -v port="$BB_PORT" '
+      NR==1 { if (NF != 9 || $1 != "COMMAND" || $2 != "PID" || $3 != "USER" || $4 != "FD" || $5 != "TYPE" || $6 != "DEVICE" || $7 != "SIZE/OFF" || $8 != "NODE" || $9 != "NAME") bad=1; next }
+      NF == 0 { next }
+      { if (NF < 10 || $8 != "TCP" || $10 != "(LISTEN)" || $9 !~ /^(\*|[^:[:space:]]+|\[[0-9A-Fa-f:.]+\]):[0-9]+$/) { bad=1; next }
+        row_port=$9; sub(/^.*:/, "", row_port)
+        if (port !~ /^[0-9]+$/ || row_port + 0 != port + 0) { bad=1; next }
+        rows++
+        if ($9 !~ /^(127\.0\.0\.1|\[::1\]|localhost):/) wide=1 }
+      END { if (wide) print "wide"; else if (bad || !rows) print "unknown"; else print "loopback" }' 2>/dev/null)"
   fi
+  case "$verdict" in
+    loopback) pass "port $BB_PORT is loopback only (as the runbook wants)" ;;
+    wide) fail "port $BB_PORT listens beyond loopback; STOP and do not continue until it is loopback-only (runbook step 8)" ;;
+    *) fail "cannot see a listener on port $BB_PORT to verify loopback-only; check by hand: lsof -nP -iTCP -sTCP:LISTEN" ;;
+  esac
 else
   fail "lsof missing: cannot verify loopback-only; check by hand (runbook step 8)"
 fi

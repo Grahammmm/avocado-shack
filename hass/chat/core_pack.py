@@ -4,7 +4,7 @@ AVB-12: moved verbatim out of hass/conversation.py, which imports every name bac
 unchanged). The methods run on the Conversation (self is the conversation): they use its store, replies and
 settings exactly as before. Command routing stays in Conversation._command.
 """
-import contextlib, copy, json, re, sqlite3  # noqa: E401
+import contextlib, copy, json, os, re, sqlite3, stat  # noqa: E401
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -29,6 +29,7 @@ AGAIN_WINDOW_DAYS = 7  # AV2152-03 (H05/H16): `again <code>` works for a proposa
 AGAIN_USAGE = "Send " + q("again") + " and an expired draft code, e.g. " + q("again a1b2") + "."
 AGAIN_PHOTO_OPS = ("product.set_photo", "store.set_home_image")  # ops that carry a stored photo; any op with args.photo does too
 AGAIN_DRIFT = "the site changed since {code}; send the change again"
+AGAIN_UNDO = "That code is for an undo. Use again with the original change's code."
 
 
 class CorePack:
@@ -123,10 +124,46 @@ class CorePack:
         try:
             out = self.editor.show(row["change_id"])
             draft, ops = out.get("draft") if out.get("result") == "ok" else None, json.loads(row["ops_json"])
+            if draft is None and row["state"] == "reverted": draft = self._again_stored(row["change_id"])  # AV2137-01: show() gives an applied change, not its draft
             if not isinstance(draft, dict) or not isinstance(ops, list) or not ops or draft.get("ops") != ops: return None
             if any(not (isinstance(c, dict) and isinstance(c.get("op"), str) and isinstance(c.get("args"), dict)) for c in ops): return None
             if any(draft.get(k) != row[k] for k in ("change_id", "draft_hash", "base")) or self._again_final(draft.get("records")) is None: return None
             return copy.deepcopy(draft)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, editor_mod.UnsafeState): return None
+
+    def _again_stored(self, change_id):
+        """AV2137-01: <state>/drafts/<id>.json of this change when it is a regular file holding an object for that id; else None."""
+        try:
+            if not editor_mod.CHANGE_ID_RE.fullmatch(str(change_id)): return None
+            path = Path(self.sdir) / "drafts" / f"{change_id}.json"
+            if not stat.S_ISREG(os.lstat(path).st_mode): return None
+            doc = json.loads(path.read_text("utf-8"))
+            return doc if isinstance(doc, dict) and doc.get("change_id") == change_id else None
+        except (OSError, ValueError, RecursionError): return None
+
+    @staticmethod
+    def _has_revert(row) -> bool:
+        """AV2137-01: any history.revert call among the draft's ops (a mixed draft too); unparsable counts as none."""
+        try: ops = json.loads(row["ops_json"])
+        except (TypeError, ValueError, RecursionError): return False
+        return isinstance(ops, list) and any(isinstance(c, dict) and c.get("op") == "history.revert" for c in ops)
+
+    def _again_undone_at(self, row):
+        """AV2137-01: when the applied undo that reverted `row` was applied (aware datetime), read ONLY from the original's change
+        record `revertedBy` -> the undo's change record, whose stored draft must revert this change and whose draft row is in
+        this chat; None when any link is missing or inconsistent."""
+        try:
+            change = self.editor.show(row["change_id"]).get("change")
+            undo_id = change.get("revertedBy") if isinstance(change, dict) else None
+            if not isinstance(undo_id, str) or not editor_mod.CHANGE_ID_RE.fullmatch(undo_id): return None
+            if change.get("state") != "applied" or change.get("change_id") != row["change_id"]: return None
+            undo, stored = self.editor.show(undo_id).get("change"), self._again_stored(undo_id)
+            if not isinstance(undo, dict) or undo.get("state") != "applied" or undo.get("change_id") != undo_id or stored is None: return None
+            if not any(isinstance(c, dict) and c.get("op") == "history.revert" and (c.get("args") or {}).get("changeId") == row["change_id"]
+                       for c in stored.get("ops") or []): return None
+            if not any(self._mine(r) and _is_undo(r) and r["state"] in ("applied", "verified") for r in self._drafts("change_id = ?", undo_id)): return None
+            at = datetime.fromisoformat(undo["applied_at"])
+            return at if at.tzinfo is not None else None
         except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, editor_mod.UnsafeState): return None
 
     def _again_same(self, row, new) -> bool:
@@ -143,19 +180,23 @@ class CorePack:
         if not re.fullmatch(r"[0-9a-f]{4,12}", arg or ""): return self._reply(AGAIN_USAGE) or "again"
         code, row = arg, self._by_code(arg)
         if row is None: return self._reply(f"No draft {q(code)}.") or "again"
-        if row["state"] != "expired":  # a live, cancelled, replaced, saved or failed draft is refused with its own state
+        if self._has_revert(row): return self._reply(AGAIN_UNDO) or "again"  # AV2137-01: an undo, or a draft with any undo call
+        if row["state"] not in ("expired", "reverted"):  # a live, cancelled, replaced, saved or failed draft is refused with its own state
             self._reply({"proposed": f"{q(code)} is still waiting for your yes, so there is nothing to draft again.",
                          "needs-details": f"{q(code)} is still waiting for details, so there is nothing to draft again."}.get(row["state"]) or self._state_text(row))
             return "again"
         if not row["change_id"] or not row["draft_hash"]: return self._reply(f"{q(code)} expired before it was a proposal; send the change again.") or "again"
-        try:
-            expiry = datetime.fromisoformat(row["expires_at"])
-            age = now - expiry if expiry.tzinfo is not None else None
+        try:  # expired: the age since its expiry; undone (AV2137-01): the age since the linked undo was applied
+            since = datetime.fromisoformat(row["expires_at"]) if row["state"] == "expired" else self._again_undone_at(row)
+            age = now - since if since is not None and since.tzinfo is not None else None
         except (TypeError, ValueError): age = None
         if age is None or age < timedelta(0): return self._reply(f"{q(code)}: the draft details are not available any more.") or "again"
-        if age > timedelta(days=AGAIN_WINDOW_DAYS): return self._reply(f"{q(code)} expired more than {AGAIN_WINDOW_DAYS} days ago; send the change again.") or "again"
+        if age > timedelta(days=AGAIN_WINDOW_DAYS):
+            return self._reply(f"{q(code)} expired more than {AGAIN_WINDOW_DAYS} days ago; send the change again." if row["state"] == "expired" else
+                               f"{q(code)} was undone more than {AGAIN_WINDOW_DAYS} days ago; send the change again.") or "again"
         old = self._again_original(row)
-        if old is None: return self._reply(f"{q(code)}: the draft details are not available any more.") or "again"
+        if old is None or (row["state"] == "reverted" and self._again_final((self.editor.show(row["change_id"]).get("change") or {}).get("records")) != self._again_final(old["records"])):
+            return self._reply(f"{q(code)}: the draft details are not available any more.") or "again"
         if old.get("assets") or any(c["op"] in AGAIN_PHOTO_OPS or "photo" in c["args"] for c in old["ops"]):
             return self._reply(f"{q(code)} is a photo draft; send the photo again.") or "again"
         if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)
