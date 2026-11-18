@@ -151,6 +151,29 @@ class PricedTextConversation(unittest.TestCase):
                 self.assertNotIn("24", str(chat.asked))
                 self.doCleanups()
 
+    def test_spelled_ambiguous_quantities_stay_private(self):
+        for counts in ("thirteen jars or fourteen jars", "twenty-one jars or one hundred and five jars"):
+            for result in ({"price_cents": None, "cost_cents": None, "quantity": 13},
+                           {"price_cents": None, "cost_cents": None, "quantity": None}, RuntimeError("offline")):
+                with self.subTest(counts=counts, result=result):
+                    chat = self.chat()
+                    reader = Mock()
+                    if isinstance(result, Exception):
+                        reader.fields.side_effect = result
+                    else:
+                        reader.fields.return_value = result
+                    text = "add plums $3 each; " + counts
+                    chat.script("add plums", base.reply(name="Plums", shelf="fruit"))
+                    with patch.object(chat.conv, "answer_reader", reader):
+                        chat.say(text)
+                    reader.fields.assert_called_once_with(text)
+                    self.assertTrue(chat.asked)
+                    self.assertNotIn(counts, str(chat.asked).lower())
+                    for word in counts.split():
+                        if word not in ("or", "and"):
+                            self.assertNotIn(word, str(chat.asked).lower())
+                    self.doCleanups()
+
     def test_priced_photo_while_a_draft_waits_keeps_the_label_and_preview_path(self):
         chat = self.chat()
         chat.conv.labels, labels = label_reader(recorded({k: v for k, v in GLUE.items() if k != "brand"}))

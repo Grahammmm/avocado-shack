@@ -113,9 +113,12 @@ def commerce_answers(value):
     return out
 
 
+_COUNT_WORD = (r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|"
+               r"fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|"
+               r"eighty|ninety|hundred|thousand|million|billion|dozen)")
 _FINANCE_CUE = re.compile(
     r"\b(?:bought|paid|cost|costs|wholesale|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$|\d"
-    r"|\b(?:" + "|".join(NUMBER_WORDS) + r")\s+(?:" + "|".join(UNIT_WORDS) + r")\b",
+    r"|\b(?:a|an|" + _COUNT_WORD + r")(?:[-\s]+(?:and|" + _COUNT_WORD + r"))*\s+(?:" + "|".join(UNIT_WORDS) + r")\b",
     re.I,
 )
 
