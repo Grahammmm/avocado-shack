@@ -4,6 +4,7 @@ Run: python3 -B -m unittest hass.tests.test_post_command -v
 """
 
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +16,7 @@ from hass.tests.test_commands_doc import verb
 from hass.tests.test_conversation import ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
+WARNING = "This picture is an illustration made from a shelf photo, not a photo of the product. Send a photo with the product name as its caption to post a real one."
 UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
 
 
@@ -64,9 +66,27 @@ class PostTests(StoreMixin, ConversationTestCase):
         self.assertTrue(want["draft"], want)
         with mock.patch("socket.socket", side_effect=AssertionError("network")):
             text, files = self.post(f"post {self.ids[0]}")
-        self.assertEqual(text, f"Here's a post you can copy. I haven't posted anything.\n{want['caption']}\nWhat the photo shows: {want['alt']}")
+        self.assertTrue(want["illustration"])
+        self.assertEqual(text, f"{WARNING}\nHere's a post you can copy. I haven't posted anything.\n{want['caption']}\nWhat the photo shows: {want['alt']}")
         self.assertEqual(files, [str(self.site / "post-test" / "real.jpg")])
         self.assertEqual((self.drafts(), self.commits(), self.approvals()), ([], 0, 0))
+
+    def test_owner_photo_gets_no_warning_and_refusals_never_do(self):
+        path = self.repo.wt / "hass" / "content" / "products.json"
+        doc = json.loads(path.read_text("utf-8"))
+        image = "post-test/real.jpg"  # the fixture's assets/ is a link out of the tree, so the owner-photo form is stood in by the shared rule
+        owner = mock.patch.object(social_draft, "HOME_IMAGE_RE", re.compile(r"post-test/real\.jpg"))
+        owner.start()
+        self.addCleanup(owner.stop)
+        want = social_draft.build(load_content(self.repo.wt / "hass" / "content"), self.ids[0], self.site)
+        self.assertIs(want.get("illustration"), False, want)
+        text, files = self.post(f"post {self.ids[0]}")
+        self.assertEqual(text, f"Here's a post you can copy. I haven't posted anything.\n{want['caption']}\nWhat the photo shows: {want['alt']}")
+        self.assertEqual(files, [str(self.site / image)])
+        for pid in (self.ids[1], self.ids[5]):  # missing photo, symlinked photo: refusal, no warning, no attachment
+            text, files = self.post(f"post {pid}")
+            self.assertNotIn("illustration", text)
+            self.assertEqual(files, [])
 
     def test_refusals_are_plain_words_and_attach_nothing(self):
         for send, words in ((f"post {self.ids[0]}x", f"I don't know a product called {self.ids[0]}x. Try find and a word from its name."),
@@ -90,14 +110,14 @@ class PostTests(StoreMixin, ConversationTestCase):
         upper = self.ids[0].upper()
         self.assertNotEqual(upper, self.ids[0])
         self.assertEqual(self.post(f"post {upper}")[0], f"I don't know a product called {upper}. Try find and a word from its name.")
-        self.assertTrue(self.post(f"post {self.ids[0]}")[0].startswith("Here's a post you can copy. I haven't posted anything."))
+        self.assertTrue(self.post(f"post {self.ids[0]}")[0].startswith(WARNING + "\nHere's a post you can copy. I haven't posted anything."))
 
     def test_works_while_paused_and_changes_nothing(self):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
         tables, control = self.tables(), [dict(r) for r in self.conv.db.execute("SELECT * FROM control")]
         text, files = self.post(f"post {self.ids[0]}")
-        self.assertTrue(text.startswith("Here's a post you can copy. I haven't posted anything.") and "paused" not in text.lower(), text)
+        self.assertTrue(text.startswith(WARNING + "\nHere's a post you can copy. I haven't posted anything.") and "paused" not in text.lower(), text)
         self.assertEqual(files, [str(self.site / "post-test" / "real.jpg")])
         self.assertEqual((self.drafts(), self.tables(), self.commits(), self.approvals()), ([], tables, 0, 0))
         self.assertEqual([dict(r) for r in self.conv.db.execute("SELECT * FROM control")], control)

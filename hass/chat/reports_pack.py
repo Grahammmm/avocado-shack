@@ -12,6 +12,7 @@ from hass.chat.shared import CANT_READ, CONTROL, COST_USAGE, _iso, load_content,
 from hass.content_model import ContentError, load_and_validate, shop_today
 from hass.ops import catalog
 
+POST_ILLUSTRATION = "This picture is an illustration made from a shelf photo, not a photo of the product. Send a photo with the product name as its caption to post a real one."  # AV1352-03
 POST_USAGE = "Which product is the post for? Say it like " + q("post Hass avocado") + "."  # AV1322-07
 MAKER_USAGE = "Send " + q("post maker") + " and a maker key; " + q("find <words>") + " gives keys."  # AV1937-10
 MAKER_REFUSALS = {"no such maker": "No maker {id}; send " + q("find <words>") + " for keys.",
@@ -145,6 +146,7 @@ class ReportsPack:
             out = social_draft.build(content, self._pick("product", pid, content), wt / "storefront-mockup")
             if out["draft"] and stat.S_ISREG(os.lstat(photo := wt / "storefront-mockup" / out["image"]).st_mode):
                 text = f"Here's a post you can copy. I haven't posted anything.\n{q(out['caption'])}\nWhat the photo shows: {q(out['alt'])}"
+                if out.get("illustration"): text = POST_ILLUSTRATION + "\n" + text  # AV1352-03: only after the photo is eligible
             else:  # a refusal, or a photo that is itself a link: never attached
                 reason = out.get("reason", "no photo on the site")
                 text = POST_REFUSALS[reason].format(id=q(pid)) if reason in POST_REFUSALS else POST_CANT.format(id=q(pid))
