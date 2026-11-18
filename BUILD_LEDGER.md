@@ -2828,7 +2828,7 @@ Limits: audit changes no copy and writes no replacement copy; no record is not p
 
 Branch rb/av0007-09 from origin/main (AV0007-09, issue #2, PR #377: merged as 23891bfcae07bc0073c77c384631408bbff17a6c). For Michael: the trial plan has six more tasks (home-page notice, home-page photo, add, hide and bring back a route idea) and the handover guide links it and lists three open public-site decisions.
 
-Checks at PR head 165b5a6f6b6ccd8542cea046c8c7f59a1473fec8 (recorded in PR #377): `python3 -B -m unittest hass.tests.test_commands_doc hass.tests.test_phone_guide hass.tests.test_store_notice hass.tests.test_store_home_image hass.tests.test_route_add hass.tests.test_route_hide hass.tests.test_trial_handover_doc` — 67 tests, OK (run with the browser module path set); `git diff --check` clean; wording checked against `hass/ops/home.py` and `hass/ops/routes.py`; PREPUSH-TESTS NOT-RUN.
+Checks at PR head 165b5a6f6b6ccd8542cea046c8c7f59a1473fec8 (recorded in PR #377): `python3 -B -m unittest hass.tests.test_commands_doc hass.tests.test_phone_guide hass.tests.test_store_notice hass.tests.test_store_home_image hass.tests.test_route_add hass.tests.test_route_hide hass.tests.test_trial_handover_doc` — 67 tests, OK (run with the browser module path set); `git diff --check` clean; the new tasks in `docs/hass/TRIAL.md` and the links in `docs/hass/HANDOVER.md` checked against `hass/ops/home.py` and `hass/ops/routes.py`; PREPUSH-TESTS NOT-RUN.
 
 Limits: trial remains proposal, untried, and needs Michael and G to agree; no decision, provider, address, spend or logo is recorded, and the three open public-site decisions (H25-domain, H25-forms, H25-logo) stay open.
 
