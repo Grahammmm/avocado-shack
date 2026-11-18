@@ -593,7 +593,7 @@ class _Blocks(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
-        if tag == "meta" and (a.get("name") or a.get("property") or "").lower() in ("description", "og:description"):
+        if tag == "meta" and not self._skip and (a.get("name") or a.get("property") or "").lower() in ("description", "og:description"):
             self.blocks.insert(0, a.get("content") or "")
         elif tag in SKIP_TAGS:
             self._skip += 1
