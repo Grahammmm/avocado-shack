@@ -255,7 +255,7 @@ def valid_supplier(value):
             and re.fullmatch(r"[^\W\d_][^\W_]*(?:[ &'’\-][^\W_]+){0,4}", value) is not None)
 
 
-def validate_products(problems, products, makers, site_dir: Path | None, checked: date | None = None):
+def validate_products(problems, products, makers, site_dir: Path | None, checked: date | None = None, today: date | None = None):
     if not isinstance(products, list):
         problems.append("products: must be a list")
         return
@@ -311,8 +311,10 @@ def validate_products(problems, products, makers, site_dir: Path | None, checked
             problems.append(f"{where}.available: must be one of {AVAILABILITY}")
         if "available_on" in rec and ("available" not in rec or iso_day(rec["available_on"]) is None):
             problems.append(f"{where}.available_on: must be a real date YYYY-MM-DD, set only together with available")
-        elif "available_on" in rec and (checked is None or iso_day(rec["available_on"]) > checked):
-            problems.append(f"{where}.available_on: {rec['available_on']} is after store.selection_checked_on")
+        elif "available_on" in rec and checked is None:  # AV1922-02: a word's own day needs a first recorded full shelf check
+            problems.append(f"{where}.available_on: {rec['available_on']} needs a recorded store.selection_checked_on")
+        elif "available_on" in rec and iso_day(rec["available_on"]) > (today or shop_today()):  # may follow the full check, never the future
+            problems.append(f"{where}.available_on: {rec['available_on']} is in the future")
         if "restock_on" in rec and iso_day(rec["restock_on"]) is None:  # AV1109-03: shape only; any past/far day loads
             problems.append(f"{where}.restock_on: must be a real date YYYY-MM-DD")
         if status == "held":

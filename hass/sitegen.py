@@ -170,15 +170,22 @@ def checked_note(store: dict, today) -> str:
 
 
 def availability_label(product: dict, store: dict, today) -> str | None:
-    """Card words for an active product, or None (no check yet, or availability not confirmed). AV1102-01: the word
-    shows only when its own day is the store's latest, fresh check; otherwise "Last confirmed <its own day>"."""
-    day, stale = _check_state(store, today)
-    on = iso_day(product.get("available_on"))
-    if day is None or on is None or product.get("available") not in AVAILABILITY_WORDS:
+    """Card words for an active product, or None (no check yet, or availability not confirmed). AV1922-02: the word shows
+    while its own day is current (availability_state); otherwise "Last confirmed <its own day>"."""
+    day, on = checked_on(store), iso_day(product.get("available_on"))
+    if day is None or day > today or on is None or on > today or product.get("available") not in AVAILABILITY_WORDS:
         return None
-    if on > day:  # AV1622-04: a product cannot have been checked after the store's latest check
+    word = availability_state(product, store, today)
+    return AVAILABILITY_WORDS[word] if word else f"Last confirmed {_day_text(on)}"
+
+
+def availability_state(product: dict, store: dict, today) -> str | None:
+    """AV1922-02: the product's word (yes|limited|no) while current, else None. Current: a known word whose own day is not
+    before the store's last full check, not after ``today`` and at most STALE_AFTER_DAYS old (shop.js has the same rule)."""
+    day, on, word = checked_on(store), iso_day(product.get("available_on")), product.get("available")
+    if day is None or on is None or word not in AVAILABILITY_WORDS or not (day <= on <= today):
         return None
-    return AVAILABILITY_WORDS[product["available"]] if on == day and not stale else f"Last confirmed {_day_text(on)}"
+    return word if (today - on).days <= STALE_AFTER_DAYS else None
 
 
 def _catalog_js(content: Content) -> bytes:
