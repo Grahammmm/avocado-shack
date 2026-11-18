@@ -157,8 +157,10 @@ class PhoneGuideTest(unittest.TestCase):
             self.assertIn(missing, problems(self.doc.replace(line, flipped)), text)
 
     def test_batch_photo_instructions_and_separate_codes(self):  # AV2152-14
-        for text in ("one to four photos in one message", "its own draft code", "none is saved", "caption on several photos is ignored",
-                     "repeat the answer for each actual code", "separately with its own code", "no text command that sends photos"):
+        for text in ("one to four photos in one message", "Each newly accepted photo gets its own draft code",
+                     "already waiting, repeated in the same message, or already on a product", "does not get a new draft code",
+                     "none is saved", "caption on several photos is ignored", "repeat the answer for each actual code",
+                     "separately with its own code", "no text command that sends photos"):
             self.assertIn(text, self.doc)
             self.assertNotIn(text, self.doc.replace(text, ""), text)
         self.assertNotRegex(self.doc, r"(?i)one photo per message")

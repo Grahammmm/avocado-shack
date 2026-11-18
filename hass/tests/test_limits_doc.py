@@ -146,6 +146,9 @@ class LimitsDocTest(unittest.TestCase):
         for text in (self.doc, commands):
             self.assertNotRegex(text, r"(?i)one photo per message|one photo at a time")
         self.assertIn("1 to 4 photos per message", commands)
+        for wording in ("Each newly accepted photo gets its own code and question", "already waiting, repeated in the same message",
+                        "already on a product gets no new draft code"):
+            self.assertIn(wording, self.doc)
 
     def test_bold_number_without_comment_names_its_line(self):
         self.assertEqual(problems("Intro.\nAt most **7** things."), ["line 2: bold number without a source comment"])

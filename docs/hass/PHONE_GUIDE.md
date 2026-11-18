@@ -19,7 +19,7 @@ Text Hass from Messages like you would text a helper. Nothing reaches the websit
 Tip: Hass replies again when the change is saved and whether it is on the website. Hass never invents organic claims or farm origins. A photo on a busy shelf gets a request to retake it on a plain surface. One undo removes the whole item. See NEW-ITEM-FLOW.md.
 
 ## Add a photo
-1. Send one to four photos in one message, as JPEG or PNG, the right way up. Each photo gets its own draft code, in the order sent, and Hass asks which product it is for and for a few words describing it. If any photo is not usable, none is saved. A caption on several photos is ignored.
+1. Send one to four photos in one message, as JPEG or PNG, the right way up. Each newly accepted photo gets its own draft code, in the order sent, and Hass asks which product it is for and for a few words describing it. A photo already waiting, repeated in the same message, or already on a product does not get a new draft code; Hass tells you instead. If any photo is not usable, none is saved. A caption on several photos is ignored.
 2. Answer in plain words: the product, or the home page; your words become the picture's alt text. With several photos, repeat the answer for each actual code.
    Send (plain words): `It is for the Hass avocado, a crate of ripe avocados on the counter`
    Send (plain words): `Use this for the home page, a crate of ripe avocados on the counter`

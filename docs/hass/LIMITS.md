@@ -5,7 +5,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 ## Photos
 
 - Send up to **4** <!-- media.MAX_PHOTOS_PER_MESSAGE --> photos per message, each a JPEG or PNG up to **20 MB** <!-- media.MAX_BYTES -->.
-  Each photo gets its own code and question, and a caption sent with several photos is not read. Every photo is checked
+  Each newly accepted photo gets its own code and question. A photo already waiting, repeated in the same message, or
+  already on a product gets no new draft code; Hass tells you instead. A caption sent with several photos is not read. Every photo is checked
   before any is saved: if one is refused (another picture format, too large, or unreadable), none is saved and the reply
   names which one. More than that many in one message are refused.
 - Phone photos taken upright or sideways are fine; the website shows them the way they were taken.
