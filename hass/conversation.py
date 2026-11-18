@@ -1084,8 +1084,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             public, facts = item_intake.caption_answers(msg.text.replace("\ufffc", ""), empty)
             if photo:
                 if not public and "price" in facts and "cost" in facts: return empty
-            elif {"price", "cost", "qty"} & facts.keys():
-                return empty  # a typed fact needs no private finance model call (including zero)
+            elif {"price", "cost", "qty"} & facts.keys() and not item_intake.unresolved_finance(public):
+                return empty  # only skip the local reader when no finance remains unresolved
         self.stage("finance-start", msg.provider_id)
         try:
             fields = self.answer_reader.fields(msg.text)

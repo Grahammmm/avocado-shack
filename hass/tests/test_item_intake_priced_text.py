@@ -111,6 +111,26 @@ class PricedTextConversation(unittest.TestCase):
         self.assertEqual(request["slots"]["intake"]["price"], "2.75")
         self.assertEqual(chat.asked, [])
 
+    def test_mixed_unresolved_finance_stays_private_even_if_reader_fails(self):
+        text = "add plums $3 each; paid $1.50 wholesale"
+        for result in ({"price_cents": None, "cost_cents": 150, "quantity": None},
+                       {"price_cents": None, "cost_cents": None, "quantity": None}, RuntimeError("offline")):
+            with self.subTest(result=result):
+                chat = self.chat()
+                reader = Mock()
+                if isinstance(result, Exception):
+                    reader.fields.side_effect = result
+                else:
+                    reader.fields.return_value = result
+                chat.script("add plums", base.reply(name="Plums", shelf="fruit"))
+                with patch.object(chat.conv, "answer_reader", reader):
+                    chat.say(text)
+                reader.fields.assert_called_once_with(text)
+                self.assertTrue(chat.asked)
+                self.assertNotIn("1.50", str(chat.asked))
+                self.assertNotIn("wholesale", str(chat.asked).lower())
+                self.doCleanups()
+
     def test_priced_photo_while_a_draft_waits_keeps_the_label_and_preview_path(self):
         chat = self.chat()
         chat.conv.labels, labels = label_reader(recorded({k: v for k, v in GLUE.items() if k != "brand"}))

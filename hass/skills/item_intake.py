@@ -113,6 +113,23 @@ def commerce_answers(value):
     return out
 
 
+_FINANCE_CUE = re.compile(
+    r"\b(?:bought|paid|cost|costs|wholesale|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$",
+    re.I,
+)
+
+
+def unresolved_finance(text):
+    """Detect finance left in the deterministic parser's public remainder."""
+    return bool(_FINANCE_CUE.search(text))
+
+
+def without_unresolved_finance(text):
+    """Fail closed on whole unresolved clauses, including on reader failure."""
+    return "; ".join(part.strip() for part in re.split(r"[;\n]+|(?<!\d),|,(?!\d)", text)
+                     if part.strip() and not unresolved_finance(part))
+
+
 def caption_answers(caption, extracted=None):
     """Separate typed finance spans from public words. Never called on image output.
 
