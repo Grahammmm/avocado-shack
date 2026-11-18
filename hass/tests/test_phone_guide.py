@@ -18,6 +18,13 @@ AV1937_PLAIN = (
     "Repeat hike walk-001 on 2026-12-06 at 09:00",
 )  # AV1937-13
 AV1937_POST = "post maker Example Orchard"
+AV2152_PLAIN = (
+    "For draft a1b2, use this on the home page: avocados in a wooden crate",
+    "Cancel hike walk-001 with the note: Rained out - we will pick a new date soon.",
+    "Set the hiking club opening paragraph to: Walk with us along the coast, share the trail, and leave room for discovery.",
+    "Set the home notice to \"Closed Thanksgiving Day\" from 2026-11-26 through 2026-11-26.",
+)
+AV2152_COMMANDS = {"history notice": "history", "again a1b2": "again"}  # AV2152-14
 PRIVATE_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w+|\+\d|http://", re.I)
 
 
@@ -44,6 +51,8 @@ def problems(doc: str) -> list:
     found = {(plain, text) for plain, text, _ in sends(doc)}
     out += [f"required example missing or misclassified: {t}" for t in AV1937_PLAIN if (True, t) not in found]
     out += [f"required example missing or misclassified: {AV1937_POST}"] if (False, AV1937_POST) not in found else []
+    out += [f"required example missing or misclassified: {t}" for t in AV2152_PLAIN if (True, t) not in found]
+    out += [f"required example missing or misclassified: {t}" for t in AV2152_COMMANDS if (False, t) not in found]
     headings = re.findall(r"^## (.+)$", doc, re.M)
     if headings != SECTIONS:
         out.append(f"sections are {headings}, not {SECTIONS}")
@@ -126,6 +135,53 @@ class PhoneGuideTest(unittest.TestCase):
         for bad in ("Mail owner@example.com", "Call +15551234567", "See http://example.com"):
             self.assertEqual(problems(self.doc + bad + "\n"), [f"private text or http link: {bad}"], bad)
         self.assertEqual(problems(self.doc + "See [limits](LIMITS.md) or https://example.com\n"), [])
+
+    def test_av2152_examples_required_and_classified(self):  # AV2152-14
+        found = sends(self.doc)
+        self.assertLessEqual(set(AV2152_PLAIN), {t for p, t, _ in found if p})
+        self.assertLessEqual(set(AV2152_COMMANDS), {t for p, t, _ in found if not p})
+        for text in AV2152_PLAIN:
+            self.assertIsNone(verb(text), text)
+        for text, name in AV2152_COMMANDS.items():
+            self.assertEqual(verb(text), name)
+        self.assertEqual(problems(self.doc), [])
+
+    def test_av2152_missing_or_reclassified_example_fails(self):  # AV2152-14
+        for text in (*AV2152_PLAIN, *AV2152_COMMANDS):
+            plain = text in AV2152_PLAIN
+            missing = f"required example missing or misclassified: {text}"
+            line = f"Send{' (plain words)' if plain else ''}: `{text}`"
+            self.assertIn(line, self.doc)
+            self.assertIn(missing, problems(self.doc.replace(f"`{text}`", "`gone`")), text)
+            flipped = f"Send{'' if plain else ' (plain words)'}: `{text}`"
+            self.assertIn(missing, problems(self.doc.replace(line, flipped)), text)
+
+    def test_batch_photo_instructions_and_separate_codes(self):  # AV2152-14
+        for text in ("one to four photos in one message", "Each newly accepted photo gets its own draft code",
+                     "already waiting, repeated in the same message, or already on a product", "does not get a new draft code",
+                     "none is saved", "caption on several photos is ignored", "repeat the answer for each actual code",
+                     "separately with its own code", "no text command that sends photos"):
+            self.assertIn(text, self.doc)
+            self.assertNotIn(text, self.doc.replace(text, ""), text)
+        self.assertNotRegex(self.doc, r"(?i)one photo per message")
+
+    def test_again_window_and_named_approval_wording(self):  # AV2152-14
+        step = next(l for l in self.doc.splitlines() if "expired within the last seven days" in l)
+        for text in ("site still matches", "new code and expiry", "separately with `yes` and the new code",
+                     "A photo, a question, a cancelled, replaced or applied draft is not renewed"):
+            self.assertIn(text, step)
+        self.assertIn("resuming never applies a waiting draft by itself", self.doc)
+
+    def test_store_undo_keeps_other_fields_not_same_field(self):  # AV2152-14
+        for text in ("keeping a later shelf check or other detail", "a later edit of the same detail is a conflict and the undo is refused",
+                     "with its new code", "Not every older change can be undone"):
+            self.assertIn(text, self.doc)
+            self.assertNotIn(text, self.doc.replace(text, ""), text)
+
+    def test_notice_and_club_wording_promises_nothing_outbound(self):  # AV2152-14
+        for text in ("Before the first day it stays hidden", "Hass sends no message to guests", "guests are not messaged",
+                     "club page copy only, still a draft you approve; it is not an announcement or the store intro"):
+            self.assertIn(text, self.doc)
 
     def test_readme_links_the_guide(self):
         self.assertIn("](PHONE_GUIDE.md)", (DOCS / "README.md").read_text("utf-8"))
