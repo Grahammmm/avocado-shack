@@ -213,7 +213,7 @@ def parse_memory(text: str):
     return ("memory", None, None) if match and match[5] else None
 
 
-READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "backlog", "look"}
+READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "backlog", "look", "shelf"}
 
 
 def _asked(text: str):

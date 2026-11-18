@@ -33,6 +33,13 @@ class ShelfParseTests(unittest.TestCase):
         for text in ("shelf chek done. milk in, cheese out", "shelf report then specials", "please shelf eggs", "shelf eggs\nshelf fruit", "shelves", "shelfeggs"):
             self.assertIsNone(conversation.parse_command(text), text)
 
+    def test_question_form_is_read_only(self):  # a closing ? is dropped for a read-only command
+        self.assertEqual(conversation.read_command("shelf eggs?"), ("shelf", "eggs"))
+        self.assertEqual(conversation.read_command("shelf?"), ("shelf", ""))
+        self.assertEqual(conversation.read_command("shelf dairy and cheese?"), ("shelf", "dairy and cheese"))
+        for text in ("shelf chek done. milk in, cheese out?", "shelf report then specials?"):
+            self.assertIsNone(conversation.read_command(text), text)
+
 
 class ShelfTests(StoreMixin, ConversationTestCase):
     def setUp(self):
