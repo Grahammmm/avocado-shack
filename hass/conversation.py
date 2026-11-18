@@ -1070,21 +1070,27 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     def _read_intake(self, msg):
         """Bounded owner-text read before the write lock, never on photo output or approval commands."""
+        photo = msg.attachments > 0
+        empty = {"photo_fields": None} if photo else {}
         if (not self.dispatch or not getattr(self.dispatch, "simple_intake", lambda: False)() or not self.answer_reader
                 or msg.from_me or msg.kind != "new" or not self._is_owner(msg)
-                or not msg.text or len(msg.text) > MAX_OWNER_TEXT): return {}
-        if re.match(r"\s*(?:(?:add|description)\s*:|(?:remove|delete|yes|no|cancel|stop)\b)", msg.text, re.I): return {}
-        if not re.search(r"\b(?:bought|paid|cost|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$", msg.text, re.I): return {}
-        if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone(): return {}
+                or not msg.text or len(msg.text) > MAX_OWNER_TEXT): return empty
+        if re.match(r"\s*(?:(?:add|description)\s*:|(?:remove|delete|yes|no|cancel|stop)\b)", msg.text, re.I): return empty
+        if not re.search(r"\b(?:bought|paid|cost|sell|selling|price|retail|have|stock|qty|quantity|purchased|dollars?|items?)\b|\$", msg.text, re.I): return empty
+        if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone(): return empty
         req = self.requests.get(msg.chat, self._now())
-        if req and not self.dispatch.simple_intake(req): return {}
-        if msg.attachments == 1:
-            public, facts = item_intake.caption_answers(msg.text.replace("\ufffc", ""))
-            if not public and "price" in facts and "cost" in facts:
-                return {}  # complete typed caption; no private finance model call needed
+        if req and not self.dispatch.simple_intake(req): return empty
+        if not photo or msg.attachments == 1:
+            public, facts = item_intake.caption_answers(msg.text.replace("\ufffc", ""), empty)
+            if photo:
+                if not public and "price" in facts and "cost" in facts: return empty
+            elif {"price", "cost", "qty"} & facts.keys() and not item_intake.unresolved_finance(public):
+                return empty  # only skip the local reader when no finance remains unresolved
         self.stage("finance-start", msg.provider_id)
-        try: return self.answer_reader.fields(msg.text)
-        except Exception: return {}  # a failed reader leaves the deterministic parser, never an inferred value
+        try:
+            fields = self.answer_reader.fields(msg.text)
+            return {"photo_fields": fields} if photo else fields
+        except Exception: return empty  # a failed reader leaves the deterministic parser, never an inferred value
         finally: self.stage("finance-end", msg.provider_id)
 
     def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:

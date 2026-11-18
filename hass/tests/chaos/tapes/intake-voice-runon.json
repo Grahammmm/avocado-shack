@@ -1,24 +1,22 @@
 {
+ "case": "intake-voice-runon",
  "calls": [
   {
-   "attrs": {
-    "last_backend": null,
-    "last_error": null,
-    "last_fallback": false,
-    "last_model": null,
-    "last_primary_error": null,
-    "last_seconds": null
-   },
-   "method": "answer.fields",
+   "turn": 1,
+   "method": "interpret",
    "result": {
-    "cost_cents": 300,
-    "price_cents": 300,
-    "quantity": null
+    "question": "Kiwis are new to the shelf, so I can add them as a new item. Which maker should I list: Etto (the pasta maker) or a new maker called Etto Farms?"
    },
-   "route": "qwen",
-   "seconds": 2.204,
-   "turn": 1
+   "attrs": {
+    "last_error": null,
+    "last_backend": "openai",
+    "last_fallback": true,
+    "last_primary_error": "codex-local",
+    "last_seconds": 2.288,
+    "last_model": "qwen3.8:27b-thinkingcap-q6"
+   },
+   "seconds": 2.288,
+   "route": "qwen"
   }
- ],
- "case": "intake-voice-runon"
+ ]
 }

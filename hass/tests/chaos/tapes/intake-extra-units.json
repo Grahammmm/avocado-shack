@@ -1,24 +1,22 @@
 {
+ "case": "intake-extra-units",
  "calls": [
   {
-   "attrs": {
-    "last_backend": null,
-    "last_error": null,
-    "last_fallback": false,
-    "last_model": null,
-    "last_primary_error": null,
-    "last_seconds": null
-   },
-   "method": "answer.fields",
+   "turn": 1,
+   "method": "interpret",
    "result": {
-    "cost_cents": null,
-    "price_cents": 400,
-    "quantity": null
+    "question": "What brand and short description should I use for the satsumas?"
    },
-   "route": "qwen",
-   "seconds": 2.141,
-   "turn": 1
+   "attrs": {
+    "last_error": null,
+    "last_backend": "codex",
+    "last_fallback": false,
+    "last_primary_error": null,
+    "last_seconds": 3.728,
+    "last_model": "gpt-6.2-sol"
+   },
+   "seconds": 3.728,
+   "route": "codex"
   }
- ],
- "case": "intake-extra-units"
+ ]
 }
