@@ -17,14 +17,15 @@ from unittest import mock
 from hass import fixture_chat, preview
 from hass.content_model import REPO_ROOT
 from hass.tests import test_demo_transcript_photo as photo
-from hass.tests.test_demo_browser import MISSING_PLAYWRIGHT, PNG_SIGNATURE, DemoBrowserTests
+from hass.tests import test_demo_browser as _db
+from hass.tests.test_demo_browser import MISSING_PLAYWRIGHT, PNG_SIGNATURE
 from hass.tests.test_editor import git
 from hass.tests.test_set_photo import PID
 
 
 @unittest.skipUnless(os.environ.get("PLAYWRIGHT_MODULE"), "PLAYWRIGHT_MODULE is not set")
 class DemoBrowserPhotoTests(unittest.TestCase):
-    fresh, query, site = photo.PhotoDemoTranscriptTests.fresh, photo.PhotoDemoTranscriptTests.query, DemoBrowserTests.site  # the browser test's full-site helper
+    fresh, query, site = photo.PhotoDemoTranscriptTests.fresh, photo.PhotoDemoTranscriptTests.query, _db.DemoBrowserTests.site  # the browser test's full-site helper
 
     def run_chain(self, repo, extra=(), playwright=None):
         """(reply rows, [(out png name, target, capture result)]) of one --preview run on the demo with its times at now."""

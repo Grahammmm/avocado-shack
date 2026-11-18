@@ -33,9 +33,6 @@ class OutboxDelayedTest(unittest.TestCase):
     def stored(self):
         return [(r["text"], r["sent_at"]) for r in self.db.execute("SELECT * FROM outbox ORDER BY id")]
 
-    def test_constant(self):
-        self.assertEqual(conversation.DELAYED_AFTER_S, 600)
-
     def test_599_seconds_unprefixed_601_prefixed(self):
         self.box.add(CHAT, "Reply yes to save it.")
         self.now = T0 + timedelta(seconds=599)
