@@ -21,7 +21,10 @@ Hermes profile skill at runtime, so an edit never changes Hass output unseen.
 3. If the TSV changed, regenerate `limits.json`: `python3 scripts/hass/npp_limits.py` (never edit it by hand).
 4. Refresh the pins: `python3 scripts/hass/npp_limits.py pins`, then confirm with `python3 scripts/hass/npp_limits.py pins --check`.
 5. Run the asset test: `python3 -B -m unittest hass.tests.test_npp_assets` and the offline replay for the cases the asset
-   names (`hass/tests/npp/run_npp.py`, once NPP-H has landed).
+   names (`hass/tests/npp/run_npp.py`, once NPP-H has landed). `hass/tests/test_npp_assets.py` is the single owner of the
+   asset and case-fixture contracts; it is an addition to the NPP-A owned-files list (design section 5) made under
+   the G standing grant SCOPE-3 (2026-11-03), because the acceptance needs a test module and no other NPP card owns one.
+   Do not delete it: it is the only proof of the pin, closure, no-copying and listing-path guards.
 6. For an asset or pin change that moves model output: re-record on the private host within the caps, then run the judge
    (`npp_eval.py --judge`, calibration first). Gates: replay passes; strict preview run passes; judge mean at least 4.0,
    no case regressing by more than 0.5, every validator check green.
