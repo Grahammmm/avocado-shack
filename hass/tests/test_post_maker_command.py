@@ -131,10 +131,9 @@ class PostMakerTests(StoreMixin, ConversationTestCase):
         self.assertEqual((calls, self.untouched()), ([], before))
 
     def test_lookalikes_and_other_post_modes_unchanged(self):
-        for send in ("postmaker Etto", "post makers Etto"):
-            with self.subTest(send=send):
-                self.assertNotEqual(self.say(send), "post")
-                self.assertFalse(any(PREFIX in r for r in self.replies()))
+        self.assertNotEqual(self.say("postmaker Etto"), "post")
+        self.assertFalse(any(PREFIX in r for r in self.replies()))
+        self.assertEqual(self.post("post makers Etto"), ('No active product matches "makers Etto"; send find <words> for ids.', []))  # AV1052-07: a product query, not post maker
         self.assertEqual(self.post("post photo-product-001x")[0], "I don't know a product called photo-product-001x. Try find and a word from its name.")
         self.assertEqual(self.post("post hike nope")[0], "I don't know a hike called nope. Try find and a word from its name.")
         self.assertEqual(self.post("post maker Etto and more")[0], "No maker Etto and more; send find <words> for keys.")

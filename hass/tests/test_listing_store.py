@@ -119,10 +119,8 @@ class ListingStoreTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.say(f"listing {pid}"), "listing")
         self.assertEqual(self.replies()[0].splitlines()[:2], [HEAD, "Name: Hass avocado"])
         self.assertEqual(self.store("listing storefront"), ["I don't know that one. Try find and a word from its name."])
-        self.say("listing store hours please")  # a sentence is a change request, never the store branch
-        self.assertEqual(self.calls, ["interpret"])
-        self.calls.clear()
-        self.assertNotIn(HEAD, self.replies())
+        self.assertEqual(self.store("listing store hours please"), ["I don't know that one. Try find and a word from its name."])  # AV1052-07: a name, never the store branch or the interpreter
+        self.assertEqual(self.calls, [])
 
     # Contract: read-only and fail-closed. Bug caught: a draft expired/changed by the listing, a partial reply on bad content.
     def test_listing_store_is_read_only_and_fails_closed(self):

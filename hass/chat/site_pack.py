@@ -4,12 +4,12 @@ AVB-12: moved verbatim out of hass/conversation.py, which imports every name bac
 unchanged). The methods run on the Conversation (self is the conversation): they use its store, replies and
 settings exactly as before. Command routing stays in Conversation._command.
 """
-import os, stat  # noqa: E401
+import os, stat, unicodedata  # noqa: E401
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from hass import editor as editor_mod, preview as preview_mod, sitegen, voice
-from hass.chat.shared import CANT_READ, load_content, LOCAL_TZ, q, STATUS_PLAIN
+from hass.chat.shared import CANT_READ, FIND_TEXT_MAX, load_content, LOCAL_TZ, q, STATUS_PLAIN
 from hass.content_model import _text as checked_text, ContentError, DEFAULT_HEADLINE, DEFAULT_INTRO, DEFAULT_STORY, HOME_IMAGE_RE, iso_day, load_and_validate, SHELF_LABELS, shop_today, validate
 from hass.ops import catalog
 
@@ -22,7 +22,7 @@ LISTING_DESC_MAX = 120  # AV1622-09: characters of a product description in `lis
 
 LISTING_STORY_MAX = 80  # AV1052-06: characters of the story in `listing store`
 LISTING_HEAD = "This is from my saved copy, not a live look at the website:"
-LISTING_USAGE = "Which one? Say it like " + q("listing Etto") + "."
+LISTING_USAGE = "Which one? Say " + q("listing <id, name or alias>") + ", like " + q("listing Etto") + "; " + q("find <words>") + " looks it up."  # AV1052-07
 LISTING_NONE = "I don't know that one. Try " + q("find") + " and a word from its name."
 LISTING_MANY = "That fits more than one thing. Could you say a bit more of its name?"
 
@@ -35,6 +35,7 @@ LOOK_USAGE = "Send " + q("look") + ", " + q("look hike") + ", or " + q("look <pr
 LOOK_ABSENT = "{id} is not on the site; send " + q("find <words>") + " for ids."
 LOOK_NONE = "No active product matches {id}; send " + q("find <words>") + " for ids."
 LOOK_MANY = "That fits more than one active product; send " + q("look") + " and the id:"
+NAME_MORE = "There are more. Add a word to narrow it down."  # AV1052-07: a lookup that filled its 10 may have more
 
 
 class SitePack:
@@ -43,15 +44,42 @@ class SitePack:
     def _look_product(self, content, query):
         """AV1922-01: ("one", record) for the one active product the query names (exact id first, then name or saved alias),
         ("absent", id) for an exact id that is hidden or held, ("none", None) or ("many", [records]). Read-only."""
-        active = [p for p in content.products if p.get("status") == "active"]
         for p in content.products:
             if p.get("id") == query: return ("one", p) if p.get("status") == "active" else ("absent", query)
+        hits = self._active_hits(content, query)
+        return ("one", hits[0]) if len(hits) == 1 else ("many", hits) if hits else ("none", None)
+
+    def _active_hits(self, content, query):
+        """AV1052-07: the active products a name or saved alias names (catalog.lookup, <= 10, sorted by id). Only active
+        products are in the view the lookup sees, so held or hidden rows can neither match nor use up its 10; the memory
+        table is read only when it already exists (aliases() would create it). Read-only."""
+        active = [p for p in content.products if p.get("status") == "active"]
         has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
         found = catalog.lookup(SimpleNamespace(products=active, makers={}), "product", query,
                                aliases=self.aliases() if has_memory else None)
-        if "match" in found: return "one", next(p for p in active if p["id"] == found["match"])
-        ids = [c["id"] for c in found["candidates"]]
-        return ("many", [p for p in active if p["id"] in ids]) if ids else ("none", None)
+        ids = [found["match"]] if "match" in found else [c["id"] for c in found["candidates"]]
+        return [p for p in active if p["id"] in ids]
+
+    @staticmethod
+    def _many_lines(hits) -> str:
+        """AV1052-07: find-style lines (id, name, status) for several active matches; the tail when the lookup was full."""
+        lines = [f"product {p['id']}: " + q(p["name"]) + " (active)" for p in sorted(hits, key=lambda p: p["id"])[:FIND_MAX]]
+        return "\n".join(lines + ([NAME_MORE] if len(hits) >= catalog.MAX_CANDIDATES else []))
+
+    @staticmethod
+    def _bad_query(query) -> bool:
+        """AV1052-07: a product query is 1 to FIND_TEXT_MAX characters on one line."""
+        return not query or len(query) > FIND_TEXT_MAX or any(unicodedata.category(c) in ("Cc", "Zl", "Zp") for c in query)
+
+    def _product_for(self, content, query):
+        """AV1052-07: (product id, None) for what a post or listing names, or (None, reply). An exact id of any status acts as
+        before (never case-repaired or rematched by name); else exactly one active product by name or alias acts as its id,
+        several give the find lines and none says to use find. One unknown word keeps the old 'I don't know' answer."""
+        if any(p.get("id") == query for p in content.products): return query, None
+        hits = self._active_hits(content, query)
+        if len(hits) == 1: return hits[0]["id"], None
+        if hits: return None, self._many_lines(hits)
+        return (query, None) if len(query.split()) == 1 else (None, LOOK_NONE.format(id=q('"' + query + '"')))
 
     def _look_path(self, now):
         """A fresh private screenshot path look-<UTC stamp>.png (microseconds; never an existing name), or None when the
@@ -100,24 +128,6 @@ class SitePack:
             text, photo = LOOK_FAIL, []
         self._reply(text, photo, long_ok=True, ids_ok=True)
         return "look"
-
-    def _listing_names_something(self, text) -> bool:
-        """Like post, a multiword listing needs a known name; unreadable content gets the usual read error."""
-        try:
-            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
-        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
-            return True
-        return any(self._pick(kind, text, content) != text for kind in ("product", "maker")) \
-            or self._pick_hike(content, text) != text or self._pick_hike(content, text, "routeIdeas") != text \
-            or self._title_matches(content, text)
-
-    @staticmethod
-    def _title_matches(content, text) -> bool:
-        """True when some hike or route idea title holds every word, even if several do (the listing then says it is not sure)."""
-        words = catalog._fold(text).split()
-        if not words or not isinstance(content.community, dict): return False
-        return any(isinstance(e, dict) and isinstance(e.get("title"), str) and all(w in catalog._fold(e["title"]) for w in words)
-                   for key in ("events", "routeIdeas") for e in (content.community.get(key) if isinstance(content.community.get(key), list) else []))
 
     def _find(self, query) -> str:
         """AV1537-04: read-only lookup, products then makers; id/name/status only, never a draft or a memory table."""
@@ -209,6 +219,9 @@ class SitePack:
             self._reply(LISTING_USAGE)
             return "listing"
         if ident.casefold() == "store": return self._listing_store()
+        if self._bad_query(ident):  # AV1052-07: a blank, over-long or several-line name is the usage, never the interpreter
+            self._reply(LISTING_USAGE, ids_ok=True)
+            return "listing"
         try:
             wt = editor_mod._load(str(self.sdir))[2]
             content = load_content(wt / "hass" / "content")
@@ -219,13 +232,16 @@ class SitePack:
                 return f + [(kind, r) for kind, key in (("hike", "events"), ("route idea", "routeIdeas"))
                             for r in content.community[key] if r.get("id") == i]
             found = collect(ident)  # an exact id/key of any kind beats every name/title fallback
-            if not found:
-                typed, ident = ident, self._pick("product", ident, content)
-                if not any(p.get("id") == ident for p in content.products): ident = self._pick("maker", typed, content)
+            hits = []
+            if not found:  # AV1052-07: one active product by name or alias, else a maker, hike or route idea as before
+                typed, hits = ident, self._active_hits(content, ident)
+                ident = hits[0]["id"] if len(hits) == 1 else typed
+                if ident == typed: ident = self._pick("maker", typed, content)
                 if ident == typed: ident = self._pick_hike(content, typed)
                 if ident == typed: ident = self._pick_hike(content, typed, "routeIdeas")
                 found = collect(ident)
-            if len(found) != 1: text = LISTING_NONE if not found else LISTING_MANY
+            if len(found) != 1:
+                text = LISTING_MANY if found else self._many_lines(hits) if hits else LISTING_NONE
             else:
                 kind, rec = found[0]
                 nope = "nothing yet"
@@ -256,7 +272,7 @@ class SitePack:
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             self._problem("error", "shop-list-unreadable")
             text = CANT_READ
-        self._reply(text, long_ok=True)
+        self._reply(text, long_ok=True, ids_ok=True)
         return "listing"
 
     def _photos_to_take(self) -> str:

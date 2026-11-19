@@ -1204,10 +1204,6 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if msg.text.strip() == "?" and self.dispatch is not None:
             req = self.requests.get(msg.chat, now)
             if req and self.dispatch.simple_intake(req): command = None
-        if command and command[0] == "listing" and command[1] and len(command[1].split()) >= 2 and not self._listing_names_something(command[1]):
-            command = None  # A sentence is not a listing request unless it names something in the catalog.
-        if command and command[0] == "post" and len(command[1].split()) >= 2 and not self._post_names_something(command[1]):
-            command = None  # HASS-VOICE-1: "post a sale on social media" is a sentence for the interpreter, not a product or hike name
         if command is None and msg.attachments <= 0 and (near := near_control(msg.text)) is not None:  # AV2007-05: guidance only, no model, nothing paused or resumed
             self._reply(NEAR_STOP_REPLY if near == "stop" else NEAR_RESUME_REPLY)
             self._record(msg, "near-control")
