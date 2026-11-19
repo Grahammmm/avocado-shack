@@ -25,12 +25,11 @@ const HELP=()=>{const A=window.__a={},ids=new WeakMap();let n=0;
  A.id=e=>{if(!ids.has(e))ids.set(e,++n);return ids.get(e)};
  A.desc=e=>{const c=typeof e.className==='string'?e.className.trim().split(/\s+/)[0]:'',k=Object.keys(e.dataset||{}).find(x=>!/^a11y/.test(x)),t=(e.getAttribute('aria-label')||e.textContent||e.getAttribute('alt')||e.value||'').replace(/\s+/g,' ').trim().slice(0,28);
   return e.tagName.toLowerCase()+(e.id?'#'+e.id:c?'.'+c:'')+(k?'[data-'+k.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())+']':'')+(t?' "'+t+'"':'')};
- A.kind=e=>e.tagName+'|'+(e.id||String(e.className).split(' ')[0])+'|'+(e.closest('dialog[open]')?'dialog':'page')+'|'+(e.type||'');
  A.cover=e=>{const r=e.getBoundingClientRect();let p=0,c=0,by='';for(const [fx,fy] of [[.5,.5],[.1,.1],[.9,.1],[.1,.9],[.9,.9]]){const x=r.left+r.width*fx,y=r.top+r.height*fy;if(x<0||y<0||x>=innerWidth||y>=innerHeight)continue;p++;const h=document.elementFromPoint(x,y);if(!h||!(h===e||e.contains(h)||h.contains(e))){c++;by=by||(h?A.desc(h):'nothing')}}return {p,c,by}};
  // Resolves with the focused element once the page and the open dialog have stopped scrolling (the site sets scroll-behavior:smooth).
  A.stop=()=>new Promise(res=>{let last='',k=0;const f=()=>{const e=document.activeElement,s=scrollY+':'+(e?.closest?.('dialog')?.scrollTop||0);if(s===last&&++k>2)return res(A.read());if(s!==last)k=0;last=s;requestAnimationFrame(f)};f()});
  A.read=()=>{const e=document.activeElement;if(!e||e===document.body)return {body:true};e.setAttribute('data-a11y-hit','1');const r=e.getBoundingClientRect(),cs=getComputedStyle(e),cv=A.cover(e);
-  return {id:A.id(e),d:A.desc(e),kind:A.kind(e),x:r.left,y:r.top+scrollY,w:r.width,h:r.height,inView:r.bottom>0&&r.top<innerHeight,tabindex:e.getAttribute('tabindex'),dialog:!!e.closest('dialog[open]'),points:cv.p,covered:cv.c,by:cv.by,
+  return {id:A.id(e),d:A.desc(e),x:r.left,y:r.top+scrollY,w:r.width,h:r.height,inView:r.bottom>0&&r.top<innerHeight,tabindex:e.getAttribute('tabindex'),dialog:!!e.closest('dialog[open]'),points:cv.p,covered:cv.c,by:cv.by,
    outline:cs.outlineStyle+' '+cs.outlineWidth+' '+cs.outlineColor,clip:{x:Math.max(0,r.left-6),y:Math.max(0,r.top-6),width:Math.min(innerWidth,r.width+12),height:Math.min(innerHeight,r.height+12)}}};
 };
 // Static scan of the current DOM (or of the open dialog only when one is open).
@@ -41,8 +40,8 @@ const SCAN=()=>{const A=window.__a,dlg=document.querySelector('dialog[open]'),ro
  const idc={};document.querySelectorAll('[id]').forEach(e=>idc[e.id]=(idc[e.id]||0)+1);
  const hi=[],hs=heads.filter(h=>!h.dlg);hs.forEach((h,i)=>{if(i&&h.l-hs[i-1].l>1)hi.push(`h${hs[i-1].l} "${hs[i-1].t}" -> h${h.l} "${h.t}"`);if(!h.t)hi.push('empty h'+h.l)});if(hs.filter(h=>h.l===1).length!==1)hi.push('h1 count '+hs.filter(h=>h.l===1).length);if(hs[0]&&hs[0].l!==1)hi.push('first heading is h'+hs[0].l);
  const dangling=[...document.querySelectorAll('label[for],[aria-labelledby],[aria-describedby]')].flatMap(e=>[e.getAttribute('for'),...(e.getAttribute('aria-labelledby')||'').split(/\s+/),...(e.getAttribute('aria-describedby')||'').split(/\s+/)].filter(Boolean).filter(i=>!document.getElementById(i)).map(i=>A.desc(e)+' -> #'+i));
- const els=[...root.querySelectorAll('a[href],button,input:not([type=hidden]),select,textarea,summary,[tabindex],[role],[aria-label],[aria-labelledby],dialog')].filter(e=>A.vis(e)||e===dlg);
- els.forEach((e,i)=>e.setAttribute('data-a11y',i));
+ const els=[...(dlg?[dlg]:[]),...root.querySelectorAll('a[href],button,input:not([type=hidden]),select,textarea,summary,[tabindex],[role],[aria-label],[aria-labelledby],dialog')].filter(e=>A.vis(e)||e===dlg);
+ document.querySelectorAll('[data-a11y]').forEach(e=>e.removeAttribute('data-a11y'));els.forEach((e,i)=>e.setAttribute('data-a11y',i));
  const tg=[...root.querySelectorAll('a[href],button,input:not([type=hidden]),select,textarea,summary,[role=button]')].filter(e=>A.vis(e)&&!e.classList.contains('sr-only')).map(e=>{const box=e.type==='checkbox'||e.type==='radio'?e.closest('label')||e:e,r=box.getBoundingClientRect();
   return {d:A.desc(e),x:r.left+scrollX,y:r.top+scrollY,w:r.width,h:r.height,inline:getComputedStyle(e).display==='inline'&&[...e.parentNode.childNodes].some(n=>n.nodeType===3&&n.textContent.trim()),disabled:!!e.disabled}});
  const fixed=[...document.querySelectorAll('*')].filter(e=>/fixed|sticky/.test(getComputedStyle(e).position)&&A.vis(e)).map(A.desc);
@@ -56,11 +55,12 @@ const targetFails=ts=>{const live=ts.filter(t=>!t.disabled&&t.w>0&&t.h>0),small=
  const names=l=>l.map(t=>`${t.d} ${Math.round(t.w)}x${Math.round(t.h)}`),fail=small.filter(t=>live.some(o=>o!==t&&(hitRect(cc(t),o)||((o.w<24||o.h<24)&&!o.inline&&Math.hypot(cc(t).x-cc(o).x,cc(t).y-cc(o).y)<24))));
  return {measured:live.length,undersized:small.length,inline:live.filter(t=>(t.w<24||t.h<24)&&t.inline).length,smallest:names(live.slice().sort((a,b)=>Math.min(a.w,a.h)-Math.min(b.w,b.h)).slice(0,3)),fail:names(fail),spacedOk:names(small.filter(t=>!fail.includes(t)))}};
 const same=(a,b)=>Buffer.compare(a,b)===0;
-async function indicatorSeen(page,clip){const a=await page.screenshot({clip});await page.evaluate(()=>{window.__cur=document.activeElement;window.__cur.blur()});const b=await page.screenshot({clip});await page.evaluate(()=>window.__cur.focus({preventScroll:true}));return !same(a,b)}
+async function indicatorSeen(page,clip){const a=await page.screenshot({clip});await page.evaluate(()=>{window.__cur=document.activeElement;window.__cur.blur()});try{const b=await page.screenshot({clip});return !same(a,b)}finally{await page.evaluate(()=>window.__cur.focus({preventScroll:true}))}}
 async function ax(page,cdp,tagged){await cdp.send('DOM.enable');const {root}=await cdp.send('DOM.getDocument',{depth:-1,pierce:true}),byIdx={};
  const walk=n=>{const a=n.attributes||[],i=a.indexOf('data-a11y');if(i>=0)byIdx[a[i+1]]=n.backendNodeId;[...(n.children||[]),...(n.contentDocument?[n.contentDocument]:[])].forEach(walk)};walk(root);
  const {nodes}=await cdp.send('Accessibility.getFullAXTree'),back={},roles={};
- for(const n of nodes){if(n.ignored)continue;if(n.backendDOMNodeId)back[n.backendDOMNodeId]={role:n.role?.value,name:n.name?.value||''};roles[n.role?.value]=(roles[n.role?.value]||0)+1}
+ const STATE=/^(pressed|expanded|checked|disabled|modal|required|haspopup|valuemin|valuemax|valuenow|valuetext|orientation|selected|live|atomic)$/i;
+ for(const n of nodes){if(n.ignored)continue;if(n.backendDOMNodeId)back[n.backendDOMNodeId]={role:n.role?.value,name:n.name?.value||'',value:n.value?.value,states:(n.properties||[]).filter(p=>STATE.test(p.name)).map(p=>p.name+'='+p.value.value).join(' ')};roles[n.role?.value]=(roles[n.role?.value]||0)+1}
  const named=n=>nodes.filter(x=>!x.ignored&&x.role?.value===n).map(x=>x.name?.value||'(no name)');
  const rows=tagged.map(t=>({...t,...(back[byIdx[t.i]]||{role:'(not in accessibility tree)',name:''})}));
  return {landmarks:{banner:named('banner'),main:named('main'),contentinfo:named('contentinfo'),navigation:named('navigation'),region:named('region'),form:named('form'),dialog:named('dialog')},
@@ -68,13 +68,16 @@ async function ax(page,cdp,tagged){await cdp.send('DOM.enable');const {root}=awa
   hiddenFocusable:rows.filter(r=>r.interactive&&r.ariaHidden&&!r.disabled&&r.tabindex!=='-1').map(r=>r.d),
   genericNamed:rows.filter(r=>r.aria&&/^(generic|none|)$/.test(r.role||'')).map(r=>`${r.d} role=${r.role}`),
   notInTree:rows.filter(r=>r.interactive&&!r.disabled&&r.role==='(not in accessibility tree)').map(r=>r.d),
-  kinds:[...new Set(rows.filter(r=>r.interactive).map(r=>`${r.role}: ${r.name.slice(0,30)||'-'}`))].slice(0,70),interactive:rows.filter(r=>r.interactive).length,rows}}
+  kinds:[...new Set(rows.filter(r=>r.interactive).map(r=>`${r.role}: ${r.name.slice(0,30)||'-'}`))].slice(0,70),interactive:rows.filter(r=>r.interactive).length,rows,
+  // every row inside an open dialog, with its exposed value and states (for 4.1.2 on dialogs)
+  items:rows.filter(r=>r.interactive||r.tag==='dialog').map(r=>`${r.d.split(' ')[0]} => ${r.role}: ${r.name.slice(0,40)||'(no name)'}${r.value?' value='+r.value:''}${r.states?' ['+r.states+']':''}`)}}
 // 2.1.1 / 2.4.3 / 2.4.7 / 2.4.11: Tab from the top, one stop at a time. Each stop is checked for coverage (elementFromPoint at 5 points) and
-// each new kind of control is compared pixel-for-pixel focused versus blurred (no change = no visible indicator).
-async function tabWalk(page,cap,kindsDone,out,opts={}){const ids=new Set(),stops=[];let prev=null;
- for(let i=0;i<cap;i++){await page.keyboard.press(opts.reverse?'Shift+Tab':'Tab');const s=await page.evaluate(()=>window.__a.stop());
+// EVERY stop is compared pixel-for-pixel focused versus blurred (no change = no visible indicator; a stop that cannot be screenshotted is counted, not passed).
+// opts.current: first examine the control that already has focus (a dialog's landing control), then Tab on.
+async function tabWalk(page,cap,out,opts={}){const ids=new Set(),stops=[];let prev=null;out.indicatorChecked=0;out.indicatorUnchecked=[];
+ for(let i=0;i<cap;i++){if(!(opts.current&&i===0))await page.keyboard.press('Tab');const s=await page.evaluate(()=>window.__a.stop());
   if(s.body||ids.has(s.id)){out.ended=s.body?'left the document':'wrapped to the first stop';break}ids.add(s.id);
-  if(!kindsDone.has(s.kind)&&s.inView&&s.w>0){kindsDone.add(s.kind);if(!await indicatorSeen(page,s.clip))out.noIndicator.push(`${s.d} (${s.kind})`)}
+  if(s.inView&&s.w>0){const seen=await indicatorSeen(page,s.clip).catch(()=>null);if(seen===null)out.indicatorUnchecked.push(s.d);else{out.indicatorChecked++;if(!seen)out.noIndicator.push(s.d)}}else out.indicatorUnchecked.push(s.d);
   if(s.points>0&&s.covered===s.points)out.hidden.push(`${s.d} by ${s.by}`);else if(s.covered>0)out.partlyCovered.push(`${s.d} ${s.covered}/${s.points} points under ${s.by}`);
   if(!s.inView)out.offScreen.push(s.d);if(s.tabindex&&+s.tabindex>0)out.positiveTabindex.push(s.d);
   if(prev&&prev.y-s.y>240&&!s.dialog)out.backwards.push(`${prev.d} -> ${s.d}`);prev=s;stops.push(s.d)}
@@ -89,22 +92,24 @@ async function open(browser,route,width,service){const ctx=await browser.newCont
  if(route==='/')await page.locator('#catalog-grid article').first().waitFor();if(route==='/hike/')await page.locator('#upcoming-hikes article').first().waitFor();
  return {ctx,page,errors}}
 // One dialog opened by keyboard: where focus lands, the Tab cycle inside it, Escape, and where focus returns (close/return focus is also asserted by static-site-qa.cjs:265-266).
-async function dialogTest(page,opener,name,kindsDone){const out={name,...newWalk()};
+async function dialogTest(page,opener,name){const out={name,...newWalk()};
  await focusKey(page,opener,'Enter');await page.locator('dialog[open]').waitFor({timeout:3000}).catch(()=>{});out.opened=await page.evaluate(()=>!!document.querySelector('dialog[open]'));
  if(!out.opened)return {...out,note:'did not open'};
  out.landed=await page.evaluate(()=>window.__a.stop()).then(s=>s.d||'body');const sc=await page.evaluate(SCAN);out.targets=targetFails(sc.targets);out.unlabelled=sc.controls.filter(c=>!c.labels&&!c.aria).map(c=>c.d);out.controlCount=sc.controls.length;out.fixed=sc.fixed;out.label=await page.evaluate(()=>{const d=document.querySelector('dialog[open]'),l=d.getAttribute('aria-labelledby');return d.getAttribute('aria-label')||(l&&document.getElementById(l)?.textContent)||null});out.scrollable=await page.evaluate(()=>{const d=document.querySelector('dialog[open]');return d.scrollHeight>d.clientHeight});
- await tabWalk(page,14,kindsDone,out);out.escapeCloses=await page.keyboard.press('Escape').then(()=>page.evaluate(()=>!document.querySelector('dialog[open]')));await page.waitForTimeout(200);
+ // 4.1.2 on the OPEN dialog: Chrome's accessibility tree for the dialog and every control in it (role, name, value, states)
+ const a=await ax(page,await page.context().newCDPSession(page),sc.tagged);out.ax={items:a.items,noName:a.noName,notInTree:a.notInTree,hiddenFocusable:a.hiddenFocusable,genericNamed:a.genericNamed,interactive:a.interactive,dialogRole:a.rows.filter(r=>r.tag==='dialog').map(r=>`${r.role}: ${r.name||'(no name)'} [${r.states}]`)};
+ await tabWalk(page,14,out,{current:true});out.escapeCloses=await page.keyboard.press('Escape').then(()=>page.evaluate(()=>!document.querySelector('dialog[open]')));await page.waitForTimeout(200);
  out.focusReturnedTo=await page.evaluate(()=>window.__a.desc(document.activeElement));delete out.list;return out}
 async function collect(browser,route,width,service){const {ctx,page,errors}=await open(browser,route,width,service),cdp=await ctx.newCDPSession(page),r={route,width,state:service?'service-fixture':'published'},tests=[];
- const kindsDone=new Set(),kb=newWalk();
+ const kb=newWalk();
  if(route==='/hike/'&&!service){await page.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();await page.locator('[data-trail-explorer][data-ready=true]').waitFor({timeout:8000}).catch(()=>{});await page.evaluate(()=>scrollTo(0,0))}
  await page.evaluate(()=>{scrollTo(0,0);document.activeElement.blur()});
- const walk=await tabWalk(page,900,kindsDone,kb);
+ const walk=await tabWalk(page,900,kb);
  const sc=await page.evaluate(SCAN),a=await ax(page,cdp,sc.tagged);
  const missed=sc.tagged.filter(t=>t.interactive&&!t.disabled&&t.tabindex!=='-1'&&!t.hit).map(t=>t.d);// every enabled, tab-reachable control must have been a stop
  Object.assign(r,{images:sc.images,headings:sc.headings,headingIssues:sc.headingIssues,cards:sc.cards,outsideLandmarks:sc.outsideLandmarks,controls:sc.controls,dupIds:sc.dupIds,dangling:sc.dangling,landmarks:a.landmarks,noName:a.noName,hiddenFocusable:a.hiddenFocusable,genericNamed:a.genericNamed,notInTree:a.notInTree,roleNameKinds:a.kinds,interactiveCount:a.interactive,
-  fixed:sc.fixed,toast:sc.toast,targets:targetFails(sc.targets),keyboard:{...walk,list:undefined,notReached:missed,indicatorKindsChecked:kindsDone.size},errors});
- tests.push(await dialogTest(page,'[data-policy]','privacy dialog',kindsDone));
+  fixed:sc.fixed,toast:sc.toast,targets:targetFails(sc.targets),keyboard:{...walk,list:undefined,notReached:missed},errors});
+ tests.push(await dialogTest(page,'[data-policy]','privacy dialog'));
  await page.evaluate(()=>{scrollTo(0,0);document.activeElement.blur()});await focusKey(page,'.skip-link','Enter');await page.keyboard.press('Tab');
  tests.push({name:'skip link (Enter, then Tab)',hash:await page.evaluate(()=>location.hash),next:await page.evaluate(()=>window.__a.desc(document.activeElement)),insideTarget:await page.evaluate(()=>!!document.getElementById(location.hash.slice(1))?.contains(document.activeElement))});
  if(route==='/'&&!service){ // catalog: filter keys, card details, a "See all from maker" button that re-renders the grid
@@ -127,19 +132,21 @@ async function collect(browser,route,width,service){const {ctx,page,errors}=awai
    tests.push({name:'trail map Zoom in x3 by keyboard (button disables at max zoom)',...zi,nextTab:await page.evaluate(()=>window.__a.desc(document.activeElement))});await focusKey(page,'[data-map-action="fit"]','Enter');
    const nm=['#preview-rsvp-name','Synthetic Visitor'],em=['#preview-rsvp-email','synthetic@example.invalid'];await page.fill(nm[0],nm[1]);await page.fill(em[0],em[1]);await page.focus('#preview-rsvp-email');await page.keyboard.press('Enter');await page.waitForTimeout(100);
    tests.push({name:'sample RSVP submitted by keyboard (Enter in email; nothing is sent)',status:await page.locator('#preview-hike-rsvp .form-status').textContent(),focus:await page.evaluate(()=>window.__a.desc(document.activeElement))});
-   tests.push(await dialogTest(page,'[data-map-action="expand"]','enlarged trail map dialog (Enlarge map)',kindsDone));await page.setViewportSize({width,height:360});tests.push(await dialogTest(page,'[data-map-action="expand"]','enlarged trail map dialog at 360 px high',kindsDone))}}
- if(route==='/hike/'&&service){await page.evaluate(()=>{scrollTo(0,0);document.activeElement.blur()});tests.push(await dialogTest(page,'[data-rsvp]','RSVP dialog (synthetic event)',kindsDone));await page.setViewportSize({width,height:360});tests.push(await dialogTest(page,'[data-rsvp]','RSVP dialog at 360 px high',kindsDone))}
+   tests.push(await dialogTest(page,'[data-map-action="expand"]','enlarged trail map dialog (Enlarge map)'));await page.setViewportSize({width,height:360});tests.push(await dialogTest(page,'[data-map-action="expand"]','enlarged trail map dialog at 360 px high'))}}
+ if(route==='/hike/'&&service){await page.evaluate(()=>{scrollTo(0,0);document.activeElement.blur()});tests.push(await dialogTest(page,'[data-rsvp]','RSVP dialog (synthetic event)'));await page.setViewportSize({width,height:360});tests.push(await dialogTest(page,'[data-rsvp]','RSVP dialog at 360 px high'))}
  if(route==='/404.html'){ // detector controls: a covered control and a suppressed outline must be caught; two adjacent 10 px targets fail 2.5.8, one isolated 10 px target passes by spacing
   await page.evaluate(()=>{scrollTo(0,0);document.activeElement.blur()});await page.focus('[data-policy]');const ok=await indicatorSeen(page,(await page.evaluate(()=>window.__a.read())).clip);
   await page.evaluate(()=>{document.activeElement.style.outline='none'});const supp=await indicatorSeen(page,(await page.evaluate(()=>window.__a.read())).clip);
   const cov=await page.evaluate(()=>{const b=document.activeElement,o=document.createElement('div');Object.assign(o.style,{position:'fixed',inset:'0',zIndex:'99'});document.body.append(o);const c=window.__a.cover(b);o.remove();return c});
   const T=(x,y)=>({d:'t',x,y,w:10,h:10,inline:false,disabled:false});
-  r.selfChecks={indicatorSeenOnDefault:ok,indicatorSeenWhenSuppressed:supp,coverDetected:cov.p>0&&cov.c===cov.p,adjacentSmallTargetsFail:targetFails([T(0,0),T(12,0)]).fail.length===2,isolatedSmallTargetPasses:targetFails([T(0,0),T(200,0)]).fail.length===0}}
+  // a LATER stop whose ring is suppressed must be caught by the every-stop walk, and the others must not be flagged
+  await page.reload();await page.waitForLoadState('networkidle');await page.evaluate(()=>document.querySelector('a.brand').style.setProperty('outline','none','important'));const sw=newWalk();await tabWalk(page,8,sw);
+  r.selfChecks={indicatorSeenOnDefault:ok,indicatorSeenWhenSuppressed:supp,coverDetected:cov.p>0&&cov.c===cov.p,adjacentSmallTargetsFail:targetFails([T(0,0),T(12,0)]).fail.length===2,isolatedSmallTargetPasses:targetFails([T(0,0),T(200,0)]).fail.length===0,laterStopSuppressedCaught:sw.noIndicator.length===1&&/^a\.brand/.test(sw.noIndicator[0])&&sw.indicatorChecked>=4,laterStopDetail:{flagged:sw.noIndicator,checked:sw.indicatorChecked,stops:sw.stops}}}
  r.tests=tests;await ctx.close();return r}
 (async()=>{const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined}),rows=[];
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  try{for(const route of ROUTES)for(const width of WIDTHS)rows.push(await collect(browser,route,width,false));
   for(const route of ['/','/hike/'])for(const width of WIDTHS)rows.push(await collect(browser,route,width,true))}finally{const v=browser.version();await browser.close();server.close();fs.rmSync(tmp,{recursive:true,force:true});globalThis.__v=v}
- const missing=ROUTES.flatMap(r=>WIDTHS.filter(w=>!rows.some(x=>x.state==='published'&&x.route===r&&x.width===w)).map(w=>r+'@'+w)),selfOk=rows.filter(x=>x.selfChecks).every(x=>x.selfChecks.indicatorSeenOnDefault&&!x.selfChecks.indicatorSeenWhenSuppressed&&x.selfChecks.coverDetected&&x.selfChecks.adjacentSmallTargetsFail&&x.selfChecks.isolatedSmallTargetPasses);
+ const missing=ROUTES.flatMap(r=>WIDTHS.filter(w=>!rows.some(x=>x.state==='published'&&x.route===r&&x.width===w)).map(w=>r+'@'+w)),selfOk=rows.filter(x=>x.selfChecks).every(x=>x.selfChecks.indicatorSeenOnDefault&&!x.selfChecks.indicatorSeenWhenSuppressed&&x.selfChecks.coverDetected&&x.selfChecks.adjacentSmallTargetsFail&&x.selfChecks.isolatedSmallTargetPasses&&x.selfChecks.laterStopSuppressedCaught);
  console.log(JSON.stringify({sha,chromium:globalThis.__v,published,checkPublish:checked,fixedClock:FIXED,nonLoopbackRequests:seen.nonLoopback,nonLoopbackHosts:seen.hosts,nonGetRequests:seen.nonGet,complete:!missing.length,missing,selfChecksOk:selfOk,rows}));
  process.exit(missing.length||!selfOk||seen.nonLoopback||seen.nonGet?1:0)})().catch(e=>{process.stderr.write('a11y QA failed: '+(e.stack||e)+'\n');fs.rmSync(tmp,{recursive:true,force:true});process.exit(1)});
