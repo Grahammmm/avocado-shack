@@ -19,6 +19,21 @@ SUPPLIER_UNCERTAIN = re.compile(r"\b(?:or|maybe|probably|think|guess|please|chan
 COPY = re.compile(r"(?:(?:add|description)\s*:\s*|say\s+it['’]s\s+)(.+)", re.I)
 QUESTION = re.compile(r"(?:what|when|where|who|why|how)\b|"
                       r"(?:is|are|can|could|do|does|did|will|would|should)\s+(?:it|this|that|these|they|i|we|you|the)\b", re.I)
+# HASS-FIX-F4: a plain-words selling-price edit while a listing waits ("make it $4", "actually make it 4 bucks", "wait $4.50",
+# "no $3", "ok make it $4"). The amount is read by item_intake._parse_money only; an unsure amount ("4 or 5 bucks") never
+# matches, so it is asked, not guessed. Cost words (paid, bought, cost) are not here: those stay private finance.
+_LEAD_IN = r"(?:(?:ok(?:ay)?|actually|wait|no|so|oh|hmm|sorry)\b[,.!]?\s*)*"
+_PRICE_VERB = (r"(?:(?:make|change|set)\s+(?:it|that|them|the\s+price)(?:\s+to)?|(?:the\s+)?(?:selling\s+)?price(?:\s+is|\s+to|\s*:)?"
+               r"|sell(?:\s+(?:it|them|these|those))?(?:\s+for)?|it['’]?s|now)")
+_AMOUNT = (r"(?P<amount>\$\s*\d{1,6}(?:\.\d{1,2})?(?:\s*(?:dollars?|bucks?))?|\d{1,6}(?:\.\d{1,2})?\s*(?:dollars?|bucks?)"
+           r"|[a-z]+(?:[- ][a-z]+)?\s+(?:dollars?|bucks?)(?:\s+(?:and\s+)?[a-z]+(?:[- ][a-z]+)?\s+cents?)?)")
+PRICE_EDIT = re.compile(rf"{_LEAD_IN}(?:{_PRICE_VERB}\s*)?{_AMOUNT}"
+                        r"(?:\s*(?P<unit>each|apiece|(?:a|per)\s+(?:lb|pound)|/\s*lb|/\s*each))?[.!]*", re.I)
+# What dispatch.intake_text leaves of such an edit after it has already put the amount into the private slots.
+PRICE_LEFTOVER = re.compile(rf"(?:{_LEAD_IN}{_PRICE_VERB}|(?:ok(?:ay)?|actually|wait|no|so)\b(?:[,.!]?\s*(?:ok(?:ay)?|actually|wait|no|so)\b)*)[,.!]*",
+                            re.I)
+TWIN = ("{name} is already on the website. To list this one too, give it another name (say \"call it …\"); "
+        "to change that one, tell me what to change about {name}.")
 
 
 def public_sources(slots):
@@ -108,6 +123,12 @@ def edit(slots, text, asked=None):
         got["sold_by"] = unit
         got.pop("price_unit", None)
         return out, "", None
+    if (match := PRICE_EDIT.fullmatch(words)) and (value := ii._parse_money(match["amount"])) is not None:
+        got["price"] = value  # F4: the last plain-words price wins, on the same code
+        if match["unit"]:
+            got["sold_by"] = "pound" if re.search(r"lb|pound", match["unit"], re.I) else "item"
+            got.pop("price_unit", None)
+        return out, "", None
     public, finance = ii.caption_answers(text)
     if basis in ("bag", "bundle"):
         finance.pop("sold_by", None)  # a unit elsewhere, e.g. on a cost edit, isn't this price's basis
@@ -115,6 +136,8 @@ def edit(slots, text, asked=None):
     if asked == "price" and not finance and (value := ii._parse_money(text)) is not None:
         got["price"] = value
         return out, "", None
+    if got.get("price") is not None and PRICE_LEFTOVER.fullmatch(public.strip()):
+        return out, "", None  # F4: the amount was already read into the private slots; "make it" alone is no listing words
     if not public or NEXT.fullmatch(public.strip()) or ii.SKIP.fullmatch(public.strip()):
         return out, "", None
     source = public.rstrip(".")
@@ -183,6 +206,12 @@ def plan(slots, content):
             raise ValueError("Give the selling price separately, not in the website wording. The listing is unchanged.")
     if args["category"] not in CATEGORIES:
         raise ValueError("That shelf isn't on the website. The listing is unchanged.")
+    intake = slots.get("intake") or {}
+    if slots.get("photo") and intake.get("price") is not None:
+        from hass.ops.catalog import _twin  # lazy: the editor's own same-name-and-brand rule, said before it refuses
+        if _twin(content, args["name"], args["brand"]) is not None:
+            # F5: the listing (with the price he just gave) and the real reason, not "That's already how it is".
+            raise ValueError(preview(slots) + "\n" + TWIN.format(name=voice.quote(args["name"])))
     labels = product_claims.sanitize(slots, photo_details(slots.get("intake") or {}))
     args.update(name=slots.get("name") or name, brand=slots.get("maker") or brand,
                 description=slots.get("description") or name)

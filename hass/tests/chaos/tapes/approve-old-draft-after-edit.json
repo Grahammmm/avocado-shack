@@ -85,6 +85,26 @@
    "route": "browser",
    "seconds": 2.789,
    "turn": 3
+  },
+  {
+   "turn": 2,
+   "method": "capture",
+   "result": {
+    "ok": true,
+    "checks": {
+     "productShown": true,
+     "description": true,
+     "priceShown": true,
+     "imageShown": true,
+     "noPageErrors": true,
+     "noPosts": true
+    },
+    "error": null,
+    "cardText": "From the market\n\nSUPERGRIP GLUE\n\n$4.00\n\nAsk us about the source in store.\n\nNew\n\nSUPERGRIP GLUE comes in a tall, rectangular container with a tapered yellow top and a black label with yellow lettering. 2 fl oz. Off-white with a yellow top and a black label. Made in USA, The strongest glue.\n\nLink to this"
+   },
+   "attrs": {},
+   "seconds": 1.75,
+   "route": "browser"
   }
  ],
  "case": "approve-old-draft-after-edit"
