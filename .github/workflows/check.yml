@@ -138,8 +138,8 @@ jobs:
     needs: quick
     if: needs.quick.outputs.tier == 'full'
     runs-on: ubuntu-latest
-    # A shard is ~290 s of measured module time; 30 min leaves >5x for a loaded host.
-    timeout-minutes: 30
+    # Hosted shard jobs reached 30:16 at the old limit; allow 1.5x that time, rounded up.
+    timeout-minutes: 46
     strategy:
       fail-fast: false
       matrix:

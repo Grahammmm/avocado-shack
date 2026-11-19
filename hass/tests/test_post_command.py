@@ -28,7 +28,9 @@ class PostParseTests(unittest.TestCase):
         self.assertEqual(conversation.parse_command("post"), ("post", ""))
         for text in ("posts a", "please post a", "postit a"):
             self.assertIsNone(verb(text), text)
-        # several words read as the command here; the conversation sends them to the interpreter unless they name a product
+        # several words read as the command here (AV1052-07: however many); the conversation sends them to the interpreter unless they name a product
+        self.assertIsNone(conversation.parse_command("post a b c d e f g h"))  # AV1052-07: the plain parser keeps its window; the conversation reads the whole rest
+        self.assertEqual(conversation.read_command("post a b c d e f g h", listing_names=True), ("post", "a b c d e f g h"))
         self.assertEqual(conversation.parse_command("post Hass avocado"), ("post", "Hass avocado"))
 
 
@@ -101,7 +103,7 @@ class PostTests(StoreMixin, ConversationTestCase):
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_no_id_gets_usage_and_two_words_fall_through(self):
-        self.assertEqual(self.post("post"), ("Which product is the post for? Say it like post Hass avocado.", []))
+        self.assertEqual(self.post("post"), ("Which product is the post for? Say post <id, name or alias>, like post Hass avocado; find <words> looks it up.", []))
         self.interp.mapping["post x y"] = {"question": "Which?"}
         self.assertNotEqual(self.say("post x y"), "post")
         self.assertNotIn("Draft post", "\n".join(self.replies()))

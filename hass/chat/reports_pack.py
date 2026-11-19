@@ -13,7 +13,7 @@ from hass.content_model import ContentError, load_and_validate, shop_today
 from hass.ops import catalog
 
 POST_ILLUSTRATION = "This picture is an illustration made from a shelf photo, not a photo of the product. Send a photo with the product name as its caption to post a real one."  # AV1352-03
-POST_USAGE = "Which product is the post for? Say it like " + q("post Hass avocado") + "."  # AV1322-07
+POST_USAGE = "Which product is the post for? Say " + q("post <id, name or alias>") + ", like " + q("post Hass avocado") + "; " + q("find <words>") + " looks it up."  # AV1322-07; AV1052-07
 MAKER_USAGE = "Send " + q("post maker") + " and a maker key; " + q("find <words>") + " gives keys."  # AV1937-10
 MAKER_REFUSALS = {"no such maker": "No maker {id}; send " + q("find <words>") + " for keys.",
                   "not on the site": "Maker {id} is hidden; nothing to draft.",
@@ -122,7 +122,7 @@ class ReportsPack:
     def _post_names_something(self, text) -> bool:
         """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product
         or hike; anything else keeps going to the interpreter as before. Unreadable content counts as a name so the usual
-        'can't read' answer follows."""
+        'can't read' answer follows. AV1052-07: a product of any status counts, and a name may fit several (they are listed)."""
         try:
             content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
@@ -131,7 +131,7 @@ class ReportsPack:
         if words[0].lower() == "maker": return True  # AV1937-10: a maker key may be several words; it is never a sentence
         if words[0].lower() == "hike" and len(words) == 2: return True  # one id after 'hike': the usual 'I don't know a hike' answer
         if words[0].lower() == "hike": return self._pick_hike(content, text[4:].strip()) != text[4:].strip()
-        return self._pick("product", text, content) != text
+        return not self._bad_query(text) and self._names_a_product(content, text)
 
     def _post(self, pid) -> str:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
@@ -140,10 +140,14 @@ class ReportsPack:
         if pid.lower().split(None, 1)[:1] == ["maker"]: return self._post_maker(pid[5:].strip())  # AV1937-10: before the product-id fallback
         if pid.lower().split(None, 1)[:1] == ["hike"]: return self._post_hike(pid[4:].strip())
         try:
-            if not pid: raise LookupError
+            if self._bad_query(pid): raise LookupError  # AV1052-07: blank, over 60 characters or several lines
             wt = editor_mod._load(str(self.sdir))[2]
             content = load_content(wt / "hass" / "content")
-            out = social_draft.build(content, self._pick("product", pid, content), wt / "storefront-mockup")
+            pid, many = self._product_for(content, pid)  # an id, or the one active name or alias as that id; else several or none
+            if many:
+                self._reply(many, long_ok=True, ids_ok=True)
+                return "post"
+            out = social_draft.build(content, pid, wt / "storefront-mockup")
             if out["draft"] and stat.S_ISREG(os.lstat(photo := wt / "storefront-mockup" / out["image"]).st_mode):
                 text = f"Here's a post you can copy. I haven't posted anything.\n{q(out['caption'])}\nWhat the photo shows: {q(out['alt'])}"
                 if out.get("illustration"): text = POST_ILLUSTRATION + "\n" + text  # AV1352-03: only after the photo is eligible
