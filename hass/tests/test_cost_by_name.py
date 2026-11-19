@@ -89,11 +89,12 @@ class NameAndAliasTests(CostByNameFixture):
         # answers swapped, or an unknown name reported as a missing cost.
         self.assertEqual(self.go("margin nonesuch at 35%", "margin"), UNKNOWN.format("nonesuch"))
         self.assertEqual(self.go("margin nonesuch price 3.49", "margin"), UNKNOWN.format("nonesuch"))
-        self.assertEqual(self.go("cost nonesuch: 24 for 12", "memory-invalid"), UNKNOWN.format("nonesuch"))
         self.assertEqual(self.go("margin Figs at 35%", "margin"),
                          f"I don't have a cost saved for Figs ({FIGS}). Tell me first, like cost {FIGS}: 24 for 12.")
-        self.assertNotIn("memory", self.tables(), "a margin read created the memory table")
         self.assertEqual(self.go("margin photo-product-999 at 35%", "margin"), UNKNOWN.format("photo-product-999"))
+        self.assertNotIn("memory", self.tables(), "a margin read created the memory table")
+        self.assertEqual(self.go("cost nonesuch: 24 for 12", "memory-invalid"), UNKNOWN.format("nonesuch"))
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM memory").fetchone()[0], 0)
         self.assertIsNone(self.cost(FIGS))
 
 
@@ -112,7 +113,7 @@ class NumericFormTests(CostByNameFixture):
         for text in ("margin 24 for twelve at 35%", "margin 24 for twelve price 3.49", "margin 24 for 12 at 35"):
             self.assertEqual(self.go(text, "margin"), voice.plain(conversation.MARGIN_USAGE), text)
         self.assertEqual(self.go("cost 24 for 12: 24 for 12", "memory-invalid"), voice.plain(conversation.COST_USAGE))  # a pack form is never a name
-        self.assertNotIn("memory", self.tables())
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM memory").fetchone()[0], 0)
         (self.cdir / "products.json").write_text("{not json", "utf-8")  # the numeric forms never open the catalog
         self.assertEqual(self.go("margin 24 for 12 at 35%", "margin"), want)
         self.assertEqual(self.go("margin 24 for twelve at 35%", "margin"), voice.plain(conversation.MARGIN_USAGE))

@@ -358,7 +358,7 @@ class Honesty(ConversationTestCase):
         self.assertIn("I don't know a product called", reply)
         self.say("margin Nonesuch at 35%")
         [reply] = self.replies()
-        self.assertIn("I don't have a cost saved", reply)
+        self.assertIn("I don't know a product called", reply)  # AV2137-05: an unknown product is not "no cost saved"
 
     def test_tool_failure_says_what_happened_and_what_next(self):
         class Down:
