@@ -208,6 +208,31 @@ def plain_shelf_check(text) -> bool:
     return re.sub(r"[.!]$", "", " ".join(text.lower().split())) in PLAIN_SHELF_CHECKS
 
 
+MAX_SOLD_OUT_WITH_CHECK = 5  # AV2007-16: sold-out names one shelf check may carry
+SHELF_CHECK_EXCEPT_RE = re.compile(  # AV2007-16: [lead] <all good words> except <names>
+    r"(?:(?:did the shelf check|shelf check(?: done)?)(?:\s*[:,]\s*|\s+))?(?:everything's there|everything is there|all good|all there)\s+except\s+(.+)")
+_NAME_SPLIT_RE = re.compile(r"\s*,\s*and\s+|\s*,\s*|\s+and\s+|\s*&\s*")
+_NOT_A_NAME_RE = re.compile(r"\b(?:is|are|low|limited|running|back|in stock|not|no|will|tomorrow|yesterday)\b|n't")  # stock.set or a negation
+
+
+def shelf_check_except(text) -> list | None:
+    """AV2007-16: the product names of 'shelf check: everything's there except the watermelon' (also 'all good except X and Y').
+
+    Whole message only (case, spacing and one closing . or ! aside); names split on `,`, ` and `, `, and ` and ` & `, one leading
+    `the` dropped, in the owner's order. None for anything else (a question, a digit or price, a negation or date word, a name
+    that is really a stock.set sentence, text after the list) so it goes the usual way. The count is for the caller to judge.
+    """
+    if not isinstance(text, str):
+        return None
+    flat = re.sub(r"[.!]$", "", " ".join(text.lower().replace("\u2019", "'").split()))
+    if re.search(r"[?$\d]", flat) or not (found := SHELF_CHECK_EXCEPT_RE.fullmatch(flat)):
+        return None
+    names = [re.sub(r"^the\s+", "", name.strip()) for name in _NAME_SPLIT_RE.split(found.group(1))]
+    if not all(names) or any(_NOT_A_NAME_RE.search(name) for name in names):
+        return None
+    return names
+
+
 # -- stock.clear --------------------------------------------------------------------------------------------------
 def _clear_plan(slots, ctx) -> list:
     raw = slots.get("items")
