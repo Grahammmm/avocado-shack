@@ -92,7 +92,7 @@ async function open(browser,route,width,service){const ctx=await browser.newCont
 async function dialogTest(page,opener,name,kindsDone){const out={name,...newWalk()};
  await focusKey(page,opener,'Enter');await page.locator('dialog[open]').waitFor({timeout:3000}).catch(()=>{});out.opened=await page.evaluate(()=>!!document.querySelector('dialog[open]'));
  if(!out.opened)return {...out,note:'did not open'};
- out.landed=await page.evaluate(()=>window.__a.stop()).then(s=>s.d||'body');const sc=await page.evaluate(SCAN);out.targets=targetFails(sc.targets);out.fixed=sc.fixed;out.label=await page.evaluate(()=>{const d=document.querySelector('dialog[open]'),l=d.getAttribute('aria-labelledby');return d.getAttribute('aria-label')||(l&&document.getElementById(l)?.textContent)||null});out.scrollable=await page.evaluate(()=>{const d=document.querySelector('dialog[open]');return d.scrollHeight>d.clientHeight});
+ out.landed=await page.evaluate(()=>window.__a.stop()).then(s=>s.d||'body');const sc=await page.evaluate(SCAN);out.targets=targetFails(sc.targets);out.unlabelled=sc.controls.filter(c=>!c.labels&&!c.aria).map(c=>c.d);out.controlCount=sc.controls.length;out.fixed=sc.fixed;out.label=await page.evaluate(()=>{const d=document.querySelector('dialog[open]'),l=d.getAttribute('aria-labelledby');return d.getAttribute('aria-label')||(l&&document.getElementById(l)?.textContent)||null});out.scrollable=await page.evaluate(()=>{const d=document.querySelector('dialog[open]');return d.scrollHeight>d.clientHeight});
  await tabWalk(page,14,kindsDone,out);out.escapeCloses=await page.keyboard.press('Escape').then(()=>page.evaluate(()=>!document.querySelector('dialog[open]')));await page.waitForTimeout(200);
  out.focusReturnedTo=await page.evaluate(()=>window.__a.desc(document.activeElement));delete out.list;return out}
 async function collect(browser,route,width,service){const {ctx,page,errors}=await open(browser,route,width,service),cdp=await ctx.newCDPSession(page),r={route,width,state:service?'service-fixture':'published'},tests=[];
@@ -103,7 +103,7 @@ async function collect(browser,route,width,service){const {ctx,page,errors}=awai
  const sc=await page.evaluate(SCAN),a=await ax(page,cdp,sc.tagged);
  const missed=sc.tagged.filter(t=>t.interactive&&!t.disabled&&t.tabindex!=='-1'&&!t.hit).map(t=>t.d);// every enabled, tab-reachable control must have been a stop
  Object.assign(r,{images:sc.images,headings:sc.headings,headingIssues:sc.headingIssues,cards:sc.cards,outsideLandmarks:sc.outsideLandmarks,controls:sc.controls,dupIds:sc.dupIds,dangling:sc.dangling,landmarks:a.landmarks,noName:a.noName,hiddenFocusable:a.hiddenFocusable,genericNamed:a.genericNamed,notInTree:a.notInTree,roleNameKinds:a.kinds,interactiveCount:a.interactive,
-  fixed:sc.fixed,toast:sc.toast,targets:targetFails(sc.targets),keyboard:{...walk,list:undefined,notReached:missed},errors});
+  fixed:sc.fixed,toast:sc.toast,targets:targetFails(sc.targets),keyboard:{...walk,list:undefined,notReached:missed,indicatorKindsChecked:kindsDone.size},errors});
  tests.push(await dialogTest(page,'[data-policy]','privacy dialog',kindsDone));
  await page.evaluate(()=>{scrollTo(0,0);document.activeElement.blur()});await focusKey(page,'.skip-link','Enter');await page.keyboard.press('Tab');
  tests.push({name:'skip link (Enter, then Tab)',hash:await page.evaluate(()=>location.hash),next:await page.evaluate(()=>window.__a.desc(document.activeElement)),insideTarget:await page.evaluate(()=>!!document.getElementById(location.hash.slice(1))?.contains(document.activeElement))});
