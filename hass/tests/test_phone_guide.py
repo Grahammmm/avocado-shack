@@ -38,6 +38,22 @@ AV0222_EXPLAINS = {  # one phrase per owner explanation; dropping any one is rep
     "history approved in Pacific": "when a change was approved, in Pacific time", "history time unknown": "`time unknown`",
     "undo that needs a new yes": "needs its own new `yes` code", "never mind is not an undo": "cancels a waiting draft or question without undoing anything",
     "ambiguity asks": "Hass asks instead of guessing"}
+LINE_CAP = 110
+AV1052_PLAIN = ("All the vegetables are in today", "Everything from Cal Poly is sold out", "histroy", "Make the product cards round")  # AV1052-15
+AV1052_VERBS = {"shelf vegetables": "shelf", "listing store": "listing", "post sourdough": "post", "listing sourdough": "listing",
+                "no all": "reject", "help undo": "help", "memory": "memory"}
+AV1052_EXPLAINS = {  # one phrase per safety clause; dropping or weakening any one is reported by name
+    "bulk is one draft": "Hass makes one draft for the changed active products in it", "bulk needs its one code": "approve its one code",
+    "bulk leaves hidden and held": "Hidden and held products stay out", "bulk keeps the shelf-check date": "the shelf-check date does not change",
+    "bulk is not live stock": "does not promise live stock or approve it for you", "reads are saved not live": "read saved data (not a live check of the website)",
+    "post never publishes": "only prepares a caption or photo and never publishes", "name needs one unique match": "needs one unique active match",
+    "no all keeps photos": "cancels every waiting draft and question, keeps stored photos and changes nothing on the website",
+    "approval keeps its own code": "each approval still needs its own code", "yes all refused": "`yes all` is refused",
+    "typo gets a guess only": "gets only a guess and nothing runs", "typo reply is literal": "`Did you mean history? Send history.`",
+    "typo is resent whole": "send `history` again as a whole message", "failed read says why": "(the reader was not working), nothing was drafted",
+    "failed read is resent": "send that change again once it is back", "no automatic retry": "does not retry by itself",
+    "design note is local": "kept on the shop computer as a design note for the developer",
+    "design note is not a preference": "neither sent nor used as a preference", "design note is forgotten by key": "`forget design.<n>`"}
 PRIVATE_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w+|\+\d|http://", re.I)
 
 
@@ -68,6 +84,9 @@ def problems(doc: str) -> list:
     out += [f"required example missing or misclassified: {t}" for t in AV2152_COMMANDS if (False, t) not in found]
     out += [f"required example missing or misclassified: {t}" for plain, t in AV0222_EXAMPLES if (plain, t) not in found]
     out += [f"required explanation missing ({name}): {text}" for name, text in AV0222_EXPLAINS.items() if text not in doc]
+    out += [f"required example missing or misclassified: {t}" for t in AV1052_PLAIN if (True, t) not in found]
+    out += [f"required example missing or misclassified: {t}" for t in AV1052_VERBS if (False, t) not in found]
+    out += [f"required explanation missing ({name}): {text}" for name, text in AV1052_EXPLAINS.items() if text not in doc]
     headings = re.findall(r"^## (.+)$", doc, re.M)
     if headings != SECTIONS:
         out.append(f"sections are {headings}, not {SECTIONS}")
@@ -232,6 +251,34 @@ class PhoneGuideTest(unittest.TestCase):
         for name, text in AV0222_EXPLAINS.items():
             self.assertEqual(self.doc.count(text), 1, text)
             self.assertEqual(problems(self.doc.replace(text, "gone")), [f"required explanation missing ({name}): {text}"], name)
+
+    def test_av1052_examples_are_present_and_routed(self):  # AV1052-15: an owner can copy each new shortcut and it parses as the guide says
+        found = {(p, t) for p, t, _ in sends(self.doc)}
+        self.assertLessEqual({(True, t) for t in AV1052_PLAIN} | {(False, t) for t in AV1052_VERBS}, found)
+        for text in AV1052_PLAIN:
+            self.assertIsNone(verb(text), text)  # bulk, typo and layout sentences are plain words, never a command
+        for text, name in AV1052_VERBS.items():
+            self.assertEqual(verb(text), name, text)
+        self.assertEqual(problems(self.doc), [])
+
+    def test_missing_reclassified_examples_and_111_lines_fail(self):  # AV1052-15: each drift names the example, not just "something broke"
+        for plain, text in [(True, t) for t in AV1052_PLAIN] + [(False, t) for t in AV1052_VERBS]:
+            missing = f"required example missing or misclassified: {text}"
+            line = f"Send{' (plain words)' if plain else ''}: `{text}`"
+            self.assertIn(line, self.doc)
+            self.assertIn(missing, problems(self.doc.replace(f"`{text}`", "`gone`")), text)
+            self.assertIn(missing, problems(self.doc.replace(line, f"Send{'' if plain else ' (plain words)'}: `{text}`")), text)
+        self.assertLessEqual(len(self.doc.splitlines()), LINE_CAP)
+        self.assertGreater(len((self.doc + "One more line.\n" * (LINE_CAP + 1 - len(self.doc.splitlines()))).splitlines()), LINE_CAP)  # the 111th line is over
+        for bad in ("Send: `shelf vegetables` and `listing store`", "Mail owner@example.com"):
+            self.assertNotEqual(problems(self.doc + bad + "\n"), [], bad)
+
+    def test_explanations_never_promise_apply_publish_or_retry(self):  # AV1052-15: the safety clauses cannot be dropped or reworded away
+        for name, text in AV1052_EXPLAINS.items():
+            self.assertEqual(self.doc.count(text), 1, text)
+            self.assertEqual(problems(self.doc.replace(text, "gone")), [f"required explanation missing ({name}): {text}"], name)
+        for promise in (r"(?i)\bautomatically (?:approve|apply|publish|retr)", r"(?i)\bposts? (?:it )?to the website\b"):
+            self.assertNotRegex(self.doc, promise)
 
 
 if __name__ == "__main__":

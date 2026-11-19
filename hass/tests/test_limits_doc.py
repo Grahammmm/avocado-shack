@@ -23,7 +23,7 @@ REQUIRED = {"media.MAX_BYTES", "media.MAX_PHOTOS_PER_MESSAGE", "conversation.HIS
             "content_model.MAX_NOTICE_DAYS", "ops.store.PHONE_DIGITS", "margins.PACK_COST_MAX",
             "margins.UNITS_MIN", "margins.UNITS_MAX", "shop.NEW_BADGE_DAYS", "live_policy.MAX_RECORDS",
             "conversation.AGAIN_WINDOW_DAYS", "conversation.HISTORY_SEARCH_MAX", "conversation.HISTORY_TEXT_MAX",
-            "content_model.MAX_CLUB_INTRO"}  # AV0022-15, AV1322-12, AV1222-12, AV1622-11, AV1937-13, AV2152-14
+            "content_model.MAX_CLUB_INTRO", "chat.site_pack.SHELF_MAX"}  # AV0022-15, AV1322-12, AV1222-12, AV1622-11, AV1937-13, AV2152-14, AV1052-15
 
 
 def claims(doc: str) -> list:
@@ -317,3 +317,34 @@ class LimitsDocTest(unittest.TestCase):
         self.assertFalse(REQUIRED <= {f"{c[3]}.{c[4]}" for c in claims(swapped)})
         self.assertTrue(any("conversation.MEMORY_LIST_MAX" in ln and "saved notes" in ln for ln in self.doc.splitlines()))  # notes stay separate
         self.assertIn("conversation.ALIAS_NAME_MAX", self.doc)
+
+    def test_shelf_list_cap_follows_the_code(self):  # AV1052-15: a changed cap or an edited doc number goes red, naming the line
+        from hass.chat import site_pack
+        by = {f"{c[3]}.{c[4]}": c for c in claims(self.doc)}
+        line, number = by["chat.site_pack.SHELF_MAX"][:2]
+        self.assertEqual(number, site_pack.SHELF_MAX)
+        self.assertIn("then says how many more there are", self.doc.splitlines()[line - 1])
+        self.assertIn("hidden and held products are left out", self.doc.splitlines()[line - 1])
+        with mock.patch.object(site_pack, "SHELF_MAX", 61):
+            self.assertEqual(problems(self.doc), [f"line {line}: doc says 60, chat.site_pack.SHELF_MAX is 61"])
+        self.assertEqual(problems(self.doc.replace("**60** <!-- chat.site_pack", "**59** <!-- chat.site_pack")),
+                         [f"line {line}: doc says 59, chat.site_pack.SHELF_MAX is 60"])
+        for gone in (self.doc.replace("**60** <!-- chat.site_pack.SHELF_MAX -->", "60"), self.doc.replace(self.doc.splitlines()[line - 1], "")):
+            self.assertEqual(problems(gone), [])  # the doc check alone is clean; REQUIRED coverage is what fails
+            self.assertFalse(REQUIRED <= {f"{c[3]}.{c[4]}" for c in claims(gone)})
+
+    def test_bulk_limits_are_operations_not_record_count(self):  # AV1052-15: one shelf or maker is one operation; the 20 stays a per-message operation cap
+        from hass import editor
+        line = next(ln for ln in self.doc.splitlines() if "editor.MAX_OPS" in ln)
+        text = " ".join((line + " " + self.doc.splitlines()[self.doc.splitlines().index(line) + 1]).split())  # the bullet wraps onto a second line
+        for phrase in ("operations", "whole shelf or one maker's availability", "is one operation however many products it touches",
+                       "still one approved draft", "does not change the shelf-check date", "Split other big jobs"):
+            self.assertIn(phrase, text)
+            self.assertNotIn(phrase, text.replace(phrase, ""), phrase)  # each clause appears exactly once, so dropping it is visible
+        old_unit = r"(?i)\b20 (?:things|products)\b|editor\.MAX_OPS -->\s+(?:things|products)"
+        self.assertNotRegex(self.doc, old_unit)
+        self.assertRegex(self.doc.replace("<!-- editor.MAX_OPS --> operations", "<!-- editor.MAX_OPS --> things"), old_unit)  # restoring the old unit is caught
+        with mock.patch.object(editor, "MAX_OPS", 21):
+            self.assertEqual(problems(self.doc), [f"line {claims(self.doc)[[c[4] for c in claims(self.doc)].index('MAX_OPS')][0]}: doc says 20, editor.MAX_OPS is 21"])
+        no_claim = self.doc.replace("**20** <!-- editor.MAX_OPS -->", "20")
+        self.assertFalse(REQUIRED <= {f"{c[3]}.{c[4]}" for c in claims(no_claim)})
