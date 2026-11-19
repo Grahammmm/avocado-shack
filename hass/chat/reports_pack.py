@@ -19,6 +19,7 @@ MAKER_REFUSALS = {"no such maker": "No maker {id}; send " + q("find <words>") + 
                   "not on the site": "Maker {id} is hidden; nothing to draft.",
                   "no active products": "Maker {id} has no active products on the site."}  # other reasons: "Cannot draft a post for {id}: {reason}."
 MAKER_CANT_READ = q("Catalog unavailable right now; nothing changed.")  # the spec's exact line; quoted so the voice list of tech words ("catalog") leaves it alone
+NOTICE_NONE = "There is no notice on the website to post."  # AV1104-07: none, not shown yet, or its last day has passed
 HIKE_USAGE = "Which hike is the post for? Say it like " + q("post hike Point Buchon") + "."  # AV1222-11
 HIKE_REFUSALS = {"no such hike": "I don't know a hike called {id}. Try " + q("find") + " and a word from its name.",
                  "hike is cancelled": "{id} is cancelled, so there is nothing to announce.",
@@ -159,6 +160,7 @@ class ReportsPack:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
         writer worktree content. Read-only: nothing is posted, scheduled, written or drafted; works while paused."""
         photo = None
+        if pid.strip().lower() == "notice": return self._post_notice()  # AV1104-07: the whole argument; before the product-id fallback
         if pid.lower().split(None, 1)[:1] == ["maker"]: return self._post_maker(pid[5:].strip())  # AV1937-10: before the product-id fallback
         if pid.lower().split(None, 1)[:1] == ["hike"]: return self._post_hike(pid[4:].strip())
         try:
@@ -186,6 +188,24 @@ class ReportsPack:
             text, photo = CANT_READ, None
         self._reply(text, [str(photo)] if photo else [], long_ok=True)
         return "post"
+
+    def _post_caption(self, out, failure) -> str:
+        """AV1104-07: one text reply, no attachment: a builder's caption draft as is (never posted, scheduled or stored), else ``failure``."""
+        self._reply("Draft post (not posted; copy it yourself):\n" + q(out["caption"]) if out["draft"] else failure, long_ok=True, ids_ok=True)
+        return "post"
+
+    def _post_notice(self) -> str:
+        """AV1104-07 (F07/H13): social_draft.build_notice's caption for the home notice the saved content shows today.
+        Read-only: nothing is posted, scheduled, stored or drafted; works while paused; no interpreter call or usage count."""
+        try:
+            out = social_draft.build_notice(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), self._now())
+            if not out["draft"] and out["reason"] == "cannot read content": raise OSError
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            self._problem("error", "shop-list-unreadable")
+            return self._post_caption({"draft": False}, MAKER_CANT_READ)
+        if out["draft"] or out["reason"] == "no notice on the website": return self._post_caption(out, NOTICE_NONE)
+        self._problem("could-not-do", "post-refused")
+        return self._post_caption(out, q(f"Cannot draft a notice post: {out['reason']}."))
 
     def _post_maker(self, key) -> str:
         """AV1937-10 (F07): social_draft.build_maker's caption for one maker key, exactly as the builder wrote it, in chat.
