@@ -40,7 +40,7 @@ from hass.chat.wording import (  # noqa: E402,F401
     _when, _shown, UNREADABLE_TIME, EVENT_ORDER, _shown_in, _added, _change_line, _removed, _removal, _record_lines,
     proposal_text)
 from hass.chat.core_pack import (  # noqa: E402,F401
-    MEMORY_LIST_MAX, HISTORY_MAX, ALIAS_LIST_MAX, HISTORY_STATES, HISTORY_SEARCH_MAX, HISTORY_TEXT_MAX,
+    MEMORY_LIST_MAX, HISTORY_MAX, ALIAS_LIST_MAX, COSTS_LIST_MAX, HISTORY_STATES, HISTORY_SEARCH_MAX, HISTORY_TEXT_MAX,
     HISTORY_USAGE, AGAIN_WINDOW_DAYS, AGAIN_USAGE, AGAIN_DRIFT, CorePack)
 from hass.chat.site_pack import (  # noqa: E402,F401
     PHOTOS_TO_TAKE_MAX, HIDDEN_MAX, LISTING_DESC_MAX, LISTING_USAGE, LISTING_NONE, LISTING_MANY, FIND_MAX,
@@ -1295,7 +1295,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         late = cutoff != now and self._forwarded_late(msg)  # HASS-SEC-2 (L5): forwarded long after it was sent
         if late: cutoff = now  # ... judged when it arrived, never at its send time
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog", "shelf", "look")
+        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog", "shelf", "look", "costs")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         if bulk is not None and command is None:  # AV1052-08: before the interpreter, till and memory; works paused and at the daily cap
             if bulk == "reject": self._expire(expired)
@@ -2616,6 +2616,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if verb == "photos": return self._photos_to_take()
         if verb == "shelf": return self._shelf(code, now)  # AV1052-05
         if verb == "backlog": return self._backlog_list()  # SKILLS-FW-3
+        if verb == "costs": return self._costs()  # AV2137-06
         if verb == "history" and code is not None: return self._history_search(code)
         if verb == "again": return self._again(msg, now, code)  # AV2152-03
         if verb == "history":
