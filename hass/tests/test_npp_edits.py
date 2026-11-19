@@ -41,6 +41,9 @@ class LegacyPriceEditTests(unittest.TestCase):
                 self.assertEqual((slots["intake"]["price"], public, question), (want, "", None))
         slots, _, _ = intake_simple.edit(listing_slots(), "change the price to $3.50 per lb")
         self.assertEqual(slots["intake"]["sold_by"], "pound")
+        # F5 "from Etto" (after Hass's own price question) is the source line, not a supplier question.
+        slots, _, question = intake_simple.edit(listing_slots(), "from Etto", "price")
+        self.assertEqual((slots.get("supplier"), question), ("Etto", None))
 
     def test_amount_already_read_upstream_leaves_no_listing_words(self):
         # Contract F4: dispatch.intake_text moves "$4" into the private slots and passes on "make it"; that remainder is

@@ -30,8 +30,8 @@ _AMOUNT = (r"(?P<amount>\$\s*\d{1,6}(?:\.\d{1,2})?(?:\s*(?:dollars?|bucks?))?|\d
 PRICE_EDIT = re.compile(rf"{_LEAD_IN}(?:{_PRICE_VERB}\s*)?{_AMOUNT}"
                         r"(?:\s*(?P<unit>each|apiece|(?:a|per)\s+(?:lb|pound)|/\s*lb|/\s*each))?[.!]*", re.I)
 # What dispatch.intake_text leaves of such an edit after it has already put the amount into the private slots.
-PRICE_LEFTOVER = re.compile(rf"(?:{_LEAD_IN}{_PRICE_VERB}|(?:ok(?:ay)?|actually|wait|no|so)\b(?:[,.!]?\s*(?:ok(?:ay)?|actually|wait|no|so)\b)*)[,.!]*",
-                            re.I)
+_ALONE = r"(?:ok(?:ay)?|actually|wait|no|so)\b"
+PRICE_LEFTOVER = re.compile(rf"(?:{_LEAD_IN}{_PRICE_VERB}|{_ALONE}(?:[,.!]?\s*{_ALONE})*)[,.!]*", re.I)
 TWIN = ("{name} is already on the website. To list this one too, give it another name (say \"call it …\"); "
         "to change that one, tell me what to change about {name}.")
 
@@ -174,7 +174,7 @@ def edit(slots, text, asked=None):
         got["description_default"] = False
         return out, copy, None
     # Explicit listing edits take precedence over a bare clarification answer.
-    match = SUPPLIER.fullmatch(source)
+    match = SUPPLIER.fullmatch(source) or re.fullmatch(r"from\s+(\D+)", source, re.I)  # F5: "from Etto" is the source line
     if match or asked == "supplier":
         name = (match[1] if match else source).strip()
         if (name.startswith('"') and name.endswith('"')) or (name.startswith('“') and name.endswith('”')):
@@ -207,7 +207,7 @@ def plan(slots, content):
     if args["category"] not in CATEGORIES:
         raise ValueError("That shelf isn't on the website. The listing is unchanged.")
     intake = slots.get("intake") or {}
-    if slots.get("photo") and intake.get("price") is not None:
+    if intake.get("price") is not None and isinstance(getattr(content, "products", None), list):
         from hass.ops.catalog import _twin  # lazy: the editor's own same-name-and-brand rule, said before it refuses
         if _twin(content, args["name"], args["brand"]) is not None:
             # F5: the listing (with the price he just gave) and the real reason, not "That's already how it is".

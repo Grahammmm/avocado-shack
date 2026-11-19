@@ -24,7 +24,6 @@ UNSURE = re.compile(r"\b(?:or|maybe|probably|think|guess|not|either)\b", re.I)
 DIGIT = re.compile(r"\d")
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
 QUOTES = (('"', '"'), ("“", "”"), ("'", "'"))
-PUBLIC_FIELDS = ("supplier", "maker", "makerTown", "name", "category")
 
 
 @dataclass(frozen=True)
@@ -203,7 +202,8 @@ def apply(listing, edits):
     """A NEW listing: ``listing`` plus each Edit's patch in order (the last value of a field wins). Fields that are not
     patched are copied unchanged, so the picture variant and bytes of the parent version stay the same."""
     out = json.loads(json.dumps(listing))
-    rewrite = list(out.get("rewrite", []))
+    rewrite = []  # a wording request reruns S5 for this version only; later versions copy its result, not the request
+    out.pop("rewrite", None)
     changed = {}
     for edit in edits:
         for field, value in edit.patch:
