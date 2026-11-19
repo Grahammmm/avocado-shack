@@ -69,8 +69,9 @@ class SitePack:
 
     @staticmethod
     def _many_lines(hits) -> str:
-        """AV1052-07: find-style lines (id, name, status) for several active matches; the tail when the lookup was full."""
-        lines = [f"product {p['id']}: " + q(p["name"]) + " (active)" for p in sorted(hits, key=lambda p: p["id"])[:FIND_MAX]]
+        """AV1052-07: find-style lines (id, name, status) for several matches; the tail when the lookup was full.
+        AV2137-05: cost and margin list products of any status, so each line carries its own (post and listing pass active ones)."""
+        lines = [f"product {p['id']}: " + q(p["name"]) + f" ({p.get('status', 'active')})" for p in sorted(hits, key=lambda p: p["id"])[:FIND_MAX]]
         return "\n".join(lines + ([NAME_MORE] if len(hits) >= catalog.MAX_CANDIDATES else []))
 
     @staticmethod

@@ -135,7 +135,7 @@ class MarginHandlerTests(test_status_pause.StoreMixin, test_conversation.Convers
         with localcontext(Context(prec=3, traps=[Inexact, Rounded])):
             [reply] = self.margin("margin photo-product-001 at 35% shrink 5%", pid="saved-1")
         prefix, _, body = reply.partition("\n")
-        self.assertTrue(prefix.startswith("Using the cost you gave me "), prefix)
+        self.assertTrue(prefix.startswith("For Hass avocado (photo-product-001), using the cost you gave me "), prefix)
         self.assertEqual(body, SAVED_REPLY)
         self.assertEqual([tuple(r) for r in self.conv.db.execute("SELECT * FROM memory")], rows)
         self.assertEqual(self.say("margin photo-product-001 at 35% shrink 5%", pid="saved-1"), "duplicate")
