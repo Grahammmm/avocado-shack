@@ -1,7 +1,7 @@
 # HASS-SKILLS-DESIGN-1: skill model, catalog and build plan for Hass and the website
 
 Card t_6b06e976 · repo Grahammmm/avocado-shack · written against `origin/main` 57c5c70 (merge of #513) · 2026-11-08.
-**Design only.** No code, no service, no live state, no host.json, no Mac and no real owner message was touched or read. Everything below was read from the repository at that commit, plus the open PR #504 (HASS-NEWITEM-1, head 61414d7b, CI green, not merged) and the in-flight card t_9a32fec3 (HASS-HIKE-FLOW-1). Where a statement is a design choice rather than something found in the code, it says "design" or "decision". Nothing here is measured behaviour of a skill, because no skill exists yet.
+**Design only.** No code, no service, no live state, no host.json, no Mac and no real owner message was touched or read. Everything below was read from the repository at that commit, plus the open PR #504 (HASS-NEWITEM-1, head eccff797, CI green, not merged) and the in-flight card t_9a32fec3 (HASS-HIKE-FLOW-1). Where a statement is a design choice rather than something found in the code, it says "design" or "decision". Nothing here is measured behaviour of a skill, because no skill exists yet.
 
 ## 0. The answer in one page
 
@@ -81,7 +81,7 @@ Anything else is a change request (`_request`). Two whole-message classes skip t
 
 ### 1.5 What PR #504 (HASS-NEWITEM-1) already does for a new item and its picture
 
-PR #504 is **OPEN, CI green, not merged, no review recorded** (head 61414d7b). Files: `hass/house_style.py`, `hass/style/house-style.json`, `hass/newitem.py`, `hass/newitem_render.py`, `hass/newitem_synthetic.py`, `hass/newitem_preview.py`, `hass/newitem_screenshot.cjs`, `hass/newitem_demo.py`, `hass/tests/test_newitem.py`, `reports/hass/NEWITEM-1.md`. Per its report (read here, not re-run):
+PR #504 is **OPEN, CI green, not merged, no review recorded** (head eccff797). Files: `hass/house_style.py`, `hass/style/house-style.json`, `hass/newitem.py`, `hass/newitem_render.py`, `hass/newitem_synthetic.py`, `hass/newitem_preview.py`, `hass/newitem_screenshot.cjs`, `hass/newitem_demo.py`, `hass/tests/test_newitem.py`, `reports/hass/NEWITEM-1.md`. Per its report (read here, not re-run):
 
 * **Measured house style** (`house_style.py measure / verify`; numbers in `house-style.json`): pictures 800x800 1:1 RGB, quality about 84, median 62 KB, background warm ivory median rgb(254, 248, 236), subject largest side about 90% of the frame, centred, 8% bottom margin, soft contact shadow, no props / hands / text / prices. Descriptions: 2 sentences (143) or 3 (27), 59 to 167 characters (median 133), sentence 1 says what it is ("<Thing> from <Maker> in <Town>."), the rest are imperative serving suggestions, ends with a full stop, curly apostrophes, never a digit, `!`, `?`, price, size or hype word. Makers: key = name (26 of 26), place "Town, State", 3-sentence story of 239 to 297 characters. Records: id `photo-product-NNN` (next = highest + 1), unknown producer = brand `Producer not identified` / displayBrand `From the market` / `producerKey` null (62 items).
 * **Checks**: `check_image`, `check_description`, `check_maker`, `check_product` return `{score, pass, hard_failures, checks[]}`; all 170 live descriptions, 26 makers, 170 records and 170 pictures pass their own checks; a raw phone photo fails; a picture that still shows its photo background fails.
