@@ -377,3 +377,29 @@ class JobTests(unittest.TestCase):
         target, images = self.root.parent / "restore", self.root.parent / "restore-media"
         self.assertEqual(statebackup.restore(saved, target, restored_wt, media_into=images)["result"], "ok")
         self.assertFalse(json.loads((target / "config.json").read_text())["settings"]["npp"])
+
+    def test_restore_with_unrelated_original_but_missing_job_photo_turns_npp_off(self):
+        # Contract: npp stays on only if every open job's own photo is in the backup; another photo does not stand in
+        # (bug: any original at all kept npp on with the job's source photo absent).
+        self.say("sell $2", photos=1)
+        self.work()
+        sha = self.job()["photo_sha"]
+        orig = self.root / "originals" / sha[:2] / f"{sha}.jpg"
+        data = orig.read_bytes() + b"unrelated"
+        other = hashlib.sha256(data).hexdigest()
+        stray = self.root / "originals" / other[:2] / f"{other}.jpg"
+        stray.parent.mkdir(exist_ok=True)
+        stray.write_bytes(data)
+        stray.with_suffix(".json").write_text(json.dumps({**json.loads(orig.with_suffix(".json").read_text()), "sha256": other}))
+        orig.unlink()
+        orig.with_suffix(".json").unlink()
+        out = self.root.parent / "backups"
+        out.mkdir(mode=0o700)
+        saved = Path(statebackup.create(self.repo.state, out, now=self.now)["backup"])
+        restored_wt = self.root.parent / "restored-wt"
+        git(self.repo.main, "worktree", "add", "-qb", "hass/npp-drill", str(restored_wt))
+        target, images = self.root.parent / "restore", self.root.parent / "restore-media"
+        self.assertEqual(statebackup.restore(saved, target, restored_wt, media_into=images)["result"], "ok")
+        self.assertTrue((images / stray.relative_to(self.root)).is_file())
+        self.assertFalse((images / orig.relative_to(self.root)).exists())
+        self.assertFalse(json.loads((target / "config.json").read_text())["settings"]["npp"])

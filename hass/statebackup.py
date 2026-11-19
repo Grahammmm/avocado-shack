@@ -293,6 +293,16 @@ def _intact(path: Path) -> bool:
     except sqlite3.DatabaseError:
         return False
 
+def _jobs_resumable(db_path: Path, mrels) -> bool:
+    """True only if every open NPP job's source photo (its photo_sha) is in the backup's media; any doubt is False."""
+    try:
+        with _connect_ro(db_path) as db:
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE name = 'npp_jobs'").fetchone(): return True
+            shas = [row[0] for row in db.execute("SELECT photo_sha FROM npp_jobs WHERE closed_at IS NULL")]
+    except sqlite3.DatabaseError: return False  # completeness cannot be established
+    have = {m[1] for r in mrels if (m := re.fullmatch(rf"{ORIG}[0-9a-f]{{2}}/([0-9a-f]{{64}})\.(?!json$)\w+", r))}
+    return all(isinstance(sha, str) and sha in have for sha in shas)
+
 def _config_worktree(path: Path):  # the worktree a hashed config.json names, else None; never raises
     try: cfg = json.loads(_read_small(path, editor.MAX_CONFIG).decode("utf-8"))  # restore merges it as a dict, rewrites worktree
     except (OSError, ValueError, RecursionError): return None
@@ -441,7 +451,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
             cfg = {**json.loads(_read(bdir / CONFIG).decode("utf-8")), "worktree": str(wt)}
             if isinstance(cfg.get("settings"), dict) and cfg["settings"].get("npp"):
                 # A drill with no media, or media without the photo originals a job resumes from, must not run NPP.
-                keep = mtarget and any(r.startswith(ORIG) for r in mrels)
+                keep = mtarget and _jobs_resumable(bdir / DB, mrels)
                 cfg["settings"] = {**cfg["settings"], **({"mediaRoot": str(mtarget)} if keep else {"npp": False})}
             _write_new(tmp / CONFIG, json.dumps(cfg, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"))
         if ctmp:
