@@ -84,7 +84,7 @@ class Capture:
         # Only a code explicitly typed in this message is bound here; never guess from another draft.
         from hass.conversation import parse_keyword
         match = parse_keyword(m.text)
-        if match and match[1]:
+        if match and match[1] and match[1] != 'all':  # AV1052-08: `no all` names no draft
             out['draft_code'] = match[1]
         return out
 

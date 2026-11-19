@@ -112,10 +112,15 @@ MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S.*)|(memory|notes)
                        r"|(cost)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)  # AV1222-10: groups 8/9
 
 
+BULK_PHRASES = {"no all": "reject", "cancel all": "reject", "cancel everything": "reject", "yes all": "approve", "approve all": "approve"}
+
+
 def parse_keyword(text: str):
-    """(verb, code or None) when the whole message is an approval keyword; otherwise None."""
+    """(verb, code or None) when the whole message is an approval keyword; otherwise None. AV1052-08: the five whole-message
+    bulk phrases (`no all`, `cancel all`, `cancel everything`, `yes all`, `approve all`) give code \"all\" (never a real code)."""
     norm = re.sub(r"[.!]+$", "", text.strip().lower())
     if norm in CANCEL_PHRASES: return "reject", None  # AV0222-07: the same as a bare no
+    if norm in BULK_PHRASES: return BULK_PHRASES[norm], "all"
     match = KEYWORD_RE.fullmatch(norm)
     if not match: return None
     return ("approve" if match[1] in APPROVE else "reject"), match[2]

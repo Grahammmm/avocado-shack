@@ -34,7 +34,7 @@ def problems(table, verbs, words) -> list:
         got = verb(spans[0]) if len(spans) == 1 else None
         if got is None:
             out.append(f"example does not parse: {line}")
-        elif not re.search(rf"\b{got}\b", send.lower()):
+        elif not re.search(rf"\b{got}\b", send.lower()) and spans[0].lower() not in send.lower():  # AV1052-08: `no all` names its row by its own words
             out.append(f"example parses as {got}, not this row's command: {line}")
         documented.add(got)
     sends = " ".join(send.lower() for send, _, _ in table)
@@ -74,6 +74,20 @@ class CommandsDocTest(unittest.TestCase):
                               ("listing sourdough", ("listing", "sourdough")), ("listing store", ("listing", "store")),
                               ("post hike Point Buchon", ("post", "hike Point Buchon")), ("post maker Linn's.", ("post", "maker Linn's."))):
             self.assertEqual(conv.read_command(message, listing_names=True), want, message)
+
+    def test_bulk_cancel_and_refusal_rows(self):
+        """AV1052-08: `no all` and `yes all` have their own rows; their examples parse as bulk and the rows state the rules."""
+        # Bug caught: a bulk phrase documented without its replies, private-photo retention or the paused rule.
+        rows = {send: (example, " ".join(line.split())) for send, example, line in self.table}
+        cancel = next(r for s, r in rows.items() if s.startswith("`no all`"))
+        refuse = next(r for s, r in rows.items() if s.startswith("`yes all`"))
+        self.assertEqual((conv.parse_keyword(re.findall(r"`([^`]+)`", cancel[0])[0]), conv.parse_keyword(re.findall(r"`([^`]+)`", refuse[0])[0])),
+                         (("reject", "all"), ("approve", "all")))
+        for phrase in ("`cancel all`", "`cancel everything`", "every code it cancelled", "its photo stays stored privately", "`Nothing is waiting.`",
+                       "never calls the interpreter", "works while paused"):
+            self.assertIn(phrase, cancel[1])
+        for phrase in ("`approve all`", "Approves nothing", "Waiting codes:", "Questions still need details before approval.", "works while paused"):
+            self.assertIn(phrase, refuse[1])
 
     def test_dropped_row_fails(self):
         table = [r for r in self.table if r[0] != "`memory`"]

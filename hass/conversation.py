@@ -1216,12 +1216,19 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
-        cutoff = _answered_at(msg, now) if msg.attachments <= 0 and (parse_keyword(msg.text) or coded) is not None else now
+        bulk = None if msg.attachments > 0 else parse_keyword(msg.text)  # AV1052-08: no/cancel all, yes/approve all (never an attachment's caption)
+        bulk = bulk[0] if bulk is not None and bulk[1] == "all" else None
+        cutoff = _answered_at(msg, now) if msg.attachments <= 0 and bulk is None and (parse_keyword(msg.text) or coded) is not None else now
         late = cutoff != now and self._forwarded_late(msg)  # HASS-SEC-2 (L5): forwarded long after it was sent
         if late: cutoff = now  # ... judged when it arrived, never at its send time
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
         if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog", "shelf", "look")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
+        if bulk is not None and command is None:  # AV1052-08: before the interpreter, till and memory; works paused and at the daily cap
+            if bulk == "reject": self._expire(expired)
+            disposition = self._bulk(now, bulk)
+            self._record(msg, disposition)
+            return disposition, None
         req = self.requests.get(msg.chat, now) if self.dispatch else None
         intake_answer = bool(self.dispatch and getattr(self.dispatch, "simple_intake", lambda req: False)(req) and (
             self.dispatch.takes_answer(msg.text, now) if req else item_intake.caption_answers(msg.text)[1]))
@@ -1230,9 +1237,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if first: command = memory = None
         till = first or (None if command or memory or msg.attachments > 0 or self.till is None or intake_answer else self.till.parse(msg.text))  # HASS-CLOVER-2
         if memory and memory[0] == "memory" or till: expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
-        for row in expired:
-            self._move(row, "expired", expires_at=_iso(self._expiry(row)))
-            if row["state"] == "proposed": self._audit("refused", row, "expired")  # AVB-10
+        self._expire(expired)
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
             self._record(msg, disposition)
@@ -1378,6 +1383,32 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self.requests.close_drafted(self._chat(), now)  # SKILLS-FW-3: the request that made this draft is finished
         self._record(msg, "approved")
         return "approved", self._row(target["row_id"])
+
+    def _expire(self, rows) -> None:
+        for row in rows:
+            self._move(row, "expired", expires_at=_iso(self._expiry(row)))
+            if row["state"] == "proposed": self._audit("refused", row, "expired")  # AVB-10
+
+    def _bulk(self, now, verb) -> str:
+        """AV1052-08 (H05/H17): `no all`, `cancel all` and `cancel everything` close every waiting proposal and question of this
+        owner (the unexpired ones, as of now) through the one-draft cancel move; `yes all` and `approve all` approve nothing and
+        name the waiting codes. A photo draft's stored photo is never touched. No interpreter, daily count, editor or pause check."""
+        live = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._mine(r) and self._expiry(r) > now]
+        if not live:
+            self._reply("Nothing is waiting.")
+            return "no-target"
+        codes = ", ".join(q(r["code"]) for r in live)  # quoted: a repeat's longer code is not a voice-rule break
+        if verb == "approve":  # nothing moves: no approval row, no expiry sweep, even with one draft waiting
+            self._reply(f"Nothing was changed. Each draft needs its own yes <code>. Waiting codes: {codes}."  # not "applied": a word the voice rules ban
+                        + (" Questions still need details before approval." if any(r["state"] == "needs-details" for r in live) else ""),
+                        long_ok=True, ids_ok=True)  # ids_ok: the literal `yes <code>` placeholder
+            return "no-target"
+        for row in live:  # one transaction: a failed move rolls every row, the reply and the record back together
+            self._move(row, "rejected", reason="owner")
+            if row["state"] == "proposed": self._audit("refused", row, "said-no")  # AVB-10
+        self._close_asks()  # as a single no: the open request goes too
+        self._reply(f"Cancelled {codes}; nothing changed.", long_ok=True)
+        return "rejected"
 
     def _waiting_note(self, now, exclude=None) -> str:
         """AV2007-02: what still waits on this chat (proposed or needing an answer, unexpired), with each one's own `no <code>`;
