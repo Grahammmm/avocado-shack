@@ -253,8 +253,12 @@ class Handler(BaseHTTPRequestHandler):
             try: srv.photos.put(msg, secs)
             except ValueError: return self._send(400, {"result": "rejected"})
             out = {"op": "photo-ok", "guid": msg["guid"], "idx": msg["idx"]}
-        elif msg["op"] == "pull": out = {"op": "replies", "items": srv.store.pull(msg["max"], secs)}
-        elif msg["op"] == "ack": srv.store.ack(msg["ids"], secs); out = {"op": "acked", "ids": msg["ids"]}
+        elif msg["op"] == "pull":
+            out = {"op": "replies", "items": srv.store.pull(msg["max"], secs, card_receipts=msg.get("card_receipts", False))}
+        elif msg["op"] == "ack":
+            if "receipt" in msg: srv.store.acknowledge_receipt(msg["ids"][0], msg["receipt"], now)
+            else: srv.store.ack(msg["ids"], secs)
+            out = {"op": "acked", "ids": msg["ids"]}
         elif msg["op"] == "state" and "paused" not in msg: out = {"op": "state", "paused": srv.paused()}  # HASS-FAST-1, read-only
         elif msg["op"] == "picture":
             while srv.pic_times and secs - srv.pic_times[0] >= 60: srv.pic_times.popleft()
@@ -310,6 +314,7 @@ class Worker:
         self.stage, self.current = stage, ""  # HASS-FAST-1: `current` is the message being handled (stage log only)
         conv.stage = stage
         self.sender = relay.RelaySender(store, owner_chat_order(conv.settings), lambda: int(clock().timestamp()), shots_dir, conv.settings.get("gChat"))
+        self.receipt_for = self.sender.receipt_for
         self.rev = editor_mod.content_revision(self.worktree)
         conv.interpreter = _Timed(conv.interpreter, self)
         conv.early_flush = lambda: conv.flush(self.sender)  # HASS-INTAKE-2: a photo's first question goes out on receipt, before the photo is fetched
