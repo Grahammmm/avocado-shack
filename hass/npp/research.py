@@ -20,12 +20,15 @@ ASSETS = "hass-maker-research/"
 STORY = frozenset({"makes", "founded", "nature"})
 BASE = re.compile(r"\b(?:based|located|headquartered) in ([^.!?;]+)", re.I)
 THIRD_PARTY = re.compile(r"\b(?:vendors?|directory|marketplace|stockists?|resellers?|retailers?|reviews?)\b", re.I)
-# Words that make the owner of a page a seller or a directory rather than the maker. The owner entity may
-# be the maker's name plus descriptors ("Miners Orchards"), never plus one of these ("Miners Shop").
-SELLER = re.compile(
-    r"\b(?:shops?|stores?|markets?|marts?|outlets?|emporiums?|depots?|boutiques?|malls?|retail\w*|resell\w*|dealers?|"
-    r"distribut\w+|wholesal\w+|trading|suppl(?:y|ies|iers?)|sellers?|merchants?|traders?|importers?|brokers?|agency|"
-    r"agents?|affiliates?|fans?|unofficial|vendors?|directory|marketplace|stockists?)\b")
+# The only words an owner entity may add to the maker's name ("Miners Orchards", "Miners Dried Fruit Co."): a
+# company form or a producer word. Any other word ("Shop", "Delicatessen", "Grocery") is not affirmative maker
+# ownership, so the page fails closed rather than relying on a blacklist of retailer words.
+OWNER_WORDS = frozenset(
+    "the and of a an co company inc incorporated llc ltd limited corp corporation lp plc family brothers sons "
+    "orchard orchards farm farms farmstead ranch ranches grove groves vineyard vineyards winery brewery distillery "
+    "apiary apiaries creamery dairy bakery kitchen kitchens mill mills nursery nurseries growers producers makers "
+    "dried fruit fruits nut nuts foods food preserves jam jams honey olive oil oils cheese confections confectionery "
+    "chocolate chocolates".split())
 # Page text that says the page is not the maker's own. Checked on folded text; {name} is the folded maker name.
 CONTRARY = (
     r"\b(?:un)?affiliated\b",
@@ -34,12 +37,19 @@ CONTRARY = (
     r"\bunofficial\b|\bfan[- ]?(?:site|page|made|run)\b",
     r"\b(?:independent(?:ly)?|third[- ]party|authori[sz]ed|licensed) (?:\w+ ){0,2}"
     r"(?:shops?|stores?|retail\w*|resell\w*|dealers?|sellers?|stockists?|distribut\w+|merchants?|marketplace|"
-    r"directory|reviews?|blog|website|site)\b",
+    r"directory|reviews?|blog|website|site|grocer\w*|delicatessens?|delis?|supermarkets?|markets?|food ?halls?|"
+    r"emporiums?|boutiques?|outlets?|wholesal\w+|importers?)\b",
     r"\b(?:shop|store|retailer|reseller|dealer|stockist|distributor|merchant|marketplace|directory) "
     r"(?:for|of|selling|that sells|which sells|specializ\w+)\b",
     r"\b(?:sells?|selling|sold|stocks?|stocking|carr(?:y|ies|ying)|resell\w*|retail\w*|offers?|offering|"
     r"distribut\w+|supplies|supplying) [^.!?]{0,60}(?<![\w-]){name}(?![\w-])",
     r"(?<![\w-]){name}(?![\w-])(?: \w+){0,3} (?:products?|goods|brands?) (?:are |is )?(?:available|sold|stocked)\b",
+    # The page lists the maker as one of several brands/suppliers it handles: a seller, not the maker.
+    r"(?<![\w-]){name}(?![\w-]) (?:is|are) (?:just |only )?(?:one|some|part) of (?:our|the) (?:\w+ ){0,2}"
+    r"(?:brands?|products?|suppliers?|producers?|makers?|lines|labels?|names)\b",
+    r"\b(?:one|some|part) of (?:our|the) (?:\w+ ){0,2}(?:brands?|suppliers?|producers?|makers?|labels?)\b",
+    r"\b(?:the|our|other|these) (?:\w+ )?(?:brands?|suppliers?|producers?|makers?) (?:we|that we|which we) "
+    r"(?:stock|carry|sell|offer|supply|work with|love)\b",
 )
 ABOUT = re.compile(r"(?:^|/)(?:about(?:-us)?|(?:our|the)-story|who-we-are)/?$", re.I)
 VOID = frozenset("area base br col embed hr img input link meta param source track wbr".split())
@@ -173,8 +183,11 @@ def _identity_field(value):
 
 
 def _owner(entity, name):
-    """True when the claimed owner entity is the maker: its name plus, at most, non-seller descriptors."""
-    return _has(entity, name) and not SELLER.search(re.sub(re.escape(claims.fold(name)), " ", claims.fold(entity)))
+    """True when the claimed owner entity is the maker: its name plus, at most, company-form/producer words."""
+    if not _has(entity, name):
+        return False
+    rest = re.sub(r"(?<![\w-])" + re.escape(claims.fold(name)) + r"(?![\w-])", " ", claims.fold(entity))
+    return all(word in OWNER_WORDS for word in re.findall(r"[\w'-]+", rest.replace("&", " and ")))
 
 
 def _contrary(page, name):

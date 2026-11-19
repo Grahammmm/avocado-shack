@@ -231,6 +231,13 @@ class ResearchTests(unittest.TestCase):
             (b"Miners", b"Miners", b"This site is not affiliated with the makers of Miners."),
             (b"Miners", b"Miners", b"Miners products are available from our store."),
             (b"Miners Shop", b"Miners Shop", b"Welcome."),
+            # Not blacklisted by any seller word: only the affirmative owner test and the body can reject these.
+            (b"Miners Delicatessen", b"Miners Delicatessen",
+             b"We are an independent grocery. Miners is one of our brands."),
+            (b"Miners Delicatessen", b"Miners Delicatessen", b"Welcome."),
+            (b"Miners Farm Market", b"Miners Farm Market", b"Welcome."),
+            (b"Miners", b"Miners", b"We are an independent grocery. Miners is one of our brands."),
+            (b"Miners", b"Miners", b"We are an independent delicatessen."),
         ):
             with self.subTest(line=line):
                 world = World()
@@ -242,3 +249,18 @@ class ResearchTests(unittest.TestCase):
                 self.assertEqual(result.receipt["outcome"], "no-confirmed-site")
                 self.assertEqual(result.receipt["identity"][0]["reason"], "not-the-makers-own-site")
                 self.assertEqual(world.requests, [])
+
+    def test_genuine_maker_owner_names_are_still_the_official_site(self):
+        # Control for the affirmative-ownership test: the maker's own name, with a company form or producer word,
+        # in matching title and copyright, and no third-party wording, is still accepted and its fact returned.
+        page = (b"<title>%s</title><h1>%s</h1><p>We are %s.</p><p>Miners makes jam.</p>"
+                b"<footer>&copy; %s. All rights reserved.</footer>")
+        for owner in (b"Miners", b"Miners Orchards", b"Miners Dried Fruit", b"Miners Family Farm"):
+            with self.subTest(owner=owner):
+                world = World()
+                world.searches = {"Miners official site": [{"url": HOME, "title": "x"}]}
+                world.pages[HOME] = 200, "text/html", page % (owner, owner, owner, owner)
+                world.stubs["extract"] = [dict(slot="makes", value="jam", url=HOME, quote="Miners makes jam.")]
+                result = world.run(owner_maker="Miners")
+                self.assertEqual(result.receipt["identity"][0]["reason"], "official")
+                self.assertEqual([(f["slot"], f["value"]) for f in result.facts], [("makes", "jam")])
