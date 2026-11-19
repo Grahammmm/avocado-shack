@@ -17,8 +17,8 @@ DRAFT = "link-draft.json"
 
 
 def suggest(snapshot, content, links):
-    """(pairs {product id: link}, clashes, site_only, till_only): the last three are lists of names (a clash lists each site product with its id),
-    never linked. A till name that two till items share is a clash too."""
+    """(pairs {product id: link}, clashes, site_only, till_only): the last three list EVERY item left over, never linked. A name shared by
+    several items carries its site product id / till SKU (or item id); a till name two till items share is a clash too."""
     taken = {v.get("cloverId") for v in links.values() if isinstance(v, dict)}
     site, till = {}, {}
     for p in content["products"]:
@@ -28,14 +28,17 @@ def suggest(snapshot, content, links):
         if i.id not in taken:
             till.setdefault(norm_name(i.name), []).append(i)
     pairs, clashes = {}, []
+    label = lambda name, ident, many: f"{name} ({ident})" if many else name   # noqa: E731 - a shared name carries its id/SKU
     for name, ps in sorted(site.items()):
         items = till.get(name, [])
         if len(ps) == 1 and len(items) == 1:
             pairs[ps[0]["id"]] = {"cloverId": items[0].id, **({"sku": items[0].sku} if items[0].sku else {})}
         elif items:
             clashes += [f"{p['name']} ({p['id']})" for p in ps]
-    return (pairs, clashes, [ps[0]["name"] for n, ps in sorted(site.items()) if n not in till],
-            [its[0].name for n, its in sorted(till.items()) if n not in site])
+            clashes += [label(i.name, i.sku or i.id, True) for i in items if len(items) > 1]
+    return (pairs, clashes,
+            [label(p["name"], p["id"], len(ps) > 1) for n, ps in sorted(site.items()) if n not in till for p in ps],
+            [label(i.name, i.sku or i.id, len(its) > 1) for n, its in sorted(till.items()) if n not in site for i in its])
 
 
 def write(path, value):

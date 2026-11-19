@@ -4,6 +4,7 @@ Run: python3 -m unittest discover -s hass/tests -p 'test_clover_links.py' -v
 """
 import json
 import stat
+import types
 from datetime import timedelta
 from unittest import mock
 
@@ -61,6 +62,17 @@ class LinkTests(Fixture, CliCase):
         self.assertEqual((clashes, site_only), (["Eggs, dozen (eggs-1)", "eggs, dozen (eggs-2)"], ["Heirloom tomato", "Lemons"]))
         self.assertEqual(till_only, ["Heirloom tomatoes", "Market special (ring up price)", "Old honey jar"])
         self.assertEqual(links.suggest(snapshot, PRODUCTS, {"avocado": {"cloverId": "FAKEITEM00002"}})[0].keys(), {"oil"})   # linked ones are left alone
+
+    def test_every_one_sided_item_is_listed_and_same_name_twins_carry_their_ids(self):
+        # Contract: nothing left over is silently dropped. Bug: only the first of two same-name unmatched items was listed (ps[0] / its[0]).
+        till = lambda i, name, sku="": types.SimpleNamespace(id=i, name=name, sku=sku)   # noqa: E731
+        snapshot = types.SimpleNamespace(items=[till("T1", "Quince", "Q-1"), till("T2", "quince"), till("T3", "Plum"), till("T4", "Fig"), till("T5", "fig")])
+        content = {"products": [P("s1", "Pear"), P("s2", "pear"), P("s3", "Plum"), P("s4", "Fig"), P("s5", "Kale")]}
+        pairs, clashes, site_only, till_only = links.suggest(snapshot, content, {})
+        self.assertEqual(pairs, {"s3": {"cloverId": "T3"}})
+        self.assertEqual(site_only, ["Kale", "Pear (s1)", "pear (s2)"])             # (a) both site-only twins, each with its product id
+        self.assertEqual(till_only, ["Quince (Q-1)", "quince (T2)"])                 # (b) both till-only twins, by SKU or else item id
+        self.assertEqual(clashes, ["Fig (s4)", "Fig (T4)", "fig (T5)"])            # one site product, two till items: neither is linked or lost
 
     def test_cli_saves_one_private_draft_and_a_private_list_and_prints_counts_only(self):
         out, stdout = self.suggest()
