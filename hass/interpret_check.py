@@ -7,6 +7,8 @@ Names shown to the owner contain only visible characters (no controls, zero-widt
 SKILLS-FW-2 adds check_skill for the skill reply shapes (see below).
 The same change listed twice (same op, equal args in any key order, spacing ignored) becomes one question naming the first repeated
 pair; it is checked after the shape check and before op/field checks, so a repeated unknown op is reported as a repeat.
+AV1104-06: a sole-key {"lookup": "<command>"} result passes only when the real parse_command reads the string as one of the read-only
+LOOKUP_VERBS (find, listing and shelf also need an argument); every other lookup becomes the fixed LOOKUP_REFUSED reply.
 """
 
 import json
@@ -25,6 +27,9 @@ UNDO_GUIDANCE = "To undo the last change, say " + voice.quote("undo") + ". To se
 PRICE_REPLY = "The website doesn't show prices, so I haven't made any change. Could you send it without the price?"  # AV0222-03
 PLAIN_TEXT_REPLY = ("The website only takes plain words, so I haven't made any change. "
                     "Could you send it again without special marks?")
+LOOKUP_VERBS = frozenset({"status", "report", "history", "find", "listing", "shelf", "hidden"})  # AV1104-06: the read-only commands a question may ask for
+LOOKUP_NEEDS_ARG = frozenset({"find", "listing", "shelf"})
+LOOKUP_REFUSED = "Nothing changed. To look something up, say status, report, or find and a few words."
 CANT_DO_YET = "I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change."
 WANTS = {"bool": "yes or no", "int": "a whole number", "text_list": "a list of words"}
 
@@ -111,8 +116,22 @@ def _problem(result: dict, registry, pending_codes, from_intake):
     return None
 
 
+def lookup_command(text):
+    """AV1104-06: the parsed (verb, argument) when ``text`` is one read-only command the owner could send (the real parse_command
+    decides, so aliases, punctuation and the argument's own case are the command's); otherwise None. A line break or other control
+    character, a blank argument for find/listing/shelf, and any verb outside LOOKUP_VERBS give None."""
+    from hass.chat.commands import parse_command  # function-local: hass.conversation imports this module
+    if not isinstance(text, str) or any(unicodedata.category(c) in ("Cc", "Zl", "Zp") for c in text): return None
+    found = parse_command(text)
+    if not found or found[0] not in LOOKUP_VERBS: return None
+    if found[0] in LOOKUP_NEEDS_ARG and not (found[1] or "").strip(): return None
+    return found
+
+
 def check(result: dict, registry, pending_codes, *, from_intake=False) -> dict:
-    """``result`` unchanged when it is fine (or is already a question/unsupported reply), else {"question": text}."""
+    """``result`` unchanged when it is fine (or is already a question/unsupported reply), else {"question": text}.
+    AV1104-06: a lookup is unchanged when it names an allowed read-only command, else {"unsupported": LOOKUP_REFUSED}."""
+    if "lookup" in result: return result if lookup_command(result["lookup"]) else {"unsupported": LOOKUP_REFUSED}
     if "ops" not in result: return result
     problem = _problem(result, registry, set(pending_codes), from_intake)
     return result if problem is None else {"question": problem}
