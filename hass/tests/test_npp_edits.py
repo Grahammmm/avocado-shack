@@ -243,11 +243,13 @@ class EditLoopJobTests(unittest.TestCase):
         path, digest = next(iter(out["draft"]["assets"].items()))
         return Card(out["draft"], PNG, "raw", path, digest.removeprefix("sha256:"), "picture: your own photo")
 
-    def say(self, text, photos=0):
+    def say(self, text, photos=0, reply_to=None):
         self.serial += 1
         self.now += timedelta(seconds=1)
         msg = conversation.Inbound(f"g-{self.serial}", CHAT, OWNER, text, kind="new", received_at=self.now.isoformat(),
                                    attachments=photos)
+        if reply_to is not None:
+            object.__setattr__(msg, "reply_to", reply_to)  # Inbound is frozen and has no such field yet: a transport that knows the replied-to guid sets it
         return self.conv.handle(msg, forwarded_at=self.now)
 
     def work(self):
@@ -287,6 +289,56 @@ class EditLoopJobTests(unittest.TestCase):
         products = (self.repo.wt / "hass/content/products.json").read_text()
         self.assertIn('"sellingPrice": "4.00"', products)
         self.assertIn('"supplier": "Etto"', products)
+
+    def test_plain_words_price_edit_gives_a_revised_card(self):
+        # Contract F4 on the NPP path: "make it $4" / "wait $4.50" while a card is out revise the price on the same job.
+        # Bug: the turn was parsed as a photo caption, the amount stayed in the words and no finance slot was made, so the
+        # edit asked "I didn't catch that" (or changed nothing) instead of drawing a revised card.
+        self.say("sell $2", photos=1)
+        self.work()
+        self.confirm(1)
+        self.assertEqual(self.say("make it $4"), "npp-working")
+        self.work()
+        self.confirm(2)
+        self.assertEqual(self.say("wait $4.50"), "npp-working")
+        self.work()
+        code = self.job()["job_id"]
+        prices = [json.loads(self.conv.npp.version(code, n)["listing_json"])["sellingPrice"] for n in (1, 2, 3)]
+        self.assertEqual(prices, ["2.00", "4.00", "4.50"])
+        self.assertEqual(len(self.transport.cards), 3)
+        self.assertTrue(list(self.transport.cards.values())[-1][0].startswith(f"Post this? Reply yes {code}-3,"))
+
+    def test_a_yes_replying_to_the_current_card_resolves_that_exact_card(self):
+        # Contract S11: a reply to the card names its delivered receipt; a reply to an older card is "replaced", an unknown
+        # reference is not a card. Bug: any reply reference made the yes "not ready", so replying to the card never published.
+        self.say("sell $2", photos=1)
+        self.work()
+        self.confirm(1)
+        self.say("sell $4")
+        self.work()
+        self.confirm(2)
+        code = self.job()["job_id"]
+        self.assertEqual(self.say(f"yes {code}", reply_to="m-1"), "no-target")  # the replaced card
+        self.assertEqual(self.say(f"yes {code}", reply_to="not-a-card"), "no-target")
+        self.assertEqual(self.say(f"yes {code}-9", reply_to="m-2"), "no-target")  # the code names no card of this reply
+        self.conv.flush(self.transport)
+        self.assertEqual(self.transport.texts[-3:], [REPLIES["guards"][k] for k in ("replaced", "not_ready", "which_card")])
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0], 0)
+        self.assertEqual(self.say(f"yes {code}", reply_to="m-2"), "approved")
+        self.assertIn('"sellingPrice": "4.00"', (self.repo.wt / "hass/content/products.json").read_text())
+
+    def test_posted_confirmation_names_the_item_link_only_for_a_published_listing(self):
+        # Contract S13: the confirmation the live release engine sends is `Posted: <item link>` for a published listing job,
+        # and nothing for an ordinary change. Bug: reply.posted was never called, so the legacy line went out instead.
+        self.say("sell $2", photos=1)
+        self.work()
+        self.confirm(1)
+        change = self.conv.npp.version(self.job()["job_id"], 1)["change_id"]
+        self.assertIsNone(self.conv.npp_posted(change))  # not published yet
+        self.assertEqual(self.say(f"yes {self.job()['job_id']}"), "approved")
+        key = [r["key"] for r in self.editor.show(change)["change"]["records"] if r["collection"] == "products"][0]
+        self.assertEqual(self.conv.npp_posted(change), f"Posted: https://theavocadoman.com/?item={key}#market (say undo to take it down)")
+        self.assertIsNone(self.conv.npp_posted("0" * 16))
 
     def test_picture_request_is_one_line_and_no_new_card(self):
         # Contract S10 picture requests: one line asking for a new photo; no image edit and no card for that message.
