@@ -5,10 +5,10 @@ unchanged). The methods run on the Conversation (self is the conversation): they
 settings exactly as before. Command routing stays in Conversation._command.
 """
 import contextlib, copy, json, os, re, sqlite3, stat  # noqa: E401
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from hass import owner_answers as answers, audit as audit_mod, editor as editor_mod, memory as memory_mod, morning_report as shelf, voice
+from hass import owner_answers as answers, audit as audit_mod, editor as editor_mod, margins, memory as memory_mod, morning_report as shelf, voice
 from hass.chat.shared import ALIAS_NAME_MAX, CANT_READ, CONTROL, COST_USAGE, LOCAL_TZ, _is_undo, _iso, load_content, NOTHING, q, STATUS_PLAIN
 from hass.chat.wording import proposal_text, _record_lines
 from hass.content_model import _text as checked_text
@@ -17,6 +17,9 @@ from hass.skills import dispatch as dispatch_mod
 
 MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states these (test_limits_doc)
 ALIAS_LIST_MAX = 20  # AV0222-05: `memory` lists this many aliases apart from the notes (LIMITS.md)
+COSTS_LIST_MAX = 20  # AV2137-06: `costs` lists this many saved purchase costs; `memory` lists none of them (LIMITS.md)
+COSTS_UNAVAILABLE = "I can't read the saved costs right now. Nothing has changed. Could you try again in a little while?"
+COSTS_NO_NAMES = "I can't look up the product names right now, so some lines show only the product code."
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 
 HISTORY_SEARCH_MAX, HISTORY_TEXT_MAX = 10, 60  # AV2152-02 (H06/H17): `history <words>`; docs/hass/COMMANDS.md
@@ -274,8 +277,9 @@ class CorePack:
             if has_table and self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
             every = self.memory.list() if has_table else []
             design = [r for r in every if r["key"].startswith("design.")]  # AV1052-11: kept design requests, listed apart
-            rows = [r for r in every if not r["key"].startswith(("alias.", "design."))]
+            rows = [r for r in every if not r["key"].startswith(("alias.", "design.", "cost."))]  # AV2137-06: saved costs are listed by `costs`, never among the notes
             aliases = [r for r in every if r["key"].startswith("alias.")]
+            costs = sum(1 for r in every if r["key"].startswith("cost."))  # all of them, well formed or not
             lines = [f"- {q(r['key'])}: {q(r['value'])} (since {voice.natural(datetime.fromisoformat(r['created_at']), self._now())})"
                      for r in rows[:MEMORY_LIST_MAX]]
             more = ["And a few more."] if len(rows) > MEMORY_LIST_MAX else []
@@ -285,7 +289,8 @@ class CorePack:
                                             ["I don't have any nicknames."])
                         + ([f"Design notes ({len(design)}):"] + [
                             f"- {r['key']}: {q(r['value'])} (owner, since {voice.natural(datetime.fromisoformat(r['created_at']), self._now())})"
-                            for r in design[:MEMORY_LIST_MAX]] + (["And a few more."] if len(design) > MEMORY_LIST_MAX else []) if design else [])),
+                            for r in design[:MEMORY_LIST_MAX]] + (["And a few more."] if len(design) > MEMORY_LIST_MAX else []) if design else [])
+                        + ([f"Costs saved: {costs} (send {q('costs')})"] if costs else [])),
                         long_ok=True)
             return "memory-list"
         if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
@@ -403,6 +408,70 @@ class CorePack:
                 mark = " (hidden)" if found[1] == "hidden" else " (on hold)" if found[1] == "held" else ""
                 lines.append(f"- {q(name)} means {q(found[0])}{mark}")
         return lines
+
+    def _costs(self) -> str:
+        """AV2137-06 (F03/H15): the saved purchase costs, newest saved first, read-only. Rows are read straight from an existing
+        memory table (none is made to answer it); the each figure is margins.compute's unit_cost, never worked out here. A row
+        that cannot be read stays in the list, counted and marked, and is never repaired or echoed."""
+        try:
+            has_table = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
+            rows = self.db.execute(f"SELECT key, value, created_at FROM memory WHERE {memory_mod.ACTIVE} AND substr(key, 1, 5) = 'cost.'").fetchall() if has_table else []
+        except sqlite3.Error:
+            self._reply(COSTS_UNAVAILABLE)
+            return "costs"
+        if not rows:
+            self._reply("No purchase costs saved.")
+            return "costs"
+
+        def when(raw):  # (the stored instant, its Pacific time), or None for a missing, naive or impossible date
+            try:
+                at = datetime.fromisoformat(raw[:-1] + "+00:00" if raw.endswith(("Z", "z")) else raw)
+                if at.tzinfo is None or at.utcoffset() is None: return None
+                return at.astimezone(timezone.utc), at.astimezone(LOCAL_TZ)
+            except (ValueError, TypeError, AttributeError, OverflowError, OSError): return None
+        dated = [(r, when(r["created_at"])) for r in sorted(rows, key=lambda r: str(r["key"]))]  # by key first: the sort below is stable
+        shown = (sorted((d for d in dated if d[1]), key=lambda d: d[1][0], reverse=True) + [d for d in dated if not d[1]])[:COSTS_LIST_MAX]
+        records, products = False, {}
+        if any(self._cost_parts(d[0]) for d in shown):
+            try:
+                content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+                products, records = {p["id"]: (p["name"], p["status"]) for p in content.products}, True
+            except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState): pass
+        lines, lookup_failed = [], False
+        for row, at in shown:
+            parts, ident = self._cost_parts(row), str(row["key"])[5:]
+            if parts is None:
+                lines.append(f"{q(ident)}: I can't read this saved cost. Send {q('forget cost.' + ident)} to remove it."
+                             if self._safe_text(ident) and memory_mod.KEY_RE.fullmatch(str(row["key"])) else "One saved cost has a name I can't show, so I can't read it.")
+                continue
+            found = products.get(ident)
+            if not records or (found is not None and not self._safe_text(found[0])):
+                label, lookup_failed = f"Product name unavailable ({q(ident)})", True
+            elif found is None: label = f"Product no longer listed ({q(ident)})"
+            else: label = f"{q(found[0])} ({q(ident)})" + (" (hidden)" if found[1] == "hidden" else " (held)" if found[1] == "held" else "")
+            day = f"saved {_DAYS[at[1].weekday()]} {_MONTHS[at[1].month - 1]} {at[1].day}" if at else "saved date unavailable"
+            lines.append(f"{label}: ${parts[0]} for {parts[1]} = ${parts[2]} each, {day}")
+        if len(rows) > COSTS_LIST_MAX: lines.append(f"... and {len(rows) - COSTS_LIST_MAX} more")
+        if lookup_failed: lines.append(COSTS_NO_NAMES)
+        self._reply("\n".join(lines), long_ok=True)
+        return "costs"
+
+    @staticmethod
+    def _safe_text(text) -> bool:
+        problems = []
+        checked_text(problems, "x", text)
+        return isinstance(text, str) and not problems
+
+    @staticmethod
+    def _cost_parts(row):
+        """(pack cost, units, each) as margins.compute returns them for the saved `<pack> for <units>`, or None when the row is
+        not one: a key memory would not have kept, a value not in that form, or numbers the calculator refuses."""
+        try:
+            pack, sep, units = str(row["value"]).partition(" for ")
+            if not sep or not memory_mod.KEY_RE.fullmatch(str(row["key"])): return None
+            out = margins.compute(pack, units, "0", "0")
+            return out["inputs"]["pack_cost"], out["inputs"]["units"], out["unit_cost"]
+        except (margins.InputError, ArithmeticError, ValueError, TypeError, KeyError, AttributeError): return None
 
     def aliases(self) -> dict:
         """Read-only H15 aliases {name: (kind, id)} from active memory rows, for catalog.lookup(aliases=…)."""
