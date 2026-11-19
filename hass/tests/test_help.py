@@ -90,8 +90,9 @@ class HelpTextTests(unittest.TestCase):
     def test_one_post_line_names_product_and_maker(self):
         """AV1937-10: the post entry names a product and a maker; nothing is posted; no <id> placeholder; its examples parse as post."""
         lines = voice.plain(commands.help_detail("post")).splitlines()
-        self.assertEqual(lines, ["post Hass avocado - a caption to copy for a product", "post maker fixture-farm - a caption to copy for a maker"])
-        self.assertEqual([verb(ex) for w, ex in examples() if w == "post"], ["post", "post"])
+        self.assertEqual(lines, ["post Hass avocado - a caption to copy for a product", "post maker fixture-farm - a caption to copy for a maker",
+                                 "post notice - a caption for the home page notice"])  # AV1104-07
+        self.assertEqual([verb(ex) for w, ex in examples() if w == "post"], ["post", "post", "post"])
         self.assertEqual(conversation.parse_command("post maker fixture-farm"), ("post", "maker fixture-farm"))
 
     def test_help_wordings_parse_and_lookalikes_do_not(self):

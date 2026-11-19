@@ -19,6 +19,7 @@ MAKER_REFUSALS = {"no such maker": "No maker {id}; send " + q("find <words>") + 
                   "not on the site": "Maker {id} is hidden; nothing to draft.",
                   "no active products": "Maker {id} has no active products on the site."}  # other reasons: "Cannot draft a post for {id}: {reason}."
 MAKER_CANT_READ = q("Catalog unavailable right now; nothing changed.")  # the spec's exact line; quoted so the voice list of tech words ("catalog") leaves it alone
+NOTICE_NONE = "There is no notice on the website to post."  # AV1104-07: none, not shown yet, or its last day has passed
 HIKE_USAGE = "Which hike is the post for? Say it like " + q("post hike Point Buchon") + "."  # AV1222-11
 HIKE_REFUSALS = {"no such hike": "I don't know a hike called {id}. Try " + q("find") + " and a word from its name.",
                  "hike is cancelled": "{id} is cancelled, so there is nothing to announce.",
@@ -90,34 +91,56 @@ class ReportsPack:
         by_id = None if found else MARGIN_ID_RE.fullmatch(rest.strip())  # AV1222-10: the saved cost of a product (by name or id)
         priced = None if found or by_id else PRICE_RE.fullmatch(rest.strip())  # AV1352-08: the margin a shelf price gives
         by_price = None if found or by_id or priced else PRICE_ID_RE.fullmatch(rest.strip())
+        listing = False  # AV2137-05: a product name that fits several is answered with the find lines (ids shown)
         try:
-            text = margins.say(margins.compute(found[1], found[2], found[4] or "0", found[3], found[5] and "." + found[5])) if found else \
-                self._margin_saved(*by_id.groups()) if by_id else \
-                _margin_steps(margins.check(priced[1], priced[2], priced[4] or "0", priced[3])) if priced else \
-                self._margin_saved(by_price[1], None, by_price[3], price=by_price[2]) if by_price else MARGIN_USAGE
+            if found: text = margins.say(margins.compute(found[1], found[2], found[4] or "0", found[3], found[5] and "." + found[5]))
+            elif by_id: text, listing = self._margin_saved(*by_id.groups())
+            elif priced: text = _margin_steps(margins.check(priced[1], priced[2], priced[4] or "0", priced[3]))
+            elif by_price: text, listing = self._margin_saved(by_price[1], None, by_price[3], price=by_price[2])
+            else: text = MARGIN_USAGE
         except margins.InputError as exc:
             self._problem("did-not-understand", "margin-numbers")
             text = "I couldn't work that out. " + margins.plain_input_error(exc)
-        self._reply(text)
+        self._reply(text, long_ok=listing, ids_ok=listing)
         return "margin"
 
-    def _margin_saved(self, ident, margin, shrink, ending=None, *, price=None) -> str:
-        """AV1222-10: margins for the saved cost.<id> (read-only; the memory table is not created for a read)."""
+    def _purchase_product(self, content, typed):
+        """AV2137-05: (product, None, False) for what a cost or saved-cost margin names, else (None, reply, several). An exact id
+        acts as before; else exactly one product of ANY status (a private cost needs no website listing) by name, brand or
+        saved nickname acts as that id; several give the find lines (<= 10, with ids), none says to use find. Read-only: the
+        memory table is only read when it exists, and nothing is guessed."""
+        by_id = next((p for p in content.products if p["id"] == typed), None)
+        if by_id: return by_id, None, False
+        has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
+        found = catalog.lookup(content, "product", typed, aliases=self.aliases() if has_memory else None)
+        if "match" in found: return next(p for p in content.products if p["id"] == found["match"]), None, False
+        if found["candidates"]: return None, self._many_lines(found["candidates"]), True
+        return None, f"I don't know a product called {q(typed)}. Try {q('find')} and a word from its name.", False
+
+    def _margin_saved(self, ident, margin, shrink, ending=None, *, price=None):
+        """AV1222-10: margins for the saved cost.<id> (read-only; the memory table is not created for a read).
+        AV2137-05: the product may be named by id, name or nickname; returns (reply, True when the reply lists several products)."""
+        try:
+            product, reply, several = self._purchase_product(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), ident)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            self._problem("error", "shop-list-unreadable")
+            return CANT_READ, False
+        if product is None: return reply, several
         has_table = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
         if self.memory is None and has_table: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
-        typed, ident = ident, self._pick("product", ident)
-        row = next((r for r in self.memory.list() if r["key"] == f"cost.{ident}"), None) if has_table else None
-        if row is None: return f"I don't have a cost saved for {q(typed)}. Tell me first, like " + q(f"cost {typed}: 24 for 12") + "."
+        shown = f"{q(product['name'])} ({q(product['id'])})"
+        row = next((r for r in self.memory.list() if r["key"] == f"cost.{product['id']}"), None) if has_table else None
+        if row is None: return f"I don't have a cost saved for {shown}. Tell me first, like " + q(f"cost {product['id']}: 24 for 12") + ".", False
         pack, _, units = row["value"].partition(" for ")
         calc = _margin_steps(margins.check(pack, units, shrink or "0", price)) if price is not None else \
             margins.say(margins.compute(pack, units, shrink or "0", margin, ending and "." + ending))
         try:  # RF1221-12: the saved date is only a label; an unreadable one never drops the calculation
             saved = datetime.fromisoformat(row["created_at"])
             if saved.utcoffset() is None: raise ValueError("naive")
-            when = f"Using the cost you gave me {voice.natural(saved.astimezone(LOCAL_TZ), self._now())}."
+            when = f"For {shown}, using the cost you gave me {voice.natural(saved.astimezone(LOCAL_TZ), self._now())}."
         except (TypeError, ValueError, OverflowError, OSError):
-            when = "Using your saved cost; I can't read when you gave it to me."
-        return when + "\n" + calc
+            when = f"For {shown}, using your saved cost; I can't read when you gave it to me."
+        return when + "\n" + calc, False
 
     def _post_names_something(self, text) -> bool:
         """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product
@@ -137,6 +160,7 @@ class ReportsPack:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
         writer worktree content. Read-only: nothing is posted, scheduled, written or drafted; works while paused."""
         photo = None
+        if pid.strip().lower() == "notice": return self._post_notice()  # AV1104-07: the whole argument; before the product-id fallback
         if pid.lower().split(None, 1)[:1] == ["maker"]: return self._post_maker(pid[5:].strip())  # AV1937-10: before the product-id fallback
         if pid.lower().split(None, 1)[:1] == ["hike"]: return self._post_hike(pid[4:].strip())
         try:
@@ -164,6 +188,24 @@ class ReportsPack:
             text, photo = CANT_READ, None
         self._reply(text, [str(photo)] if photo else [], long_ok=True)
         return "post"
+
+    def _post_caption(self, out, failure) -> str:
+        """AV1104-07: one text reply, no attachment: a builder's caption draft as is (never posted, scheduled or stored), else ``failure``."""
+        self._reply("Draft post (not posted; copy it yourself):\n" + q(out["caption"]) if out["draft"] else failure, long_ok=True, ids_ok=True)
+        return "post"
+
+    def _post_notice(self) -> str:
+        """AV1104-07 (F07/H13): social_draft.build_notice's caption for the home notice the saved content shows today.
+        Read-only: nothing is posted, scheduled, stored or drafted; works while paused; no interpreter call or usage count."""
+        try:
+            out = social_draft.build_notice(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), self._now())
+            if not out["draft"] and out["reason"] == "cannot read content": raise OSError
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            self._problem("error", "shop-list-unreadable")
+            return self._post_caption({"draft": False}, MAKER_CANT_READ)
+        if out["draft"] or out["reason"] == "no notice on the website": return self._post_caption(out, NOTICE_NONE)
+        self._problem("could-not-do", "post-refused")
+        return self._post_caption(out, q(f"Cannot draft a notice post: {out['reason']}."))
 
     def _post_maker(self, key) -> str:
         """AV1937-10 (F07): social_draft.build_maker's caption for one maker key, exactly as the builder wrote it, in chat.
@@ -236,23 +278,27 @@ class ReportsPack:
         typed, product, problem, value = ident, None, None, ""
         found = COST_RE.fullmatch(rest)
         try:
-            if not found or not ident: problem = COST_USAGE
+            if not found or not ident or re.fullmatch(rf"\$?{_NUM}\s+for\s+{_NUM}", ident, re.IGNORECASE): problem = COST_USAGE  # AV2137-05: a pack form is never a name
             else:
                 shown = margins.compute(found[1], found[2], "0", "0")["inputs"]  # validates and normalises both numbers
                 value = f"{shown['pack_cost']} for {shown['units']}"
                 content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
-                ident = self._pick("product", ident, content)
-                product = next((p for p in content.products if p["id"] == ident), None)
-                problem = None if product else f"I don't know a product called {q(typed)}. Try {q('find')} and a word from its name."
+                product, reply, several = self._purchase_product(content, ident)  # AV2137-05: an id, or the one name or nickname as that id
+                if several:
+                    self._reply(reply, long_ok=True, ids_ok=True)  # several fit: the find lines; nothing is saved or changed
+                    return "memory-ambiguous"
+                ident = product["id"] if product else ident
+                problem = None if product else reply
         except margins.InputError as exc:
             problem = "I couldn't read those numbers. " + margins.plain_input_error(exc)
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             problem = CANT_READ
         key, old, source = f"cost.{ident}", None, f"owner-stated:{msg.provider_id}"
+        shown = f"{q(product['name'])} ({q(product['id'])})" if product else ""  # AV2137-05: the product is always named by name and id
         try:
             old = self.memory.get(key) if product else None
             if product and old == value:
-                self._reply(f"I already have that cost for {q(product['name'])}, so nothing changed.")
+                self._reply(f"I already have that cost for {shown}, so nothing changed.")
                 return "memory-unchanged"
             if product: self.memory.remember(key, value, "fact", source) if old is None else self.memory.correct(key, value, source)
         except ValueError:  # e.g. an id too long for a memory key
@@ -262,7 +308,7 @@ class ReportsPack:
             self._reply(f"I couldn't save that. {problem}" if not problem.startswith(("Tell me", "I ")) else problem)
             return "memory-invalid"
         pack, _, units = value.partition(" for ")
-        self._reply((f"Saved. {q(product['name'])} costs you {pack} for {units}." if old is None else
-                     f"Updated. {q(product['name'])} now costs you {pack} for {units}.")
+        self._reply((f"Saved. {shown} costs you {pack} for {units}." if old is None else
+                     f"Updated. {shown} now costs you {pack} for {units}.")
                     + f" That stays private and is never on the website. Say {q('forget cost.' + ident)} to remove it.")
         return "memory-saved" if old is None else "memory-updated"

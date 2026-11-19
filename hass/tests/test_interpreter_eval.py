@@ -44,7 +44,7 @@ class ScoreTests(EvalTestCase):
         code, out, err = scored(CASES, REPLIES)
         summary = json.loads(out)
         self.assertEqual((code, err, {k: summary[k] for k in ("cases", "passed", "missing", "extra")}),
-                         (0, "", {"cases": 98, "passed": 95, "missing": [], "extra": []}))
+                         (0, "", {"cases": 104, "passed": 101, "missing": [], "extra": []}))
         self.assertEqual(summary["failed"], [
             {"id": "e06", "why": "ops product.restore but expected product.hide"},  # wrong op
             {"id": "e13", "why": "op 1 hike.create: missing arg capacity"},  # missing arg
@@ -83,27 +83,27 @@ class ScoreTests(EvalTestCase):
                 if "trailId" in args: self.assertIn(args["trailId"], trails)
                 if op == "route.edit": self.assertIn(args["id"], trails, case["id"])
                 if "photo" in args: self.assertRegex(args["photo"], r"\A[0-9a-f]{64}\Z", case["id"])
-        self.assertEqual(kinds, {"product": 24, "maker": 9, "club": 1, "hike": 15, "store": 16, "route": 8, "revises": 7,
-                                 "question": 11, "unsupported": 7})
+        self.assertEqual(kinds, {"product": 25, "maker": 9, "club": 1, "hike": 16, "store": 16, "route": 8, "revises": 7,
+                                 "question": 11, "unsupported": 7, "lookup": 4})
 
     def test_missing_and_extra_ids(self):
-        replies = {k: v for k, v in self.replies.items() if k != "e05"} | {"e99": {"question": "?"}}
+        replies = {k: v for k, v in self.replies.items() if k != "e05"} | {"e999": {"question": "?"}}
         path = self.write("r.jsonl", [{"id": k, "reply": v} for k, v in replies.items()])
         code, out, _ = scored(CASES, path)
         summary = json.loads(out)
-        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 94))
+        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e999"], 100))
 
     def test_duplicate_id_in_either_file_exits_2(self):
-        dup_cases = self.write("c.jsonl", self.rows[:97] + [self.rows[0]])
+        dup_cases = self.write("c.jsonl", self.rows[:103] + [self.rows[0]])
         dup_replies = self.write("r.jsonl", [{"_note": "x"}, {"id": "e01", "reply": {}}, {"id": "e01", "reply": {}}])
-        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 98: duplicate id"))
+        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 104: duplicate id"))
         self.assertEqual(scored(CASES, dup_replies), (2, "", "replies line 3: duplicate id"))
 
     def test_malformed_line_or_62_cases_exits_2_naming_only_the_line(self):
         broken = self.write("c.jsonl", self.rows[:3] + ['{"id": "e04", "text": "owner words"'] + self.rows[4:])
         self.assertEqual(scored(broken, REPLIES), (2, "", "cases line 4: not valid JSON"))
-        self.assertEqual(scored(self.write("c62.jsonl", self.rows[:97]), REPLIES),
-                         (2, "", "cases: 97 cases, expected 98"))
+        self.assertEqual(scored(self.write("c62.jsonl", self.rows[:103]), REPLIES),
+                         (2, "", "cases: 103 cases, expected 104"))
         self.assertEqual(scored(CASES, self.tmp / "absent.jsonl"), (2, "", "replies: unreadable"))
 
     def test_unknown_op_scores_as_question(self):
@@ -183,7 +183,7 @@ class LiveTests(EvalTestCase):
     def test_live_records_one_reply_per_case_that_score_reads(self):
         calls, out = [], self.tmp / "fresh.jsonl"
         code, stdout, _ = run("--live", "--url", URL, "--model", "m", "--out", out, transport=self.fake(calls))
-        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 98}, 98))
+        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 104}, 104))
         replies = ev.load_replies(out)
         self.assertEqual(list(replies), [c["id"] for c in self.cases])
         self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 11)  # only the 11 must-ask cases pass
@@ -217,7 +217,7 @@ class V10NoPriceShelfMakerTests(EvalTestCase):
 
     def test_v10_exact_four_cases_and_raw_replies(self):
         new = self.cases[90:94]
-        self.assertEqual(([c["id"] for c in new], len({c["id"] for c in self.cases})), (self.NEW, 98))
+        self.assertEqual(([c["id"] for c in new], len({c["id"] for c in self.cases})), (self.NEW, 104))
         self.assertTrue(all(c["pending"] == [] and set(c) == {"id", "text", "pending", "expect"} for c in new))
         self.assertEqual([c["text"] for c in new], ["Set the avocados to 2 for $3.", "The avocados are sold out. They were 2 for $3.",
                          "Move the avocados to the snacks shelf.", "Add a maker named Fixture Grove in Los Osos."])
@@ -276,9 +276,9 @@ class V10NoPriceShelfMakerTests(EvalTestCase):
     def test_v10_predecessor_outcomes(self):
         old = ev.score(self.cases[:90], self.replies, REGISTRY)
         new = ev.score(self.cases, self.replies, REGISTRY)
-        self.assertEqual((old["passed"], new["passed"], old["failed"] == new["failed"]), (87, 95, True))
+        self.assertEqual((old["passed"], new["passed"], old["failed"] == new["failed"]), (87, 101, True))
         self.assertEqual([f["id"] for f in new["failed"]], ["e06", "e13", "e25"])
-        self.assertEqual(old["extra"], self.NEW + [f"e{n}" for n in range(95, 99)])
+        self.assertEqual(old["extra"], sorted(self.NEW + [f"e{n}" for n in range(95, 105)]))  # the scorer sorts ids as strings: e100 before e85
 
 
 class V11BulkAndLayoutTests(EvalTestCase):
@@ -293,10 +293,10 @@ class V11BulkAndLayoutTests(EvalTestCase):
 
     def test_v11_exact_append_and_raw_contracts(self):
         from hass.interpreter_prompt import DESIGN_UNSUPPORTED
-        self.assertEqual([c["id"] for c in self.cases[94:]], self.NEW)
-        self.assertEqual([c["text"] for c in self.cases[94:]], ["All the vegetables are in today", "Everything from Cal Poly is sold out",
+        self.assertEqual([c["id"] for c in self.cases[94:98]], self.NEW)
+        self.assertEqual([c["text"] for c in self.cases[94:98]], ["All the vegetables are in today", "Everything from Cal Poly is sold out",
                          "The Hass avocado on the Fruit shelf is sold out", "Make the product cards round"])
-        self.assertTrue(all(c["pending"] == [] and set(c) == {"id", "text", "pending", "expect"} for c in self.cases[94:]))
+        self.assertTrue(all(c["pending"] == [] and set(c) == {"id", "text", "pending", "expect"} for c in self.cases[94:98]))
         want = {"e95": self.ops("product.set_availability_all", available="yes", shelf="vegetables"),
                 "e96": self.ops("product.set_availability_all", available="no", maker="Cal Poly"),
                 "e97": self.ops("product.set_availability", id="photo-product-001", available="no"),
@@ -309,7 +309,7 @@ class V11BulkAndLayoutTests(EvalTestCase):
         self.assertIn("vegetables", CATEGORIES)
         self.assertIn("Cal Poly", {p.get("producerKey") for p in content.active_products()})
         self.assertEqual(next(p for p in content.active_products() if p["id"] == "photo-product-001")["category"], "fruit")
-        self.assertEqual(ev.score(self.cases[94:], self.replies, REGISTRY)["passed"], 4)
+        self.assertEqual(ev.score(self.cases[94:98], self.replies, REGISTRY)["passed"], 4)
 
     def test_v11_bulk_is_one_operation_not_record_expansion(self):
         shelf = self.expect("e95")["ops"][0]
@@ -348,8 +348,98 @@ class V11BulkAndLayoutTests(EvalTestCase):
     def test_v11_predecessor_failures_and_private_output_unchanged(self):
         summary = ev.score(self.cases, self.replies, REGISTRY)
         self.assertEqual(([f["id"] for f in summary["failed"]], summary["passed"], summary["missing"], summary["extra"]),
-                         (["e06", "e13", "e25"], 95, [], []))
+                         (["e06", "e13", "e25"], 101, [], []))
         self.assertNotIn("Cal Poly", json.dumps(summary))
+
+
+class V12LookupVersusChangeTests(EvalTestCase):
+    """AV1104-12: four questions that get a lookup and two changes phrased as questions. Synthetic replies, no model."""
+
+    NEW = [f"e{n}" for n in range(99, 105)]
+    HIKE = "hike-2026-11-14-point-buchon"  # the synthetic eval-events reference, not a real event
+    PREFIX = {"cases": "a5425a8339bb4b5912380daa707473e853ad23968d94b32a1eb0011c7e2e9b99",  # sha256 of the 98 v11 lines
+              "replies": "3f14513706e17468619db6eab21aef21b06da195acf247c81f231ca5d0d56e92"}
+    WANT = [("how many are coming Saturday?", {"lookup": "status"}),
+            ("is the sourdough sold out? I mean photo-product-015.", {"lookup": "listing photo-product-015"}),
+            ("what's on the dairy shelf?", {"lookup": "shelf dairy"}),
+            ("what are my hours?", {"lookup": "listing store"}),
+            ("can you mark the eggs sold out?", {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-024", "available": "no"}}], "revises": None}),
+            ("could you move the hike to 10am? I mean " + HIKE + ".", {"ops": [{"op": "hike.update", "args": {"id": HIKE, "time": "10:00"}}], "revises": None})]
+
+    def ops(self, op, **args): return {"ops": [{"op": op, "args": args}], "revises": None}
+
+    def test_v12_exact_append_and_six_raw_contracts(self):  # bug: a drifted text/target, an edited v11 row or a raw reply that differs from its expectation
+        import hashlib
+        new = self.cases[98:]
+        self.assertEqual([c["id"] for c in new], self.NEW)
+        self.assertEqual([(c["text"], c["expect"]) for c in new], self.WANT)
+        self.assertTrue(all(c["pending"] == [] and set(c) == {"id", "text", "pending", "expect"} for c in new))
+        self.assertTrue(all(self.replies[c["id"]] == c["expect"] for c in new), "raw replies equal expectations")
+        self.assertEqual([list(self.replies[i]) for i in self.NEW], [["lookup"]] * 4 + [["ops", "revises"]] * 2)
+        self.assertEqual(len({c["id"] for c in self.cases}), 104)
+        lines = {"cases": CASES.read_text("utf-8").splitlines(True), "replies": REPLIES.read_text("utf-8").splitlines(True)}
+        got = {k: hashlib.sha256("".join(v[:99 if k == "replies" else 98]).encode()).hexdigest() for k, v in lines.items()}
+        self.assertEqual(got, self.PREFIX)  # the 98 inherited case lines and the note line + 98 replies are byte-identical
+        self.assertEqual(ev.score(new, self.replies, REGISTRY)["passed"], 6)
+
+    def test_v12_lookup_commands_are_distinct(self):  # bug: status/listing/shelf swapped, or a refused/blank lookup, a question or an op list satisfies a lookup
+        for case_id, want in zip(self.NEW[:4], ("status", "listing photo-product-015", "shelf dairy", "listing store")):
+            self.assertEqual(self.why(case_id, {"lookup": want}), [])
+            for bad in ({"lookup": "status"}, {"lookup": "listing store"}, {"lookup": "shelf dairy"}, {"lookup": "listing photo-product-015"}, {"lookup": "shelf eggs"}):
+                if bad["lookup"] != want: self.assertEqual(self.why(case_id, bad), ["lookup differs"], (case_id, bad))
+            for bad in ({"lookup": ""}, {"lookup": "yes"}, {"lookup": "listing"}, {"lookup": "status; hide"}):
+                self.assertEqual(self.why(case_id, bad), ["expected lookup, got unsupported"], (case_id, bad))
+            self.assertEqual(self.why(case_id, {"question": "Which?"}), ["expected lookup, got question"])
+            self.assertEqual(self.why(case_id, self.ops("product.hide", id="photo-product-081")), ["expected lookup, got ops"])
+            self.assertEqual(self.why(case_id, {"unsupported": "No."}), ["expected lookup, got unsupported"])
+            self.assertEqual(self.why(case_id, {"lookup": want, "ops": []}), ["expected lookup, got unsupported"])  # mixed shapes are not a lookup
+        self.assertEqual(self.why("e102", {"lookup": "listing dairy"}), ["lookup differs"])  # a category is a shelf, not a listing
+
+    def test_v12_question_form_changes_keep_typed_ops(self):  # bug: a polite question is answered as a lookup/question, or the op/target/time drifts
+        for case_id, op, args in (("e103", "product.set_availability", {"id": "photo-product-024", "available": "no"}),
+                                  ("e104", "hike.update", {"id": self.HIKE, "time": "10:00"})):
+            good = self.ops(op, **args)
+            self.assertEqual(self.why(case_id, good), [])
+            for key, wrong in (("id", "photo-product-002" if case_id == "e103" else "hike-2026-11-22-cass-hill"),
+                               ("available" if case_id == "e103" else "time", "yes" if case_id == "e103" else "22:00")):
+                self.assertEqual(self.why(case_id, self.ops(op, **dict(args, **{key: wrong}))), [f"op 1 {op}: arg {key} differs"])
+            self.assertEqual(self.why(case_id, self.ops(op, **{k: v for k, v in args.items() if k != "id"})), [f"op 1 {op}: missing arg id"])
+            for other in ({"lookup": "status"}, {"question": "Which?"}, {"unsupported": "No."}):
+                self.assertNotEqual(self.why(case_id, other), [])
+            self.assertEqual(self.why(case_id, dict(good, revises="v1")), ["expected ops, got question"])
+            self.assertEqual(self.why(case_id, {"ops": good["ops"] + [{"op": "product.hide", "args": {"id": "photo-product-024"}}], "revises": None})[0][:4], "ops ")
+        self.assertEqual(self.why("e104", self.ops("hike.update", id=self.HIKE, time="10")), ["op 1 hike.update: arg time differs"])  # "10am" is HH:MM, not a bare hour
+
+    def test_v12_real_catalog_targets_and_lookup_gate(self):  # bug: an id/name that no longer matches the catalog, or a lookup the real checker would refuse
+        content = load_content()
+        active = {p["id"]: p for p in content.active_products()}
+        self.assertEqual((active["photo-product-024"]["name"], active["photo-product-024"]["category"]), ("Cal Poly eggs", "eggs"))
+        self.assertEqual((active["photo-product-015"]["name"], active["photo-product-015"]["category"]), ("Brian's sourdough bread", "bread"))
+        self.assertIn("dairy", CATEGORIES)
+        self.assertNotIn(self.HIKE, {e["id"] for e in content.community["events"]})  # synthetic: not a real event
+        for case in self.cases[98:]:  # the real checked/allowlist path returns each expectation unchanged
+            self.assertIs(interpret_check.check(case["expect"], REGISTRY, set()), case["expect"], case["id"])
+
+    def test_v12_lookup_mismatch_does_not_echo_canaries(self):  # bug: a wrong lookup command or reply body is echoed into the score reasons or CLI summary
+        canary = "CANARY-zq7"
+        wrong = {"e99": {"lookup": f"status {canary}"}, "e100": {"lookup": f"listing {canary}"}, "e101": {"lookup": f"shelf {canary}"},
+                 "e102": {"lookup": f"yes {canary}"}, "e103": {"question": canary}, "e104": {"unsupported": canary}}
+        rows = [{"id": k, "reply": wrong.get(k, v)} for k, v in self.replies.items()]
+        code, out, err = scored(CASES, self.write("r.jsonl", rows))
+        summary = json.loads(out)
+        self.assertEqual((code, err, set(summary), summary["passed"]), (0, "", {"cases", "extra", "failed", "missing", "passed"}, 95))
+        self.assertEqual(sorted(f["id"] for f in summary["failed"]), sorted(["e06", "e13", "e25", *wrong]))
+        why = {f["id"]: f["why"] for f in summary["failed"]}
+        self.assertEqual([why[k] for k in wrong], ["expected lookup, got unsupported"] + ["lookup differs"] * 2 + ["expected lookup, got unsupported", "expected ops, got question", "expected ops, got unsupported"])
+        self.assertNotIn(canary, out + err)
+        self.assertNotIn("how many are coming", out)
+
+    def test_v12_inherited_outcomes_and_counts(self):  # bug: the new rows change an inherited verdict, or a fake always-question reply passes a lookup/change
+        old, new = ev.score(self.cases[:98], self.replies, REGISTRY), ev.score(self.cases, self.replies, REGISTRY)
+        self.assertEqual((old["passed"], new["passed"], old["failed"] == new["failed"]), (95, 101, True))
+        self.assertEqual(([f["id"] for f in new["failed"]], new["missing"], new["extra"]), (["e06", "e13", "e25"], [], []))
+        fake = {c["id"]: {"question": "Which one?"} for c in self.cases}
+        self.assertEqual(ev.score(self.cases, fake, REGISTRY)["passed"], 11)  # only the inherited must-ask cases pass
 
 
 class LookupKindTests(EvalTestCase):
@@ -375,13 +465,13 @@ class LookupKindTests(EvalTestCase):
         self.assertEqual(self.verdict({"lookup": "status"}, ops), ["expected lookup, got ops"])
 
     def test_lookup_expectations_load_and_bad_ones_are_refused_without_text(self):  # bug: a malformed expectation loads, or its text is echoed
-        good = self.write("good.jsonl", [*self.rows[:97], json.dumps(self.case({"lookup": "find eggs"}))])
+        good = self.write("good.jsonl", [*self.rows[:103], json.dumps(self.case({"lookup": "find eggs"}))])
         self.assertEqual(ev.load_cases(good)[-1]["expect"], {"lookup": "find eggs"})
         for bad in ({"lookup": 5}, {"lookup": ""}, {"lookup": "status", "extra": "canary-zz"}, {"lookup": ["status"]}):
-            path = self.write("bad.jsonl", [*self.rows[:97], json.dumps(self.case(bad))])
+            path = self.write("bad.jsonl", [*self.rows[:103], json.dumps(self.case(bad))])
             code, _out, err = scored(path, REPLIES)
-            self.assertEqual((code, err), (2, "cases line 98: not a case"), bad)
-        self.assertEqual(scored(CASES, REPLIES)[0], 0)  # the tracked set is untouched: still 98 cases, 95 passing
+            self.assertEqual((code, err), (2, "cases line 104: not a case"), bad)
+        self.assertEqual(scored(CASES, REPLIES)[0], 0)  # the tracked set is untouched: still 104 cases, 101 passing
 
 
 if __name__ == "__main__":

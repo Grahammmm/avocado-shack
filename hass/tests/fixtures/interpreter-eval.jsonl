@@ -96,3 +96,9 @@
 {"id": "e96", "text": "Everything from Cal Poly is sold out", "pending": [], "expect": {"ops": [{"op": "product.set_availability_all", "args": {"available": "no", "maker": "Cal Poly"}}], "revises": null}}
 {"id": "e97", "text": "The Hass avocado on the Fruit shelf is sold out", "pending": [], "expect": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-001", "available": "no"}}], "revises": null}}
 {"id": "e98", "text": "Make the product cards round", "pending": [], "expect": {"unsupported": true}}
+{"id": "e99", "text": "how many are coming Saturday?", "pending": [], "expect": {"lookup": "status"}}
+{"id": "e100", "text": "is the sourdough sold out? I mean photo-product-015.", "pending": [], "expect": {"lookup": "listing photo-product-015"}}
+{"id": "e101", "text": "what's on the dairy shelf?", "pending": [], "expect": {"lookup": "shelf dairy"}}
+{"id": "e102", "text": "what are my hours?", "pending": [], "expect": {"lookup": "listing store"}}
+{"id": "e103", "text": "can you mark the eggs sold out?", "pending": [], "expect": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-024", "available": "no"}}], "revises": null}}
+{"id": "e104", "text": "could you move the hike to 10am? I mean hike-2026-11-14-point-buchon.", "pending": [], "expect": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "time": "10:00"}}], "revises": null}}

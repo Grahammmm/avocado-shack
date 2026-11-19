@@ -36,7 +36,7 @@ OWNER_FACING = {
     "chat/core_pack.py": ["_history_search", "_show", "_memory", "_memory_words", "_alias", "_alias_lines", "_control", "_status", "_again",
                           "_reader_failed_lines", "_waiting_lines", "_photo_lines", "_hike_lines"],
     "chat/site_pack.py": ["_find", "_listing", "_photos_to_take", "_hidden"],
-    "chat/reports_pack.py": ["_report", "_margin", "_margin_saved", "_post", "_post_hike", "_pick", "_cost"],
+    "chat/reports_pack.py": ["_report", "_margin", "_margin_saved", "_post", "_post_hike", "_pick", "_cost", "_purchase_product"],
     "chat/wording.py": ["_added", "_change_line", "_record_lines", "proposal_text", "_summary", "_shown", "_subject"],
     "owner_answers.py": "all", "media.py": ["Refused"], "claims.py": ["question"], "live_policy.py": ["_plain_reason", "refusal"],
     "hike_chat.py": "all",  # HASS-CHAT-1
@@ -358,7 +358,7 @@ class Honesty(ConversationTestCase):
         self.assertIn("I don't know a product called", reply)
         self.say("margin Nonesuch at 35%")
         [reply] = self.replies()
-        self.assertIn("I don't have a cost saved", reply)
+        self.assertIn("I don't know a product called", reply)  # AV2137-05: an unknown product is not "no cost saved"
 
     def test_tool_failure_says_what_happened_and_what_next(self):
         class Down:

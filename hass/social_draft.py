@@ -4,6 +4,7 @@
     python3 hass/social_draft.py --hike EVENT_ID
     python3 hass/social_draft.py --maker KEY
     python3 hass/social_draft.py --recap EVENT_ID
+    python3 hass/social_draft.py --notice
 
 Prints one JSON object. Success: {"draft": true, "image", "alt", "caption", "illustration"} (illustration: true unless the image is an installed owner photo, HOME_IMAGE_RE) built only from the product's
 stored name, description, image, imageAlt and its maker's name and place (caption <= 2200 characters, at most
@@ -29,6 +30,11 @@ caption is cut after its last ".", "!" or "?" (followed by white space or the en
 Refusal (exit 1): "cannot read content" | "no such hike" | "say how it went first" (not completed, or no recap) | "hike record
 incomplete" (title not one line, recap not text, start unreadable) | "free text has a hashtag or account name" (title or any part of
 the recap, also the part cut off) | "caption too long".
+--notice prints {"draft": true, "caption"}: the home notice the saved site content shows today (Pacific, first and last day included),
+its days in words ("through Thursday, November 26", "from Monday, November 23 through Thursday, November 26" when it has a first
+day), the store name, "<street>, <town>.", then fixed #AvocadoShack #MorroBay. Refusal (exit 1): "cannot read content" |
+"no notice on the website" (none, not yet shown or already ended) | "notice record incomplete" | "store record incomplete" |
+"free text has a hashtag or account name" | "caption too long".
 Read-only: nothing is posted, scheduled, written or sent, and the module imports no network code.
 """
 from __future__ import annotations
@@ -42,12 +48,13 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass.content_model import CATEGORIES, CONTENT_DIR, HOME_IMAGE_RE, INVISIBLE_RE, SITE_DIR, ContentError, load_content  # noqa: E402
+from hass.content_model import CATEGORIES, CONTENT_DIR, HOME_IMAGE_RE, INVISIBLE_RE, SITE_DIR, ContentError, load_content, notice_days, shop_today  # noqa: E402
 from hass.ops import hikes  # noqa: E402
 
 MAX_CAPTION = 2200
 HIKE_TAGS = "#AvocadoShack #NorthCoastHikingClub"  # fixed; never from free text
 MAKER_TAGS = "#AvocadoShack #MeetTheMaker"  # fixed; never from free text
+STORE_TAGS = "#AvocadoShack #MorroBay"  # fixed; never from free text
 CATEGORY_TAGS = {c: "#" + c.capitalize() for c in CATEGORIES}  # fixed per category; never from free text
 # a hashtag or @account in free text is refused, never rewritten; marks: # @, full-width U+FF03 U+FF20, small-form U+FE5F U+FE6B
 _TAG_RE = re.compile(r"[#@\uFF03\uFF20\uFE5F\uFE6B]\w")
@@ -177,6 +184,29 @@ def build_maker(content, maker_key: str) -> dict:
     return refuse("caption too long") if len(caption) > MAX_CAPTION else {"draft": True, "caption": caption}
 
 
+def build_notice(content, now: datetime) -> dict:
+    """AV1104-07: {"draft": True, "caption"} for the home notice visible on the Pacific day of the aware ``now``
+    (its first day, when saved, and its last day both count), else {"draft": False, "reason": ...}. Saved content only."""
+    from hass.sitegen import _day_text  # the site's own day words; not imported at module load (sitegen is large)
+    def refuse(reason): return {"draft": False, "reason": reason}
+    store = getattr(content, "store", None)
+    if not isinstance(store, dict): return refuse("cannot read content")
+    if "notice" not in store: return refuse("no notice on the website")
+    notice = store["notice"]
+    days = notice_days(notice)
+    if days is None: return refuse("cannot read content")
+    first, last = days
+    today = shop_today(now)
+    if today > last or (first is not None and today < first): return refuse("no notice on the website")
+    if not _line(notice["text"]): return refuse("notice record incomplete")
+    name, street, town = store.get("name"), store.get("streetAddress"), store.get("town")
+    if not all(_line(v) for v in (name, street, town)): return refuse("store record incomplete")
+    if any(_TAG_RE.search(t) for t in (notice["text"], name, street, town)): return refuse("free text has a hashtag or account name")
+    window = f"through {_day_text(last)}" if first is None else f"from {_day_text(first)} through {_day_text(last)}"
+    caption = f"{notice['text']}\n{window}\n{name}\n{street}, {town}.\n\n{STORE_TAGS}"
+    return refuse("caption too long") if len(caption) > MAX_CAPTION else {"draft": True, "caption": caption}
+
+
 def _aware_clock(text: str) -> datetime:
     """argparse type for the hidden --now: an ISO timestamp that carries a timezone offset (never guessed)."""
     try: value = datetime.fromisoformat(text.replace("Z", "+00:00"))
@@ -186,12 +216,13 @@ def _aware_clock(text: str) -> datetime:
 
 
 def main(argv=None, content_dir: Path = CONTENT_DIR, site_dir: Path = SITE_DIR) -> int:
-    parser = argparse.ArgumentParser(description="Print a local DRAFT Instagram post for one active product or hike, or a maker introduction (posts nothing).")
+    parser = argparse.ArgumentParser(description="Print a local DRAFT Instagram post for one active product or hike, a maker introduction or the home notice (posts nothing).")
     which = parser.add_mutually_exclusive_group(required=True)
     which.add_argument("product_id", nargs="?")
     which.add_argument("--hike", metavar="ID")
     which.add_argument("--maker", metavar="KEY")
     which.add_argument("--recap", metavar="ID")
+    which.add_argument("--notice", action="store_true")
     parser.add_argument("--now", type=_aware_clock, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)  # --now: tests only
     try: content = load_content(content_dir)
@@ -199,6 +230,7 @@ def main(argv=None, content_dir: Path = CONTENT_DIR, site_dir: Path = SITE_DIR) 
     if content is None: result = {"draft": False, "reason": "cannot read content"}
     elif args.maker is not None: result = build_maker(content, args.maker)
     elif args.recap is not None: result = build_recap(content, args.recap)
+    elif args.notice: result = build_notice(content, args.now or datetime.now(timezone.utc))
     elif args.hike is not None: result = build_hike(content, args.hike, args.now or datetime.now(timezone.utc))
     else: result = build(content, args.product_id, site_dir)
     print(json.dumps(result, ensure_ascii=False, indent=2))
