@@ -57,6 +57,7 @@ def _id(row, n, label, seen):
 def _expect_ok(expect) -> bool:
     # RF1155-12: the no-draft sentinel is literal JSON true; == would also admit 1 and 1.0
     if isinstance(expect, dict) and len(expect) == 1 and expect.get("question", expect.get("unsupported")) is True: return True
+    if isinstance(expect, dict) and set(expect) == {"lookup"}: return isinstance(expect["lookup"], str) and bool(expect["lookup"])  # AV1104-06: the command the reply must name
     if not (isinstance(expect, dict) and set(expect) == {"ops", "revises"}): return False
     return (isinstance(expect["ops"], list) and bool(expect["ops"]) and isinstance(expect["revises"], (str, type(None)))
             and all(isinstance(c, dict) and set(c) == {"op", "args"} and isinstance(c["op"], str)
@@ -109,7 +110,7 @@ def load_replies(path) -> dict:
     return replies
 
 
-def _kind(r) -> str: return "ops" if "ops" in r else "question" if "question" in r else "unsupported"
+def _kind(r) -> str: return "ops" if "ops" in r else "question" if "question" in r else "lookup" if "lookup" in r else "unsupported"
 
 
 def _why(case, reply, registry):
@@ -117,6 +118,7 @@ def _why(case, reply, registry):
     got = interpret_check.check(_checked(reply), registry, {p.get("code") for p in case["pending"]})
     expect, same = case["expect"], lambda a, b: json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
     if _kind(got) != _kind(expect): return f"expected {_kind(expect)}, got {_kind(got)}"
+    if "lookup" in expect: return None if got["lookup"] == expect["lookup"] else "lookup differs"  # AV1104-06: the exact command, no text in the reason
     if "ops" not in expect: return None
     for call in expect["ops"]:  # RF2210-12: expected names are case data; never format an unregistered one into a reason
         op = registry.get(call["op"])

@@ -161,7 +161,23 @@ class NaturalLanguageRulesTest(unittest.TestCase):
             self.assertIn(phrase, self.rules)
 
     def test_rules_stay_small_enough_for_a_cpu_model_to_read(self):
-        self.assertLess(len(" ".join(RULES).encode("utf-8")), 11500)  # AV1052-04: the whole-shelf/maker availability rule; AV0222-10: the maker story rule; AV2152-09: the club intro rule; AV2152-08: the notice first-day rule; AV1937-01: the photo rule names three places; AV1937-06: the maker and route rule; AV2152-05: the shelf and maker group rule
+        self.assertLess(len(" ".join(RULES).encode("utf-8")), 11800)  # AV1104-06: the lookup rule (was 11500); AV1052-04: the whole-shelf/maker availability rule; AV0222-10: the maker story rule; AV2152-09: the club intro rule; AV2152-08: the notice first-day rule; AV1937-01: the photo rule names three places; AV1937-06: the maker and route rule; AV2152-05: the shelf and maker group rule
+
+
+class LookupPromptTest(unittest.TestCase):
+    """AV1104-06: the contract names the fourth shape and one early rule tells a question from a change."""
+
+    def test_contract_and_one_rule_name_the_lookup_and_the_question_as_change_contrast(self):  # bug: the model is never told it may look something up, or that a polite request is a change
+        prompt = build(TEST_REGISTRY, tiny_content())
+        self.assertEqual(prompt.count('{"lookup": "<command>"}\n'), 1)  # the contract line
+        rules = [r for r in RULES if "lookup" in r]
+        self.assertEqual(len(rules), 1)
+        for phrase in ("how many are coming Saturday?", "is the sourdough sold out?", "what\'s on the dairy shelf?", "what are my hours?",
+                       "-> status", "-> shelf dairy", "-> listing store", "can you mark the eggs sold out?", "product.set_availability",
+                       "could you move the hike to 10am?", "hike.update", "is still a change"):
+            self.assertIn(phrase, rules[0])
+        self.assertLess(RULES.index(rules[0]), len(RULES) - 6)  # early: the photo/repeat/design/notes tail keeps its positions
+        self.assertEqual(prompt.count("next Saturday"), 1)  # the date rule's one example; the lookup rule adds none
 
 
 if __name__ == "__main__":

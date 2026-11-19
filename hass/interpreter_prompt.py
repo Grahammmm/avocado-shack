@@ -45,6 +45,7 @@ CONTRACT = (
     '{"ops": [{"op": "<name>", "args": {...}}], "revises": "<code>" or null}\n'
     '{"question": "<one short question for the owner>"}\n'
     '{"unsupported": "<one short reason>"}\n'
+    '{"lookup": "<command>"}\n'
     '"revises" may only be a code from the "pending" list in the user message; otherwise it is null.')
 
 VOICE_RULES = (  # HASS-VOICE-1: the same rules as docs/hass/VOICE.md; hass/voice.py checks every reply that reaches the owner
@@ -114,6 +115,12 @@ RULES = (
     "Shelf is a product's listed shelf and maker is its listed maker key. When the owner clearly names a whole shelf or "
     "maker, change every listed product id with it, without asking only because several match. Ask if the group is unclear "
     "or incomplete (a more-rows line) or over the operation limit; never invent ids.",
+    # AV1104-06: a question that only asks what the site shows is answered by a read-only command, never a draft
+    'A message that only asks what the site, shop or hikes show is {"lookup": "<command>"}, never an answer: status, report, '
+    'history [words], find <words>, listing <id or store>, shelf <name> or hidden. "how many are coming Saturday?" -> status; '
+    '"is the sourdough sold out?" -> listing with its product id; "what\'s on the dairy shelf?" -> shelf dairy; "what are my '
+    'hours?" -> listing store. A question that asks for a change is still a change: "can you mark the eggs sold out?" -> '
+    'product.set_availability; "could you move the hike to 10am?" -> hike.update.',
     'If the message asks for what the Store or Hikes tables already show (the same hours, a hike already cancelled), or '
     'a hint says "alreadyTrue", reply {"question": "It already says that: <the current value>. Did you mean something '
     'else?"}; never draft a change that changes nothing.',

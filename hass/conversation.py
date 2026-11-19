@@ -77,6 +77,7 @@ TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed":
 INTERRUPTED = "interrupted; not applied; approve a new draft"
 SOCIAL_REPLY = "Nothing changed. Tell me what you'd like to change, or say " + q("help") + "."  # AV0007-07
 UNREADABLE = {"unsupported": "Sorry, I didn't understand that. Could you say it another way?"}
+LOOKUP_PREFIX = "You asked, so nothing was drafted.\n"  # AV1104-06: in front of the one reply a lookup gets
 HOSTILE_RE = re.compile(r"\b(?:ignore|disregard|forget|override|bypass)\b[^.!?]{0,40}\b(?:rules|instructions|guidelines|approval|safeguards?|previous|above)\b"
                         r"|\b(?:publish|approve|apply|post)\s+(?:everything|all\s+(?:of\s+)?(?:it|changes|drafts))\b|\bskip\s+(?:the\s+)?approvals?\b"
                         r"|\b(?:system|developer)\s+prompt\b|\bjailbreak\b|\bact\s+as\b[^.!?]{0,30}\b(?:admin|root|developer)\b", re.I)
@@ -199,7 +200,8 @@ class Editor:
 
 
 class FixtureInterpreter:
-    """Maps exact message text to an interpreter result; anything else is unsupported. No model, no network."""
+    """Maps exact message text to an interpreter result; anything else is unsupported. No model, no network. A result is any
+    of the four shapes: ops + revises, question, unsupported, or (AV1104-06) {"lookup": "<read-only command>"}."""
 
     def __init__(self, mapping):
         self.mapping = dict(mapping)
@@ -443,6 +445,7 @@ def _checked(result) -> dict:
             return result
         for key in ("question", "unsupported"):
             if set(result) == {key} and isinstance(result[key], str) and result[key].strip(): return result
+        if set(result) == {"lookup"} and isinstance(result["lookup"], str): return result  # AV1104-06: even "" (interpret_check refuses it)
     return dict(UNREADABLE)
 
 
@@ -726,12 +729,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         try: yield
         finally: self._to = before
 
+    _lookup_prefix = None  # AV1104-06: text put before the next reply only (set and restored by _lookup)
+    _lapsed = ()  # AV1104-06: lapsed drafts whose move to `expired` waits for the interpreter's answer (a lookup never moves them)
     _said = None  # SKILLS-FW-3: the text of the newest reply queued while handling a message (a question kept on the open request)
     _last_draft_code = None  # SKILLS-FW-3: the code of the draft row the last _draft call proposed or asked about
 
     def _reply(self, text, attachments=(), **flags):
         chat = self._chat()
         if chat not in self._owner_chats: attachments = ()  # G's chat is text only (the Mac sends no pictures there); every owner chat gets pictures
+        if self._lookup_prefix is not None:  # AV1104-06: the first reply of a lookup says nothing was drafted; consumed once
+            text, self._lookup_prefix, flags = self._lookup_prefix + text, None, {**flags, "long_ok": True}
         self._said = text
         self.outbox.add(chat, text, attachments, self._answering or None, **flags)
 
@@ -1112,6 +1119,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         try:
             with self._tx():
                 disposition, approved = self._handle(msg, last_try)
+                self._expire_lapsed()  # AV1104-06: whatever _request left unmoved (it never reached the interpreter) is moved now
                 if approved is not None and not apply: raise _Held(approved["code"])
                 till_approvals.save(self, msg, self._till_job, apply)
         except _Held as held:
@@ -1229,6 +1237,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if first: command = memory = None
         till = first or (None if command or memory or msg.attachments > 0 or self.till is None or intake_answer else self.till.parse(msg.text))  # HASS-CLOVER-2
         if memory and memory[0] == "memory" or till: expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
+        self._lapsed = ()
+        if (expired and not (command or memory or till or first or msg.attachments > 0 or intake_answer) and phone is None and coded is None
+                and parse_keyword(msg.text) is None and parse_unknown_code(msg.text) is None and parse_near(msg.text) is None
+                and classify_social(msg.text) is None):
+            self._lapsed, expired = expired, []  # AV1104-06: only _request follows: it moves them once it knows the reply is not a lookup
         for row in expired:
             self._move(row, "expired", expires_at=_iso(self._expiry(row)))
             if row["state"] == "proposed": self._audit("refused", row, "expired")  # AVB-10
@@ -1788,11 +1801,39 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return disposition
         return self._request_now(msg, now, req, False)
 
+    def _expire_lapsed(self) -> None:
+        """AV1104-06: the move to `expired` (and its audit line) for the drafts _handle found lapsed and held back, exactly as the
+        old up-front sweep did. Nothing is held back unless the message can only reach the interpreter."""
+        lapsed, self._lapsed = self._lapsed, ()
+        for held in lapsed:
+            row = self._row(held["row_id"])
+            if row["state"] not in ("proposed", "needs-details"): continue
+            self._move(row, "expired", expires_at=_iso(self._expiry(row)))
+            if row["state"] == "proposed": self._audit("refused", row, "expired")  # AVB-10
+
+    def _lookup(self, msg, now, result) -> str:
+        """AV1104-06: a question that only asks what the site, shop or hikes show. ``result`` is {"lookup": text}. An allowed
+        read-only command (interpret_check.lookup_command) is answered by its own handler with one line in front; anything else
+        gets the fixed refusal. Nothing is drafted, approved, saved or expired; the interpreter call was already counted."""
+        self._lapsed = ()  # never moved: a lapsed draft is only filtered out by time
+        checked = interpret_check.check(result, self._registry(), ())
+        if "unsupported" in checked:
+            self._reply(voice.quote(checked["unsupported"]), long_ok=True)  # quoted: the voice check bans "drafted" and "<id>", the owner sees the fixed words as they are
+            return "lookup"
+        verb, argument = interpret_check.lookup_command(checked["lookup"])
+        self._lookup_prefix = voice.quote(LOOKUP_PREFIX)
+        try: self._command(msg, now, verb, argument)
+        finally: self._lookup_prefix = None
+        return "lookup"
+
     def _request_now(self, msg, now, req, separate) -> str:
         cap, skills_on = self.settings["interpreterDailyCap"], self.skills_mode != dispatch_mod.DEFAULT_MODE
+        if skills_on and not separate and req is not None: self._expire_lapsed()  # the open skill request may read a lapsed draft: not a lookup, it is a short answer
         if skills_on and not separate and (done := self.dispatch.cheap(msg, now)) is not None: return done  # a short answer read by code: no model call
         from hass.skills import stock as stock_skill  # AV2007-15: a plain "shelf check done" is drafted by code, never the model
-        if stock_skill.plain_shelf_check(msg.text): return self._draft_shelf_check(msg, now, {})
+        if stock_skill.plain_shelf_check(msg.text):
+            self._expire_lapsed()
+            return self._draft_shelf_check(msg, now, {})
         if cap is not None:  # H22: counted before the call in this transaction, so a failed call still counts
             day, calls = self._calls(now)
             if calls >= cap:
@@ -1830,6 +1871,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         elif failed is not None and self.db.execute(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone():
             self.db.execute("DELETE FROM control WHERE name = 'reader-failed'")  # a request was read again
+        if skill_result is None and "lookup" in result: return self._lookup(msg, now, result)  # AV1104-06: the interpreter call is counted; nothing else is touched
+        self._expire_lapsed()  # AV1104-06: the sweep _handle held back until the reply was known not to be a lookup
         if skill_result is not None: return self.dispatch.reply(msg, now, skill_result, req)  # SKILLS-FW-3
         if skills_on and self.skills_mode == "skills-first" and "ops" in result and any(
                 dispatch_mod.op_is_owned(c["op"], self.dispatch.registry) for c in result["ops"] if isinstance(c, dict) and isinstance(c.get("op"), str)):
