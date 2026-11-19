@@ -403,3 +403,72 @@ class JobTests(unittest.TestCase):
         self.assertTrue((images / stray.relative_to(self.root)).is_file())
         self.assertFalse((images / orig.relative_to(self.root)).exists())
         self.assertFalse(json.loads((target / "config.json").read_text())["settings"]["npp"])
+
+    # Contract (rule: NPP stays on after a restore only if EVERY photo of EVERY open job is in the restored originals; a
+    # request that cannot be read fails closed and the report names the job). Bug caught: only npp_jobs.photo_sha was checked.
+    def restore_open_jobs(self, tag=""):
+        out = self.root.parent / f"backups{tag}"
+        out.mkdir(mode=0o700)
+        saved = Path(statebackup.create(self.repo.state, out, now=self.now)["backup"])
+        restored_wt = self.root.parent / f"restored-wt{tag}"
+        git(self.repo.main, "worktree", "add", "-qb", f"hass/npp-drill{tag}", str(restored_wt))
+        target, images = self.root.parent / f"restore{tag}", self.root.parent / f"restore-media{tag}"
+        got = statebackup.restore(saved, target, restored_wt, media_into=images)
+        self.assertEqual(got["result"], "ok", got)
+        return got, json.loads((target / "config.json").read_text())["settings"]
+
+    def original(self, sha):
+        return next(p for p in (self.root / "originals" / sha[:2]).glob(f"{sha}.*") if p.suffix != ".json")
+
+    def two_photo_job(self):
+        self.say("sell $2", photos=2)
+        self.work()
+        shas = json.loads(self.conv.db.execute("SELECT attachments_json FROM open_requests").fetchone()[0])
+        self.assertEqual(len(shas), 2)
+        self.assertEqual(self.job()["photo_sha"], shas[0])
+        return shas
+
+    def test_restore_keeps_npp_on_when_every_photo_of_the_open_job_is_present(self):
+        self.two_photo_job()
+        got, settings = self.restore_open_jobs()
+        self.assertTrue(settings["npp"])
+        self.assertNotIn("nppOff", got)
+
+    def test_restore_turns_npp_off_when_second_photo_of_open_job_is_missing(self):
+        first, second = self.two_photo_job()
+        job = self.job()["job_id"]
+        gone = self.original(second)
+        gone.unlink()
+        gone.with_suffix(".json").unlink()
+        got, settings = self.restore_open_jobs()
+        self.assertTrue((self.root.parent / "restore-media" / self.original(first).relative_to(self.root)).is_file())
+        self.assertFalse(settings["npp"])
+        self.assertEqual(got["nppOff"], [{"job": job, "why": f"original missing: {second[:12]}"}])
+
+    def test_restore_turns_npp_off_when_an_open_job_request_cannot_be_read(self):
+        self.two_photo_job()
+        job = self.job()["job_id"]
+        for n, sql in enumerate(("UPDATE open_requests SET attachments_json = 'not json'",
+                                 "UPDATE open_requests SET attachments_json = '{}'",
+                                 "UPDATE open_requests SET attachments_json = '[\"zz\"]'",
+                                 "UPDATE open_requests SET attachments_json = '[7]'", "DELETE FROM open_requests")):
+            with self.subTest(sql=sql):
+                self.conv.db.execute(sql)
+                self.conv.db.commit()
+                got, settings = self.restore_open_jobs(str(n))
+                self.assertFalse(settings["npp"])
+                self.assertEqual([p["job"] for p in got["nppOff"]], [job])
+                self.assertRegex(got["nppOff"][0]["why"], "request (missing|unreadable)")
+
+    def test_restore_ignores_the_photos_of_a_closed_job(self):
+        # A closed job needs none of its photos: with its second original gone, npp still stays on (no open jobs = unchanged).
+        _, second = self.two_photo_job()
+        self.conv.db.execute("UPDATE npp_jobs SET closed_at = ?, state = 'expired'", (self.now.isoformat(),))
+        self.conv.db.commit()
+        gone = self.original(second)
+        gone.unlink()
+        gone.with_suffix(".json").unlink()
+        got, settings = self.restore_open_jobs()
+        self.assertTrue(settings["npp"])
+        self.assertNotIn("nppOff", got)
+
