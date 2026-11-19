@@ -22,9 +22,21 @@ def _ident(item, group):
     return item.sku.strip() if sku and not any(sku in ((o.sku or "").strip().lower(), o.id.lower()) for o in group if o is not item) else item.id
 
 
+def _labels(products, items):
+    """One label per member of a same-name group (site products, then till items), distinct over the whole group: a site product's id, a
+    till item's SKU-or-id; any label equal to another's (either side) becomes "site <id>" / "till <item id>"."""
+    raw = [(p["id"], f"site {p['id']}") for p in products] + [(_ident(i, items), f"till {i.id}") for i in items]
+    out = [pre if sum(r.lower() == o.lower() for o, _ in raw) > 1 else r for r, pre in raw]
+    if len({o.lower() for o in out}) < len(out):   # a plain label that equals a prefixed one: prefix them all
+        out = [pre for _, pre in raw]
+    assert len(set(out)) == len(out), out
+    return out
+
+
 def suggest(snapshot, content, links):
-    """(pairs {product id: link}, clashes, site_only, till_only): the last three list EVERY item left over, never linked. A name shared by
-    several items carries a label unique in its group: the site product id, or the till SKU when no other item shares it, else the item id."""
+    """(pairs {product id: link}, clashes, site_only, till_only): the last three list EVERY item left over, never linked. A name on both
+    sides with more than one item on either side is a clash and lists all its site products and till items. A name shared by several
+    items carries a label unique in its whole group (see _labels); a name with one item stays plain."""
     taken = {v.get("cloverId") for v in links.values() if isinstance(v, dict)}
     site, till = {}, {}
     for p in content["products"]:
@@ -33,18 +45,16 @@ def suggest(snapshot, content, links):
     for i in snapshot.items:
         if i.id not in taken:
             till.setdefault(norm_name(i.name), []).append(i)
-    pairs, clashes = {}, []
-    label = lambda name, ident, many: f"{name} ({ident})" if many else name   # noqa: E731 - a shared name carries its id/SKU
-    for name, ps in sorted(site.items()):
-        items = till.get(name, [])
-        if len(ps) == 1 and len(items) == 1:
+    pairs, rows = {}, ([], [], [])   # rows: clashes, site only, till only
+    for name in sorted(site.keys() | till.keys()):
+        ps, items = site.get(name, []), till.get(name, [])
+        if len(ps) == 1 == len(items):
             pairs[ps[0]["id"]] = {"cloverId": items[0].id, **({"sku": items[0].sku} if items[0].sku else {})}
-        elif items:
-            clashes += [f"{p['name']} ({p['id']})" for p in ps]
-            clashes += [label(i.name, _ident(i, items), True) for i in items if len(items) > 1]
-    return (pairs, clashes,
-            [label(p["name"], p["id"], len(ps) > 1) for n, ps in sorted(site.items()) if n not in till for p in ps],
-            [label(i.name, _ident(i, its), len(its) > 1) for n, its in sorted(till.items()) if n not in site for i in its])
+            continue
+        ids = _labels(ps, items)
+        rows[0 if ps and items else 1 if ps else 2].extend(
+            f"{n} ({i})" if len(ids) > 1 else n for n, i in zip([p["name"] for p in ps] + [i.name for i in items], ids))
+    return (pairs, *rows)
 
 
 def write(path, value):

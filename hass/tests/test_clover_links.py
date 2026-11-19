@@ -57,18 +57,25 @@ class LinkTests(Fixture, CliCase):
     def test_suggest_links_exact_names_only_and_lists_the_rest_unlinked(self):
         # Contract: a looser (fuzzy, hidden-site or clashing) match is never suggested. Bug: "Heirloom tomato" joins "Heirloom tomatoes".
         snapshot, _ = cache.read(self.state, cache.identity_of(from_settings(BLOCK)))
-        pairs, clashes, site_only, till_only = links.suggest(snapshot, PRODUCTS, {})
+        pairs, clashes, site_only, till_only = self.distinct(snapshot, PRODUCTS)
         self.assertEqual(pairs, {"avocado": {"cloverId": "FAKEITEM00002"}, "oil": {"cloverId": "FAKEITEM00001", "sku": "AS-PAN-SUNSHINE-OLIVE-OIL-01"}})
-        self.assertEqual((clashes, site_only), (["Eggs, dozen (eggs-1)", "eggs, dozen (eggs-2)"], ["Heirloom tomato", "Lemons"]))
+        self.assertEqual((clashes, site_only), (["Eggs, dozen (eggs-1)", "eggs, dozen (eggs-2)", "Eggs, dozen (EGG12)"], ["Heirloom tomato", "Lemons"]))   # the lone till item is listed too
         self.assertEqual(till_only, ["Heirloom tomatoes", "Market special (ring up price)", "Old honey jar"])
         self.assertEqual(links.suggest(snapshot, PRODUCTS, {"avocado": {"cloverId": "FAKEITEM00002"}})[0].keys(), {"oil"})   # linked ones are left alone
+
+    def distinct(self, snapshot, content, links_=None):
+        """Contract: no two labels in any list suggest() returns are equal. Run over every fixture output in this file."""
+        found = links.suggest(snapshot, content, links_ or {})
+        for rows in found[1:]:
+            self.assertEqual(len(rows), len(set(rows)), rows)
+        return found
 
     def test_every_one_sided_item_is_listed_and_same_name_twins_carry_their_ids(self):
         # Contract: nothing left over is silently dropped. Bug: only the first of two same-name unmatched items was listed (ps[0] / its[0]).
         till = lambda i, name, sku="": types.SimpleNamespace(id=i, name=name, sku=sku)   # noqa: E731
         snapshot = types.SimpleNamespace(items=[till("T1", "Quince", "Q-1"), till("T2", "quince"), till("T3", "Plum"), till("T4", "Fig"), till("T5", "fig")])
         content = {"products": [P("s1", "Pear"), P("s2", "pear"), P("s3", "Plum"), P("s4", "Fig"), P("s5", "Kale")]}
-        pairs, clashes, site_only, till_only = links.suggest(snapshot, content, {})
+        pairs, clashes, site_only, till_only = self.distinct(snapshot, content)
         self.assertEqual(pairs, {"s3": {"cloverId": "T3"}})
         self.assertEqual(site_only, ["Kale", "Pear (s1)", "pear (s2)"])             # (a) both site-only twins, each with its product id
         self.assertEqual(till_only, ["Quince (Q-1)", "quince (T2)"])                 # (b) both till-only twins, by SKU or else item id
@@ -79,19 +86,28 @@ class LinkTests(Fixture, CliCase):
         till = lambda i, name, sku="": types.SimpleNamespace(id=i, name=name, sku=sku)   # noqa: E731
         snapshot = types.SimpleNamespace(items=[till("T1", "Quince", "Q"), till("T2", "quince", "Q"), till("T3", "Leek", "L"), till("T4", "leek", " l "),
                                                 till("T5", "Leek", "L-5"), till("T6", "Fig", "F"), till("T7", "fig", "F"), till("T8", "Kiwi", "T9"), till("T9", "kiwi")])
-        pairs, clashes, site_only, till_only = links.suggest(snapshot, {"products": [P("s1", "Fig")]}, {})
+        pairs, clashes, site_only, till_only = self.distinct(snapshot, {"products": [P("s1", "Fig")]})
         self.assertEqual((pairs, site_only), ({}, []))
         self.assertEqual(till_only, ["Kiwi (T8)", "kiwi (T9)",                         # a SKU that is another item's id is not used
                                      "Leek (T3)", "leek (T4)", "Leek (L-5)",         # (b) the shared pair shows ids, the unique SKU may show
                                      "Quince (T1)", "quince (T2)"])                  # (a) one shared SKU: both item ids
         self.assertEqual(clashes, ["Fig (s1)", "Fig (T6)", "fig (T7)"])              # (c) the same collision in the clash list
-        real = links.suggest(cache.read(self.state, cache.identity_of(from_settings(BLOCK)))[0], PRODUCTS, {})
-        for rows in (clashes, till_only, *real[1:]):
-            self.assertEqual(len(rows), len(set(rows)), rows)                        # (d) no two labels in a list are equal
+
+    def test_clash_labels_are_unique_across_site_and_till_and_a_lone_till_item_is_listed(self):
+        # Contract: every label in a same-name group is distinct over BOTH sides, and every member of a clash group is listed.
+        # Bug: site id "s1" and a till SKU "s1" both gave "Fig (s1)"; one till item beside two site products was left out of the list.
+        till = lambda i, name, sku="": types.SimpleNamespace(id=i, name=name, sku=sku)   # noqa: E731
+        snapshot = types.SimpleNamespace(items=[till("T1", "Fig", "s1"), till("T2", "Fig"), till("T3", "Plum", "p"), till("T4", "Date", "d"), till("T5", "Pear")])
+        content = {"products": [P("s1", "Fig"), P("p", "Plum"), P("p2", "plum"), P("d1", "Date"), P("d2", "date"), P("pear", "Pear")]}
+        pairs, clashes, site_only, till_only = self.distinct(snapshot, content)
+        self.assertEqual((pairs, site_only, till_only), ({"pear": {"cloverId": "T5"}}, [], []))   # 1:1 unchanged
+        self.assertEqual(clashes, ["Date (d1)", "date (d2)", "Date (d)",              # two site products, ONE till item (its SKU): it is listed
+                                   "Fig (site s1)", "Fig (till T1)", "Fig (T2)",     # the colliding pair is prefixed by side, the till one by item id
+                                   "Plum (site p)", "plum (p2)", "Plum (till T3)"])  # a till SKU equal to a site id collides too
 
     def test_cli_saves_one_private_draft_and_a_private_list_and_prints_counts_only(self):
         out, stdout = self.suggest()
-        self.assertEqual({k: v for k, v in out.items() if k != "code"}, {"result": "ok", "matches": 2, "sameName": 2, "siteOnly": 2, "tillOnly": 3,
+        self.assertEqual({k: v for k, v in out.items() if k != "code"}, {"result": "ok", "matches": 2, "sameName": 3, "siteOnly": 2, "tillOnly": 3,
                                                                           "asOf": "2026-11-10T20:00:00+00:00"})
         for name in ("avocado", "Eggs", "tomato", "Hass"):
             self.assertNotIn(name, stdout)
