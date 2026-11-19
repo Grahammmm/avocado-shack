@@ -3131,3 +3131,155 @@ Link: [issue #2](https://github.com/Grahammmm/avocado-shack/issues/2). Progress:
 ### Issue #3 — reliable operation
 
 Link: [issue #3](https://github.com/Grahammmm/avocado-shack/issues/3). Progress: [AV0222-12](#phone-guide-and-limits-for-owner-shortcuts-av0222-12--november-18-2026) explains shortcuts and shelves in the guide, and [AV0222-14](#acceptance-map-for-av0222-regressions-av0222-14--november-18-2026) registers the regressions in the acceptance map. Still open: H25 stays a release step and the real-device checks remain open.
+
+## H12 a photo's own caption is bound to it (AV2007-01) — November 15, 2026
+
+Branch rb/av2007-01 (AV2007-01, PR #869, merged as 086d13aaaa2b1fc287ad6fb81d7628ce88a76f03). A caption on a photo that names a new item is bound to that photo, and the photo question is asked only when the caption did not already answer it. Photo then name, and name then captioned photo, keep the right original and carry on toward the same product draft. A follow-up fix keeps the caption evidence through the photo detail question.
+
+Checks at PR head c8a68af8e3870e7bb525b8c4471d41cf520268a7: PR #869 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_qa1_new_item_chat hass.tests.test_photo_draft hass.tests.test_photo_new_product hass.tests.test_photo_home_image hass.tests.test_label_reader hass.tests.test_demo_transcript_photo` (not rerun per unit for this ledger).
+
+Limits: Issue #2 (media and photos). No hike photo is attached to a product, no business fact or image description is invented, a photo never approves a draft and the photo installer is unchanged; the recorded question-only model outputs are not claimed to finish a draft, and no live or model call was made.
+
+## H17 undo and thanks name the change still waiting (AV2007-02) — November 15, 2026
+
+Branch rb/av2007-02 (AV2007-02, PR #870, merged as 622b95d410daf72e2c1c313e7dcec990ca8a5ba7). When only a draft waits, `undo` says nothing is saved yet, names the waiting change and says `no <code>` drops it. Thanks and a thumbs-up name what still waits instead of implying the chat is finished. When a saved change exists too, `undo` still proposes the same history revert and also names the waiting change.
+
+Checks at PR head 8180f58762a78549cba5dab6de6621072e9d7e96: PR #870 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_qa1_waiting_reminders hass.tests.test_near_approval hass.tests.test_social_message hass.tests.test_undo_skip_undo hass.tests.test_voice hass.tests.test_phone_answers hass.tests.test_interpreter_cap` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Nothing applies the undo or discards the waiting draft, and no grammar changes: no `undo that` language, typo handling, auto-cancel or automatic second yes.
+
+## H17 an exact read-only trigger is answered without a which-task question (AV2007-03) — November 15, 2026
+
+Branch rb/av2007-03 (AV2007-03, PR #871, merged as 1a8efafbef247783f6a64c0d1f4bf84d96ceaffc). A whole message that exactly matches the trigger of one read-only skill, such as `what's sold out?`, is answered with the code-written report in one reply once the recorded model selects that skill. Shared lead words alone still ask which task.
+
+Checks at PR head dc819a477eab6df968bc8448fdb51868bec96c04: PR #871 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_skills_router hass.tests.test_skills_reports hass.tests.test_demo_rehearsal` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Only exact whole-message triggers are affected: no ranking change for other input, no automatic choice of a stock-changing skill, and validation is not skipped. This unit adds no new test module.
+
+## H17 capability questions get the help list (AV2007-04) — November 16, 2026
+
+Branch rb/av2007-04 (AV2007-04, PR #872, merged as 114e92e532cab54c5396258598aefb512c2b843d). `what can you do`, `what can you do?`, `what do you do` and `what can I say` now answer with the existing help list, built by code with no model call, in every chat mode. The aliases are written in the commands guide.
+
+Checks at PR head 39c6946e5c031bd09067b34df79735a5ccbc9e2e: PR #872 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_help hass.tests.test_demo_rehearsal` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). The help list is not redesigned, no capability is added and no other phrase is read as a command. This unit adds no new test module.
+
+## H17 near-command texts get the exact command words (AV2007-05) — November 17, 2026
+
+Branch rb/av2007-05 (AV2007-05, PR #947, merged as 493c3aa6ca5b36cd4b4bbadd6f220165ead12e76). A near-command such as `stop changes now`, `Pause changes please` or `Resume changes please` is answered by code with the exact words to send (`stop changes` or `resume changes`) instead of model-invented instructions. The message itself pauses, resumes and approves nothing.
+
+Checks at PR head 026573a132d75d2b2950eb544121f588234110ea: PR #947 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_status_pause hass.tests.test_voice hass.tests.test_demo_rehearsal` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Polite commands are still not executed (the held QA1-02 request stays held), and undo-that and one-letter typos are untouched. This unit adds no new test module.
+
+## H05 a repeated draft says what happened to the earlier one (AV2007-06) — November 16, 2026
+
+Branch rb/av2007-06 (AV2007-06, PR #874, merged as 0793081b4de5ef85bdaac79cd913c1eeac02a37c). A bare yes to a repeated draft still refuses approval and still needs `yes <new code>`, but now says whether the earlier draft timed out, was cancelled by the owner or could not be saved.
+
+Checks at PR head fe065b8b5f2896a9cfaf47fbf9bee9d770896bf1: the CI investigation for this PR is the AV2007-06 entry near the top of this ledger; no count is quoted for the final head; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_repeat_outcome hass.tests.test_conversation` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). No code is shortened or reused and approval is not simplified.
+
+## H13 store phone shows in the site's format (AV2007-07) — November 16, 2026
+
+Branch rb/av2007-07 (AV2007-07, PR #873, merged as 87af991a3fb4f833b64cda60a1ce60ff3706a0c1). A store phone change in a draft, in `show` and in history uses the site's own phone spelling instead of bare digits, and undo shows the same spelling in reverse. Storage stays the validated ten digits.
+
+Checks at PR head 334142467809472d67e59510c6e1491182493704: PR #873 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_phone_wording hass.tests.test_demo_rehearsal` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). The live refusal for store phone and address changes is unchanged; there is no new phone parser, history backfill or permission change.
+
+## H17 till suggestions accept singular or plural words (AV2007-08) — November 15, 2026
+
+Branch rb/av2007-08 (AV2007-08, PR #877, merged as b83d3615a2ff8802c5b82339b7802e6e62c8d97d). The till's `Did you mean` suggestions accept the singular or plural form of each word, so asking how many avocados we have suggests the Hass avocado instead of saying nothing matches. Every-word matching, hidden-item exclusion, name order and the limit of five stay.
+
+Checks at PR head 627ad66a24506646743ab0e14e55a3dc02b7bfb7: PR #877 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_clover_chat hass.tests.test_clover_mapper` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Suggestions only; the till stays read-only, a suggestion is never an exact match and never picks a write target. This unit adds no new test module.
+
+## H04 holiday dates in date hints (AV2007-09) — November 15, 2026
+
+Branch rb/av2007-09 (AV2007-09, PR #876, merged as 49a0c558faf99acd66a18528eed1666a890c3eb0). The interpreter's date hints give the exact coming date, in Pacific time, of Thanksgiving, Christmas Day and Eve, New Year's Day and Eve, July 4th, Memorial Day and Labor Day.
+
+Checks at PR head a9dc6549e522b2550d5b189ef25d6531d0826102: PR #876 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_nl_prep_calendar` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Only a calendar fact in the hints: no model question is rewritten, no draft path is added, and there is no explicit-year holiday grammar.
+
+## H04 a weekday that disagrees with its date is asked about (AV2007-10) — November 16, 2026
+
+Branch rb/av2007-10 (AV2007-10, PR #891, merged as 0af47d401ee9354dbb81c74389ed170cdb579f65). When a message pairs a weekday with a date that is not that weekday, Hass asks which day is meant before drafting a hike or notice, instead of picking one. A matching pair still works.
+
+Checks at PR head bbd4770a0c59642030beeb84ce780a221dd8acc9: PR #891 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_weekday_date_mismatch` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Only adjacent weekday and date pairs are checked; no new date language, and independent date mentions behave as before.
+
+## H04 spelled-out days of the month are read (AV2007-11) — November 16, 2026
+
+Branch rb/av2007-11 (AV2007-11, PR #910, merged as 2a793749a6b26c33292c3cc77151fbe60152c52a). Spelled-out ordinal days of the month (`saturday the twenty first`, `the fifth`, `November thirtieth`) are read in date hints like digit ordinals.
+
+Checks at PR head 59eeff5d86a17efb4a57a3e5d5c87d41fb0f007c: PR #910 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_nl_prep_ordinal_words` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Ordinal parsing only: no date redesign, no audio transcription and the weekday-mismatch question of AV2007-10 is unchanged.
+
+## H03 an exact stock product name wins before asking which (AV2007-12) — November 16, 2026
+
+Branch rb/av2007-12 (AV2007-12, PR #875, merged as 73769b17c33fbb2427463ceadf69fc4ca2d6ad38). In the default chat mode, a message that names exactly one product (`we're out of raspberries`, `raspberries are back`) resolves to that product instead of asking which kind, and a misspelled name suggests only site products. Equal matches still ask.
+
+Checks at PR head 22ea6a9ee8c30dabb683c6370de7507c59839a49: the CI follow-up for this PR is the AV2007-12 entry near the top of this ledger; no count is quoted for the final head; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_stock_product_choice` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Editor checks and the hidden and held product protections are kept; no bulk or count wording, date handling or skill routing change.
+
+## H05 a non-hike question stays bound to its answer (AV2007-13) — November 16, 2026
+
+Branch rb/av2007-13 (AV2007-13, PR #878, merged as 93a3df28d8d4025544f9d86864f7413dc82194d9). An unknown coded answer does not use up an open question, a separate request is not read as its answer, and a bare `no` drops the question with a plain reply.
+
+Checks at PR head 8517d7a26bb6e01c7f81ed76577f2a8f91187aea: the CI repairs for this PR are the AV2007-13 entries near the top of this ledger; no count is quoted for the final head; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_non_hike_question_turns hass.tests.test_candidate_answer_safety` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Non-hike questions only: hike scheduling, the shelf yes/no flow, approval grammar, draft expiry and status wording are unchanged.
+
+## H05 a question asked while a draft waits survives the yes (AV2007-14) — November 17, 2026
+
+Branch rb/av2007-14 (AV2007-14, PR #948, merged as 93053b3f574e283b4197fb559c87ad9c8b56b14a). A question Hass asked while another draft waits is repeated at the end of the saved reply after the yes, is listed by `status` next to the waiting draft, and the owner's next answer is still read as its answer.
+
+Checks at PR head 2a57f8bd87ac4006c65fa4da9d454c0099261d47: PR #948 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_second_question hass.tests.test_preview_route_results` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). The wrong holiday date in a model question, cancel and other-topic policy, shelf-check words, hike questions and the prompt are untouched.
+
+## H03 plain shelf-check sentences make a coded draft (AV2007-15) — November 18, 2026
+
+Branch rb/av2007-15 (AV2007-15, PR #879, merged as 9d551945248aceecf52a12a6dbc8be96d7b801d3). `did the shelf check, all good`, `shelf check done` and `shelf check: all good` draft today's shelf check by code in the ops-only and combined chat modes. The proposal names its code and needs `yes <code>`; nothing is saved before that. A stale reissue says to reply with the code.
+
+Checks at PR head 576b5e4b5c8731af97ec465225f200fff2946e3c: PR #879 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_plain_shelf_check hass.tests.test_skills_stock` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Only today's shelf-check record changes: no product word is assigned, refreshed or cleared; exception lists belong to AV2007-16.
+
+## H03 shelf check with exceptions drafts the sold-out products (AV2007-16) — November 19, 2026
+
+Branch rb/av2007-16 (AV2007-16, PR #5, merged as f6960d8072777c8f67b8da8088fdc6008ca64ca0). `shelf check: everything's there except the watermelon` (and `all good except X and Y`, up to five names) makes one coded draft: today's shelf check plus each named product sold out. A name that is unclear, held or hidden gets a question and nothing is drafted; more than five names are refused.
+
+Checks at PR head 3e8fcbb1bd08538da0e68e2b3850a6be40b262d4: PR #5 records the owner-battery replay (35 passed, 0 failed) and seven test modules (127 tests, OK); PREPUSH-TESTS NOT-RUN (full tier deferred to CI); the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_shelf_check_except hass.tests.test_plain_shelf_check hass.tests.test_skills_stock hass.tests.test_shelf_check_flow hass.tests.test_selection_checked hass.tests.test_status_shelf_check hass.tests.test_qa1_fixes` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Only sold-out exceptions: nothing is marked available, and there are no `limited` or `in` words, price or count words.
+
+## H14 hike drafts say cancelled and rescheduled (AV2007-17) — November 15, 2026
+
+Branch rb/av2007-17 (AV2007-17, PR #880, merged as b302d26bee6a4d8993f9da324d743bf206c56aca). A cancellation draft says the named hike is cancelled, and a start-time change gets a rescheduled line above the unchanged was and now lines, instead of the field wording about whether it shows. The cancellation note and Pacific times are kept.
+
+Checks at PR head 299619f5451674227c119d7541dd70bd3df983a7: PR #880 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_hike_change_words hass.tests.test_hike_flow hass.tests.test_hike_time_text` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Product and maker status lines keep the generic wording; no sign-up policy, past-hike refusal, bulk cancellation or history migration.
+
+## H14 sign-up-off and absent-notice dead ends are explained (AV2007-18) — November 15, 2026
+
+Branch rb/av2007-18 (AV2007-18, PR #881, merged as 6092a54f1f64263d2299e0699713fe70c1ccd766). Asking to change the guest limit of a hike whose sign-up is off says that sign-up is off, so there is no limit to change, and that nothing changed. Clearing a notice that is not there says so in the same way.
+
+Checks at PR head 4c7d9ae08f407c0b9717678d3a61c8f680b9767d: PR #881 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_chat_dead_end_reasons` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Explanation only: no new refusal of an update that works today, and sign-up policy, ceilings and approval grammar are unchanged.
+
+## H09 the demo rehearsal covers the till steps (AV2007-19) — November 15, 2026
+
+Branch rb/av2007-19 (AV2007-19, PR #883, merged as 1b0f5b877230e36c060a17777fa285d436bd7d43). The offline demo rehearsal now replays the till read steps 9 and 10 from the recorded till fixture: how many Hass avocados, low stock, one sold-out question, the plural avocado question, and a till write refused with the read-only reply. No reply quotes a price.
+
+Checks at PR head 543f4da3d562b8768a12e5a7b6b2cc6e2ee0f493: PR #883 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_demo_rehearsal` (not rerun per unit for this ledger).
+
+Limits: Issue #1 (conversation and ops). Offline with no token and no network; the till stays read-only, `--live` stays operator-only, and the known-gap removals and plural matching belong to other units. No AV2007 unit is Issue #3 (health and backup).

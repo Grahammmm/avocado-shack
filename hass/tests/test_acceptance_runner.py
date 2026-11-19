@@ -221,22 +221,22 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(acceptance.MAP["H01"], ("test_content", "test_content_read_errors",
                          "test_browser_freshness", "test_publish"))
         self.assertEqual(acceptance.MAP["H02"], ("test_editor", "test_maker_product_batch"))
-        self.assertEqual(acceptance.MAP["H03"], ("test_catalog_ops", "test_clear_availability",
+        self.assertEqual(acceptance.MAP["H03"][:7], ("test_catalog_ops", "test_clear_availability",
                          "test_product_new", "test_maker_hide_products", "test_maker_optional_url",
                          "test_product_default_brand", "test_maker_optional_story"))
-        self.assertEqual(acceptance.MAP["H12"], ("test_attachment_reply", "test_photo_draft",
+        self.assertEqual(acceptance.MAP["H12"][:7], ("test_attachment_reply", "test_photo_draft",
                          "test_photo_on_product", "test_photo_new_product", "test_photo_home_image",
                          "test_photo_batch", "test_media_batch"))
         self.assertEqual(acceptance.MAP["H22"], ("test_interpreter_cap", "test_interpreter_prompt"))
-        self.assertEqual(acceptance.MAP["H17"], ("test_status_pause", "test_help",
+        self.assertEqual(acceptance.MAP["H17"][:7], ("test_status_pause", "test_help",
                          "test_status_photos", "test_listing_command", "test_status_notice",
                          "test_social_draft_maker", "test_post_maker_command"))
         self.assertEqual(acceptance.MAP["H25"], "release step")
-        self.assertEqual(acceptance.MAP["H04"], ("test_hike_ops", "test_route_add",
+        self.assertEqual(acceptance.MAP["H04"][:9], ("test_hike_ops", "test_route_add",
                          "test_route_edit", "test_route_hide", "test_hike_samples",
                          "test_hike_repeat", "test_hike_ics", "test_hike_cancel_note",
                          "test_preview_cancel_note"))
-        self.assertEqual(acceptance.MAP["H05"], ("test_conversation", "test_near_approval",
+        self.assertEqual(acceptance.MAP["H05"][:19], ("test_conversation", "test_near_approval",
                          "test_unknown_approval_code", "test_again", "test_interpreter_prompt_shelf_maker",
                          "test_interpreter_prompt_descriptions", "test_claims_health_awards",
                          "test_interpreter_no_undo", "test_field_words", "test_question_missing_fields",
@@ -252,12 +252,25 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(acceptance.MAP["H15"], ("test_memory", "test_memory_source",
                          "test_memory_alias", "test_memory_listing", "test_memory_unchanged",
                          "test_memory_chat", "test_limits_doc"))
-        self.assertEqual(acceptance.MAP["H13"], ("test_store_ops", "test_store_intro",
+        self.assertEqual(acceptance.MAP["H13"][:8], ("test_store_ops", "test_store_intro",
                          "test_store_headline", "test_store_story",
                          "test_store_home_image", "test_store_clear_home_image", "test_notice_start",
                          "test_club_intro"))
         for id_ in ("H03", "H04", "H05", "H06", "H10", "H12", "H13", "H15"):
             self.assertEqual(len(acceptance.MAP[id_]), len(set(acceptance.MAP[id_])))
+        # AV2007-20: each module a unit added sits at the end of exactly its H row, and in no other row.
+        # Contract: a later MAP edit must not silently drop or move an AV2007 module out of the standing run.
+        added = {"H03": ("test_stock_product_choice", "test_plain_shelf_check", "test_shelf_check_except"),
+                 "H04": ("test_nl_prep_calendar", "test_weekday_date_mismatch", "test_nl_prep_ordinal_words"),
+                 "H05": ("test_repeat_outcome", "test_non_hike_question_turns", "test_second_question"),
+                 "H12": ("test_qa1_new_item_chat",), "H13": ("test_phone_wording",),
+                 "H14": ("test_hike_change_words", "test_chat_dead_end_reasons"),
+                 "H17": ("test_qa1_waiting_reminders",)}
+        for id_, mods in added.items():
+            self.assertEqual(acceptance.MAP[id_][-len(mods):], mods, id_)
+            for m in mods:
+                self.assertTrue(os.path.exists(os.path.join(acceptance._TESTS_DIR, m + ".py")), m)
+                self.assertEqual([k for k, v in acceptance.MAP.items() if m in v], [id_], m)
 
     def test_av1622_modules_selected_once(self):
         class Recorder(unittest.TestLoader):
