@@ -66,3 +66,15 @@ class ValidateTests(unittest.TestCase):
             with self.subTest(code=code):
                 ctx = replace(self.ctx, owner_words='My next delivery arrives soon')
                 self.assertEqual(validate.field_problem(self.writer, 'description', text, (), ctx), code)
+
+    def test_card_text_must_be_the_validated_copy_and_nothing_else(self):
+        # Contract: S7 checks the rendered card against the approved draft, not just price/number/contact.
+        # Bug caught: a swapped description ("This cures cancer.") or an extra unlisted line passed with no problems.
+        description = self.copy.text['description']
+        swapped = [self.nodes[0], self.nodes[1], 'This cures cancer.']
+        self.assertIn('card-copy', self.verdict(card_nodes=swapped).problems)
+        self.assertIn('card-copy', self.verdict(card_nodes=[*self.nodes, 'Handmade with love.']).problems)
+        self.assertIn('card-copy', self.verdict(card_nodes=[self.nodes[0], self.nodes[1]]).problems)
+        # Whitespace folding and the checked origin line stay legal.
+        self.assertEqual(self.verdict(card_nodes=[self.nodes[0], self.nodes[1], ' '.join(description.split()) + ' ',
+                                                  validate.ORIGIN_UNKNOWN, 'From the market']).problems, ())

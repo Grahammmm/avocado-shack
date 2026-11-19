@@ -61,11 +61,18 @@ def field_problem(writer, key, text, permits, ctx):
     return None
 
 
-def dom_problem(nodes, price_index, price, name, approved=(), private=()):
+def _flat(text):
+    return ' '.join(text.split())
+
+
+def dom_problem(nodes, price_index, price, name, approved=(), private=(), allowed=None, required=()):
     """`nodes` are visible DOM text fragments in order, with the exact price element identified.
 
     Keep numbers licensed in copy only in exact, already checked fields; no numeric-value
     allowlist. Pass only the numeric-bearing fields (name and/or story) as `approved`.
+    When `allowed` is given, every other public fragment must equal one of those approved
+    strings (whitespace-folded) and every `required` string must be rendered, so a swapped
+    description or any extra claim fails even if it has no contact or number in it.
     """
     if not isinstance(nodes, (tuple, list)) or not all(isinstance(s, str) for s in nodes) or name not in nodes:
         return 'card-text'
@@ -86,6 +93,12 @@ def dom_problem(nodes, price_index, price, name, approved=(), private=()):
     rest = ' '.join(text if i != price_index and text not in approved else ' ; ' for i, text in enumerate(nodes))
     if numbers.problem(rest, private):
         return 'card-number'
+    if allowed is not None:
+        shown = {_flat(text) for i, text in enumerate(nodes) if i != price_index}
+        if any(text.strip() and _flat(text) not in allowed for i, text in enumerate(nodes) if i != price_index):
+            return 'card-copy'
+        if any(_flat(text) not in shown for text in required):
+            return 'card-copy'
     return None
 
 
@@ -172,8 +185,13 @@ def listing(writer, ctx, copy, draft, *, finance, origin, makers, live_site, pho
         problems.append(problem)
     elif _contact(picture_read):
         problems.append('picture-contact')
+    # The card may show only the validated copy, the checked brand/origin lines and the maker panel.
+    shown_ok = {_flat(v) for v in (text.get('name'), text.get('description'), text.get('story'), product.get('displayBrand'), product.get('brand'), origin,
+                                   maker.get('name'), maker.get('place'), maker.get('story')) if isinstance(v, str) and v.strip()}
     if price and (problem := dom_problem(card_nodes, price_index, price, text.get('name'),
-                                        tuple(text[k] for k in ('name', 'story') if text.get(k)), private)):
+                                        tuple(text[k] for k in ('name', 'story') if text.get(k)), private,
+                                        allowed=shown_ok,
+                                        required=tuple(text[k] for k in ('name', 'description', 'story') if text.get(k)))):
         problems.append(problem)
     if claims.unstated(draft, ctx.owner_words, makers):
         problems.append('existing-claims')
