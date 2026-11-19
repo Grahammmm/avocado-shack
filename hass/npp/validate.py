@@ -186,8 +186,13 @@ def listing(writer, ctx, copy, draft, *, finance, origin, makers, live_site, pho
     elif _contact(picture_read):
         problems.append('picture-contact')
     # The card may show only the validated copy, the checked brand/origin lines and the maker panel.
+    # An existing maker's catalog name, place and story are not part of this copy: each is shown only when it
+    # carries no protected claim (health/awards/endorsements, superlatives, ...). A new maker's story is text['story'].
+    panel = [maker.get('name'), maker.get('place')]
+    if not new_makers and not live_policy._protected(maker.get('story') or '')[1]:
+        panel.append(maker.get('story'))
     shown_ok = {_flat(v) for v in (text.get('name'), text.get('description'), text.get('story'), product.get('displayBrand'), product.get('brand'), origin,
-                                   maker.get('name'), maker.get('place'), maker.get('story')) if isinstance(v, str) and v.strip()}
+                                   *panel) if isinstance(v, str) and v.strip()}
     if price and (problem := dom_problem(card_nodes, price_index, price, text.get('name'),
                                         tuple(text[k] for k in ('name', 'story') if text.get(k)), private,
                                         allowed=shown_ok,

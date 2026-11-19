@@ -78,3 +78,14 @@ class ValidateTests(unittest.TestCase):
         # Whitespace folding and the checked origin line stay legal.
         self.assertEqual(self.verdict(card_nodes=[self.nodes[0], self.nodes[1], ' '.join(description.split()) + ' ',
                                                   validate.ORIGIN_UNKNOWN, 'From the market']).problems, ())
+
+    def test_existing_maker_story_is_shown_only_when_it_carries_no_protected_claim(self):
+        # Contract: the card-copy gate binds maker-panel text too. Bug caught: an existing maker's catalog story
+        # ("This cures cancer.") was auto-allowed on the card because only contacts/numbers were checked.
+        self.product['producerKey'] = 'oak-farm'
+        origin = 'Based in Oakdale'
+        def card(story):
+            return self.verdict(makers={'oak-farm': {'name': 'Oak Farm', 'place': 'Oakdale', 'story': story}}, origin=origin,
+                                card_nodes=[*self.nodes, origin, story])
+        self.assertNotIn('card-copy', card('We grow plums on a small hill.').problems)
+        self.assertIn('card-copy', card('This cures cancer.').problems)
