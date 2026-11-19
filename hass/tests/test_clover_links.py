@@ -74,6 +74,21 @@ class LinkTests(Fixture, CliCase):
         self.assertEqual(till_only, ["Quince (Q-1)", "quince (T2)"])                 # (b) both till-only twins, by SKU or else item id
         self.assertEqual(clashes, ["Fig (s4)", "Fig (T4)", "fig (T5)"])            # one site product, two till items: neither is linked or lost
 
+    def test_same_name_twins_with_one_sku_or_a_sku_equal_to_an_id_still_get_distinct_labels(self):
+        # Contract: every label in a same-name group is unique. Bug: two twins sharing SKU "Q" were both labelled "Quince (Q)".
+        till = lambda i, name, sku="": types.SimpleNamespace(id=i, name=name, sku=sku)   # noqa: E731
+        snapshot = types.SimpleNamespace(items=[till("T1", "Quince", "Q"), till("T2", "quince", "Q"), till("T3", "Leek", "L"), till("T4", "leek", " l "),
+                                                till("T5", "Leek", "L-5"), till("T6", "Fig", "F"), till("T7", "fig", "F"), till("T8", "Kiwi", "T9"), till("T9", "kiwi")])
+        pairs, clashes, site_only, till_only = links.suggest(snapshot, {"products": [P("s1", "Fig")]}, {})
+        self.assertEqual((pairs, site_only), ({}, []))
+        self.assertEqual(till_only, ["Kiwi (T8)", "kiwi (T9)",                         # a SKU that is another item's id is not used
+                                     "Leek (T3)", "leek (T4)", "Leek (L-5)",         # (b) the shared pair shows ids, the unique SKU may show
+                                     "Quince (T1)", "quince (T2)"])                  # (a) one shared SKU: both item ids
+        self.assertEqual(clashes, ["Fig (s1)", "Fig (T6)", "fig (T7)"])              # (c) the same collision in the clash list
+        real = links.suggest(cache.read(self.state, cache.identity_of(from_settings(BLOCK)))[0], PRODUCTS, {})
+        for rows in (clashes, till_only, *real[1:]):
+            self.assertEqual(len(rows), len(set(rows)), rows)                        # (d) no two labels in a list are equal
+
     def test_cli_saves_one_private_draft_and_a_private_list_and_prints_counts_only(self):
         out, stdout = self.suggest()
         self.assertEqual({k: v for k, v in out.items() if k != "code"}, {"result": "ok", "matches": 2, "sameName": 2, "siteOnly": 2, "tillOnly": 3,

@@ -16,9 +16,15 @@ from hass.clover.mapper import norm_name
 DRAFT = "link-draft.json"
 
 
+def _ident(item, group):
+    """A till item's label inside its same-name group: its SKU only if nonempty and no other item has that SKU (or id), else its item id."""
+    sku = (item.sku or "").strip().lower()
+    return item.sku.strip() if sku and not any(sku in ((o.sku or "").strip().lower(), o.id.lower()) for o in group if o is not item) else item.id
+
+
 def suggest(snapshot, content, links):
     """(pairs {product id: link}, clashes, site_only, till_only): the last three list EVERY item left over, never linked. A name shared by
-    several items carries its site product id / till SKU (or item id); a till name two till items share is a clash too."""
+    several items carries a label unique in its group: the site product id, or the till SKU when no other item shares it, else the item id."""
     taken = {v.get("cloverId") for v in links.values() if isinstance(v, dict)}
     site, till = {}, {}
     for p in content["products"]:
@@ -35,10 +41,10 @@ def suggest(snapshot, content, links):
             pairs[ps[0]["id"]] = {"cloverId": items[0].id, **({"sku": items[0].sku} if items[0].sku else {})}
         elif items:
             clashes += [f"{p['name']} ({p['id']})" for p in ps]
-            clashes += [label(i.name, i.sku or i.id, True) for i in items if len(items) > 1]
+            clashes += [label(i.name, _ident(i, items), True) for i in items if len(items) > 1]
     return (pairs, clashes,
             [label(p["name"], p["id"], len(ps) > 1) for n, ps in sorted(site.items()) if n not in till for p in ps],
-            [label(i.name, i.sku or i.id, len(its) > 1) for n, its in sorted(till.items()) if n not in site for i in its])
+            [label(i.name, _ident(i, its), len(its) > 1) for n, its in sorted(till.items()) if n not in site for i in its])
 
 
 def write(path, value):
