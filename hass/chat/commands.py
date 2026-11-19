@@ -45,7 +45,8 @@ HELP_ENTRIES = (
     ("show", "Drafts", (), (q("show a1b2") + " - repeat a waiting change (its code or a word from it)",)),
     ("again", "Drafts", (), (q("again a1b2") + " - re-draft an expired or undone change (within 7 days)",)),  # AV2152-03
     ("find", "Look up", (), (q("find lion's mane") + " - look something up",)),
-    ("listing", "Look up", (), (q("listing Etto") + " - what's shown for one thing",)),
+    ("listing", "Look up", (), (q("listing Etto") + " - what's shown for one thing",
+                                q("listing store") + " - the hours and home page words")),  # AV1052-06
     ("shelf", "Look up", (), (q("shelf vegetables") + " - read a shelf",)),  # AV1052-05
     ("hidden", "Look up", (), (q("hidden") + " - lists what's hidden",)),
     ("report", "Look up", ("morning report",), (q("report") + " - the morning shelf report",)),
