@@ -59,6 +59,13 @@ class NameFixture(StoreMixin, ConversationTestCase):
 
     verb = "post"
 
+    def sentence(self, text):
+        """A sentence that names no product is not a command: it goes to the interpreter, as on main (HASS-VOICE-1)."""
+        self.assertNotEqual(self.say(text), self.verb)
+        self.assertEqual(self.calls[:1], ["interpret"], text)
+        self.calls.clear()
+        self.replies()
+
     def digest(self):
         return hashlib.sha256(b"".join(p.read_bytes() for p in sorted(self.cdir.glob("*.json")))).hexdigest()
 
@@ -114,10 +121,10 @@ class PostByNameTests(NameFixture):
         self.assertEqual(self.ask("post photo-product-040")[0], "photo-product-040 isn't on the website right now.")
         self.set_status("photo-product-097", "hidden")
         self.assertEqual(self.ask("post Figs")[0], "I don't know a product called Figs. Try find and a word from its name.")
-        self.assertEqual(self.say("alias fig: photo-product-097"), "memory-saved")
+        self.assertEqual(self.say("alias fig tree: photo-product-097"), "memory-saved")
         self.replies()
         self.set_status("photo-product-097", "held")  # a saved alias cannot authorize an inactive product
-        self.assertEqual(self.ask("post fig tree")[0], NONE.format("fig tree"))
+        self.assertEqual(self.ask("post fig tree")[0], NONE.format("fig tree"))  # it still names a product, so it is answered here
         for text in ("post PHOTO-PRODUCT-001", "post Photo-Product-001", "post photo-product-001x"):  # id-shaped: not repaired
             self.assertEqual(self.ask(text)[0], f"I don't know a product called {text[5:]}. Try find and a word from its name.")
 
@@ -126,27 +133,27 @@ class PostByNameTests(NameFixture):
         self.photos()
         self.edit(lambda doc: doc["products"][0].update(name="hike boots"))
         self.edit(lambda doc: doc["products"][1].update(name="maker mix"))
+        self.edit(lambda doc: doc["products"][2].update(name="makers rest"))
         self.assertEqual(self.ask("post hike boots")[0], "I don't know a hike called boots. Try find and a word from its name.")
         self.assertEqual(self.ask("Post Maker Mix")[0], "No maker Mix; send find <words> for keys.")
-        self.assertTrue(self.ask("post hiker boots")[0].startswith("No active product matches"))  # lookalike words are names
+        self.assertTrue(self.ask("post makers rest")[0].startswith("This picture is an illustration"))  # a lookalike word is a name
         self.assertEqual(self.ask("post hike boots")[0], self.ask("post hike  boots")[0])
         self.assertTrue(self.ask("post boots")[0].startswith("This picture is an illustration"))  # the name itself works
 
-    def test_usage_unavailable_and_multiword_parser_migration(self):
-        # Contract: a bad query is the usage, never the interpreter; the catalog failure is one fixed line. Bug caught: a 61-character
-        # or two-line message reaching the interpreter as a change request, or a path leaking into the unavailable reply.
+    def test_usage_unavailable_and_sentences(self):
+        # Contract: a bare or over-long word is the usage; a sentence naming no product stays with the interpreter (HASS-VOICE-1, which
+        # the social skills rely on); an unreadable catalog is one fixed line. Bug caught: "post about the porch walk recap" answered
+        # here, or a path leaking into the unavailable reply.
         self.photos()
         self.assertEqual(self.ask("post")[0], voice.plain(conversation.POST_USAGE))
-        for text in ("post " + "a" * 29 + " " + "b" * 31, "post green\njam", "post green\x07jam", "post a\u2028b"):
+        self.assertEqual(self.ask("post " + "a" * 61), (voice.plain(conversation.POST_USAGE), []))
+        self.assertTrue(self.ask("post " + "a" * 60)[0].startswith("I don't know a product called"))
+        for text in ("post a sale on social media", "post about the porch walk recap", "post green\njam", "post " + "a b " * 16):
             with self.subTest(text=text):
-                self.assertEqual(self.ask(text), (voice.plain(conversation.POST_USAGE), []))
-        edge = "a" * 29 + " " + "b" * 30  # exactly 60
-        self.assertEqual(self.ask("post " + edge), (NONE.format(edge), []))
-        self.assertEqual(self.ask("post a sale on social media")[0], NONE.format("a sale on social media"))
-        self.assertEqual(self.ask("post x y")[0], NONE.format("x y"))
+                self.sentence(text)
+        self.assertEqual(self.ask("post   BRIAN’S   sourdough bread. ")[0][:20], "This picture is an i")
         (self.cdir / "products.json").write_text("{not json", "utf-8")
-        reply = self.ask("post green jam")
-        self.assertEqual(reply, (UNAVAILABLE, []))
+        self.assertEqual(self.ask("post green jam"), (UNAVAILABLE, []))
 
     def test_read_only_all_outcomes(self):
         # Contract: post by name writes nothing but the reply. Bug caught: a lapsed draft swept, a memory table created or a count used.
@@ -157,7 +164,7 @@ class PostByNameTests(NameFixture):
         before = (self.tables(), [dict(r) for r in self.conv.db.execute("SELECT * FROM control")], self.digest(), self.drafts())
         self.now += timedelta(seconds=601)  # the draft has lapsed; no other message has swept it yet
         with mock.patch("socket.socket", side_effect=AssertionError("network")):
-            for text in ("post Figs", "post yogurt", "post no such thing", "post", "post green\njam"):
+            for text in ("post Figs", "post yogurt", "post nonesuch", "post", "post " + "a" * 61):
                 self.ask(text)
         self.assertEqual((self.tables(), [dict(r) for r in self.conv.db.execute("SELECT * FROM control")], self.digest(), self.drafts()), before)
         self.assertEqual((self.drafts()[0]["state"], self.approvals(), self.editor.applies), ("proposed", 0, 0))

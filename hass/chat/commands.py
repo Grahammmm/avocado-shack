@@ -221,7 +221,10 @@ def parse_command(text: str, *, listing_names=False):
         return ("listing", ident) if listing_names or len(ident.split()) <= 1 else None
     if match[17]: return "hidden", None  # AV1222-13
     if match[15]: return "margin", match[16] or ""  # AV1102-12 (F03)
-    if match[13]: return "post", re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""  # AV1322-07: the id in its own case
+    if match[13]:  # AV1322-07: the id in its own case
+        ident = re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""
+        # AV1052-07: the whole rest is a name only for the conversation (listing_names, which then checks it names a product); the plain parser keeps its six-word window
+        return ("post", ident) if listing_names or not ident or re.fullmatch(r"(?:hike\s+)?\S+(?:\s+\S+){0,5}", ident, re.IGNORECASE) else None
     if match[12]: return "report", None  # AV1322-05 (F04)
     if match[10]: return "show", match[11] or ""  # AV0022-08: the code is checked by _show, never guessed
     if match[7]: return "help", None

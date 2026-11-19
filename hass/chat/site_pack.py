@@ -60,6 +60,13 @@ class SitePack:
         ids = [found["match"]] if "match" in found else [c["id"] for c in found["candidates"]]
         return [p for p in active if p["id"] in ids]
 
+    def _names_a_product(self, content, query) -> bool:
+        """AV1052-07: True when the query fits a product of ANY status by name, brand or saved alias (so it is a name, not a
+        sentence). Read-only; the memory table is never created."""
+        has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
+        found = catalog.lookup(content, "product", query, aliases=self.aliases() if has_memory else None)
+        return "match" in found or bool(found["candidates"])
+
     @staticmethod
     def _many_lines(hits) -> str:
         """AV1052-07: find-style lines (id, name, status) for several active matches; the tail when the lookup was full."""
@@ -128,6 +135,25 @@ class SitePack:
             text, photo = LOOK_FAIL, []
         self._reply(text, photo, long_ok=True, ids_ok=True)
         return "look"
+
+    def _listing_names_something(self, text) -> bool:
+        """Like post, a multiword listing needs a known name; unreadable content gets the usual read error. AV1052-07: a product
+        of any status counts (the answer then lists the active ones or says none is active); a sentence stays a sentence."""
+        try:
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            return True
+        return not self._bad_query(text) and (self._names_a_product(content, text) or self._pick("maker", text, content) != text
+                                             or self._pick_hike(content, text) != text or self._pick_hike(content, text, "routeIdeas") != text
+                                             or self._title_matches(content, text))
+
+    @staticmethod
+    def _title_matches(content, text) -> bool:
+        """True when some hike or route idea title holds every word, even if several do (the listing then says it is not sure)."""
+        words = catalog._fold(text).split()
+        if not words or not isinstance(content.community, dict): return False
+        return any(isinstance(e, dict) and isinstance(e.get("title"), str) and all(w in catalog._fold(e["title"]) for w in words)
+                   for key in ("events", "routeIdeas") for e in (content.community.get(key) if isinstance(content.community.get(key), list) else []))
 
     def _find(self, query) -> str:
         """AV1537-04: read-only lookup, products then makers; id/name/status only, never a draft or a memory table."""

@@ -17,7 +17,7 @@ UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you tr
 HEAD = 'This is from my saved copy, not a live look at the website:'
 NONE = "I don't know that one. Try find and a word from its name."
 MANY = "That fits more than one thing. Could you say a bit more of its name?"
-USAGE = conversation.LISTING_USAGE  # AV1052-07: names id, name or alias and find
+USAGE = voice.plain(conversation.LISTING_USAGE)  # AV1052-07: names id, name or alias and find
 
 
 class ListingTests(StoreMixin, ConversationTestCase):

@@ -43,7 +43,7 @@ class ListingByNameTests(NameFixture):
         self.assertGreaterEqual(len(self.active_ids("chocolate")), 10)
         capped = self.listing("chocolate")
         self.assertEqual((len(capped), capped[-1]), (11, MORE))
-        self.assertEqual(self.listing("no such thing at all"), [NONE])
+        self.assertEqual(self.listing("nonesuch"), [NONE])
         self.assertEqual(self.listing("raw milk goat cheddar"), [NONE])  # held only
         self.assertEqual(self.listing("photo-product-133")[0], HEAD)  # its exact id can still be inspected
         self.assertEqual(self.listing("PHOTO-PRODUCT-097"), [NONE])  # an id is not case-repaired
@@ -57,12 +57,14 @@ class ListingByNameTests(NameFixture):
         self.assertEqual(self.listing("etto")[:2], [HEAD, "Name: Etto"])
         self.assertEqual(self.listing("photo-product-001")[:2], [HEAD, "Name: Hass avocado"])
 
-    def test_usage_and_sentences_are_commands(self):
-        # Contract: a bad query is the usage and a sentence is answered here. Bug caught: either one reaching the interpreter.
-        for text in ("listing", "listing " + "a" * 29 + " " + "b" * 31, "listing green\njam", "listing green\x07jam"):
+    def test_usage_and_sentences(self):
+        # Contract: a bare or over-long word is the usage; a sentence naming nothing stays with the interpreter as on main. Bug caught:
+        # "listing of everything please" answered here, or the usage missing the name/alias/find words.
+        for text in ("listing", "listing " + "a" * 61):
             with self.subTest(text=text):
                 self.assertEqual(self.ask(text), (voice.plain(conversation.LISTING_USAGE), []))
-        self.assertEqual(self.listing("of everything please"), [NONE])
+        for text in ("listing of everything please", "listing green\njam"):
+            self.sentence(text)
         (self.cdir / "products.json").write_text("{not json", "utf-8")
         self.assertEqual(self.listing("green jam")[0], "I can't look that up right now. Nothing has changed. Could you try again in a little while?")
 
@@ -71,7 +73,7 @@ class ListingByNameTests(NameFixture):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
         before = (self.tables(), self.digest(), self.drafts())
-        for query in ("Figs", "sourdough", "nothing here"):
+        for query in ("Figs", "sourdough", "nonesuch"):
             self.listing(query)
         self.assertEqual((self.tables(), self.digest(), self.drafts()), before)
 

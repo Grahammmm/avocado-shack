@@ -28,8 +28,9 @@ class PostParseTests(unittest.TestCase):
         self.assertEqual(conversation.parse_command("post"), ("post", ""))
         for text in ("posts a", "please post a", "postit a"):
             self.assertIsNone(verb(text), text)
-        # AV1052-07: several words are one name or alias; the whole rest is read, up to the end of the line
-        self.assertEqual(conversation.parse_command("post a b c d e f g h"), ("post", "a b c d e f g h"))
+        # several words read as the command here (AV1052-07: however many); the conversation sends them to the interpreter unless they name a product
+        self.assertIsNone(conversation.parse_command("post a b c d e f g h"))  # AV1052-07: the plain parser keeps its window; the conversation reads the whole rest
+        self.assertEqual(conversation.read_command("post a b c d e f g h", listing_names=True), ("post", "a b c d e f g h"))
         self.assertEqual(conversation.parse_command("post Hass avocado"), ("post", "Hass avocado"))
 
 
@@ -101,10 +102,11 @@ class PostTests(StoreMixin, ConversationTestCase):
                 self.assertEqual(self.post(send), (words, []))
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
-    def test_no_id_gets_usage_and_two_words_are_a_name(self):
-        self.assertEqual(self.post("post"), (conversation.POST_USAGE, []))
-        self.assertIn("find <words>", conversation.POST_USAGE)
-        self.assertEqual(self.post("post x y"), ('No active product matches "x y"; send find <words> for ids.', []))  # AV1052-07: no longer the interpreter
+    def test_no_id_gets_usage_and_two_words_fall_through(self):
+        self.assertEqual(self.post("post"), ("Which product is the post for? Say post <id, name or alias>, like post Hass avocado; find <words> looks it up.", []))
+        self.interp.mapping["post x y"] = {"question": "Which?"}
+        self.assertNotEqual(self.say("post x y"), "post")
+        self.assertNotIn("Draft post", "\n".join(self.replies()))
 
     def test_id_is_matched_as_typed(self):
         upper = self.ids[0].upper()

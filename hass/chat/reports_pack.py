@@ -119,6 +119,20 @@ class ReportsPack:
             when = "Using your saved cost; I can't read when you gave it to me."
         return when + "\n" + calc
 
+    def _post_names_something(self, text) -> bool:
+        """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product
+        or hike; anything else keeps going to the interpreter as before. Unreadable content counts as a name so the usual
+        'can't read' answer follows. AV1052-07: a product of any status counts, and a name may fit several (they are listed)."""
+        try:
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            return True
+        words = text.split()
+        if words[0].lower() == "maker": return True  # AV1937-10: a maker key may be several words; it is never a sentence
+        if words[0].lower() == "hike" and len(words) == 2: return True  # one id after 'hike': the usual 'I don't know a hike' answer
+        if words[0].lower() == "hike": return self._pick_hike(content, text[4:].strip()) != text[4:].strip()
+        return not self._bad_query(text) and self._names_a_product(content, text)
+
     def _post(self, pid) -> str:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
         writer worktree content. Read-only: nothing is posted, scheduled, written or drafted; works while paused."""
