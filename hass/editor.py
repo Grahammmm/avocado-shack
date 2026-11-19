@@ -267,7 +267,12 @@ def prepare(request, *, state=None, registry=None, now=None, environment=None) -
     if problems: return {"result": "invalid", "problems": problems}
     try:
         design = _design_call(sdir, ops)
-        out = _design_compute(design, wt, sdir) if design else _compute(ops, wt, cfg.get("settings", {}), registry, now, sdir)
+        if design:  # a design draft is checked against a clean writer HEAD under the writer lock, as apply will (a dirty writer is refused up front)
+            with _writer_lock(sdir) as held:
+                if not held: return {"result": "busy"}
+                if problems := worktree_problems(wt): return {"result": "refused", "problems": problems}
+                out = _design_compute(design, wt, sdir)
+        else: out = _compute(ops, wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
     if out["result"] != "ok": return out

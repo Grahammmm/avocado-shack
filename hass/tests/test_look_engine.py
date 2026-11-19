@@ -120,6 +120,21 @@ class LookEngine(unittest.TestCase):
         self.assertEqual(git(self.bare, "rev-parse", "main"), self.site_before)
         self.assertEqual([j["state"] for j in self.live.books.journals()], ["not-applied", "not-applied"])
 
+    def test_design_prepare_refuses_a_dirty_or_busy_writer_up_front(self):
+        # Contract: a design draft is made only against a clean writer under the writer lock (as apply checks). Bug caught:
+        # prepare skipped both, so a dirty writer got an approval draft that apply then refused.
+        ok = self.look("prep", css_edit)
+        (self.repo.wt / "stray.txt").write_text("x\n")
+        out = self.design(ok)
+        self.assertEqual(out["result"], "refused")
+        self.assertIn("writer worktree has uncommitted changes", out["problems"])
+        self.assertEqual(list((Path(self.repo.state) / "drafts").glob("chg-*.json")), [])  # no approval draft was created
+        (self.repo.wt / "stray.txt").unlink()
+        with editor._writer_lock(Path(self.repo.state)) as held:
+            self.assertTrue(held)
+            self.assertEqual(self.design(ok), {"result": "busy"})
+        self.assertEqual(self.design(ok)["result"], "ok")
+
     def test_content_change_unchanged_and_design_path_in_it_refused(self):
         css = self.published("style.css")
         self.assertEqual(self.apply()["result"], "applied")
