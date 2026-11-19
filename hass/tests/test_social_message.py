@@ -126,8 +126,6 @@ class RegionalFlagTests(unittest.TestCase):
         for code in sorted(UNICODE16_FLAGS):
             with self.subTest(code=code):
                 self.assertEqual(classify_social(pair(code)), "social")
-        for code in ("US", "GB", "EU", "UN", "XK", "AC"):
-            self.assertEqual(classify_social(pair(code)), "social")
 
     def test_all_other_regional_pairs_fall_through(self):
         others = [c for c in ALL_PAIRS if c not in UNICODE16_FLAGS]
@@ -135,8 +133,6 @@ class RegionalFlagTests(unittest.TestCase):
         for code in others:
             with self.subTest(code=code):
                 self.assertIsNone(classify_social(pair(code)))
-        for text in ("\U0001F1E6\U0001F1E6", "\U0001F1FF\U0001F1FF", "\U0001F1FA\U0001F1F0"):
-            self.assertIsNone(classify_social(text))
 
     def test_regional_flags_require_whole_input_and_fixed_pairing(self):
         us, gb, zz, aa = pair("US"), pair("GB"), pair("ZZ"), pair("AA")

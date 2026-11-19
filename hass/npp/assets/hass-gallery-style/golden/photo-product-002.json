@@ -1,0 +1,25 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-002",
+  "photo_path": "assets/products/photo-product-002.webp",
+  "category": "pantry",
+  "card": {
+    "photo_alt": "Linn's triple berry preserves (illustration)",
+    "brand": "Linn's",
+    "name": "Linn's triple berry preserves",
+    "price": null,
+    "origin": "Based in Cambria, California",
+    "badges": [],
+    "availability": null,
+    "description": "Triple berry preserves for buttered toast, a bowl of yogurt, or a plain cake that deserves a little company. Keep a jar where breakfast happens.",
+    "meet_the_maker": {
+      "name": "Linn's",
+      "place": "Cambria, California",
+      "story": "Linn’s story starts with a family and a Central Coast farm. They have been growing crops and making food since 1979, with the next generation still working the land. These preserves belong on real bread, with real butter. A modest breakfast can be a very good meal.",
+      "visit_url": "https://www.linnseats.com/our-farm",
+      "see_all_count": 8
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-002#market"
+  }
+}

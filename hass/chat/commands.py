@@ -7,6 +7,7 @@ import re
 import unicodedata
 
 from hass import memory as memory_mod
+from hass.content_model import SHELF_LABELS
 from hass.chat.shared import ALIAS_NAME_MAX, q
 from hass.ops import catalog
 
@@ -27,7 +28,10 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(listing)(?:\s+(\S+(?:\s+\S+){0,5}))?"  # AV1622-09 (H17): groups 18/19; multiword names need a catalog check
                         r"|(photos to take)"  # AV0222-04 (H10/H17): group 20
                         r"|(backlog)"  # SKILLS-FW-3: group 21 (what I could not do yet; read-only)
-                        r"|(again)(?:\s+((?s:.*)))?")  # AV2152-03 (H05/H16): groups 22/23; the code is checked by _again, never guessed
+                        r"|(again)(?:\s+((?s:.*)))?"  # AV2152-03 (H05/H16): groups 22/23; the code is checked by _again, never guessed
+                        r"|(shelf)(?:\s+(.*))?")  # AV1052-05 (H17): groups 24/25; one line, the shelf is checked by _shelf
+
+SHELF_NOT_A_NAME = frozenset("report specials special check chek checked done finished in out then stock sold".split())  # AV1052-05: words that make "shelf ..." a stock update or report
 
 # AV1052-12 (H17/H25): one entry per command - (name, group, other words that reach it, full lines each ending in a quoted
 # example). `help` replies a short grouped index of the names; `help <name>` replies that entry's lines. Every line is
@@ -42,6 +46,7 @@ HELP_ENTRIES = (
     ("again", "Drafts", (), (q("again a1b2") + " - re-draft an expired or undone change (within 7 days)",)),  # AV2152-03
     ("find", "Look up", (), (q("find lion's mane") + " - look something up",)),
     ("listing", "Look up", (), (q("listing Etto") + " - what's shown for one thing",)),
+    ("shelf", "Look up", (), (q("shelf vegetables") + " - read a shelf",)),  # AV1052-05
     ("hidden", "Look up", (), (q("hidden") + " - lists what's hidden",)),
     ("report", "Look up", ("morning report",), (q("report") + " - the morning shelf report",)),
     ("post", "Look up", (), (q("post Hass avocado") + " - a caption to copy for a product",  # AV1937-10: nothing is posted
@@ -199,6 +204,10 @@ def parse_command(text: str, *, listing_names=False):
     if norm in UNDO_PHRASES: return "undo", None  # AV0222-07: the same as a bare undo
     match = COMMAND_RE.fullmatch(norm)
     if not match: return None
+    if match[24]:  # AV1052-05: a shelf name or an unknown shelf gets the read-only chooser; a stock update or report ("shelf chek done. milk in, cheese out", "shelf report then specials") stays with the interpreter
+        rest = (match[25] or "").strip()
+        if re.search(r"[,.;:?!]", rest) or set(rest.split()) & SHELF_NOT_A_NAME: return None
+        return "shelf", rest  # _shelf resolves it
     if match[22]: return "again", (match[23] or "").strip()  # AV2152-03: the rest as sent (lower-cased); _again accepts only a code
     if match[21]: return "backlog", None  # SKILLS-FW-3
     if match[20]: return "photos", None  # AV0222-04
@@ -253,7 +262,7 @@ def parse_memory(text: str):
     return ("memory", None, None) if match and match[5] else None
 
 
-READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "backlog", "look"}
+READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "backlog", "look", "shelf"}
 
 
 def _asked(text: str):

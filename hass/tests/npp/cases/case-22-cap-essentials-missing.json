@@ -1,0 +1,53 @@
+{
+  "id": 22,
+  "slug": "cap-essentials-missing",
+  "title": "Cap with the essentials missing at 100 s",
+  "contract": "R1.2: an incomplete listing never gets a card or an approval prompt, at the cap or otherwise",
+  "bug": "a card goes out at the deadline without a price",
+  "path": "question",
+  "terminal": "asking",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "new honey",
+      "photos": [
+        "npp:honey.jpg"
+      ]
+    }
+  ],
+  "settle_until_s": 130,
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/honey-good.png",
+      "latency_s": 95
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "question"
+      }
+    ],
+    "total_replies": 1,
+    "state": "asking",
+    "draft_rows": "none",
+    "approval_rows": 0,
+    "commits": 0,
+    "checks": [
+      "reply",
+      "no_draft"
+    ]
+  }
+}

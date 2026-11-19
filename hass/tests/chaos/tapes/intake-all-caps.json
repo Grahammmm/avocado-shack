@@ -1,24 +1,22 @@
 {
+ "case": "intake-all-caps",
  "calls": [
   {
-   "attrs": {
-    "last_backend": null,
-    "last_error": null,
-    "last_fallback": false,
-    "last_model": null,
-    "last_primary_error": null,
-    "last_seconds": null
-   },
-   "method": "answer.fields",
+   "turn": 1,
+   "method": "interpret",
    "result": {
-    "cost_cents": null,
-    "price_cents": 250,
-    "quantity": null
+    "question": "Which blood oranges should I add: the Blood Orange marmalade, or a new fruit called blood oranges?"
    },
-   "route": "qwen",
-   "seconds": 18.189,
-   "turn": 1
+   "attrs": {
+    "last_error": null,
+    "last_backend": "openai",
+    "last_fallback": true,
+    "last_primary_error": "codex-local",
+    "last_seconds": 1.374,
+    "last_model": "qwen3.8:27b-thinkingcap-q6"
+   },
+   "seconds": 1.374,
+   "route": "qwen"
   }
- ],
- "case": "intake-all-caps"
+ ]
 }

@@ -1,0 +1,207 @@
+{
+  "id": 30,
+  "slug": "research-owner-url-facts",
+  "title": "Owner gives the maker's address: kept, negated, past and fabricated facts",
+  "contract": "R1.3 and R2.2: supported typed facts are kept with their quote; negated or past quotes are dropped; free prose from the model never reaches the card",
+  "bug": "a negated or past quote is kept, or a fabricated sentence is published",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "made by Miners, Paso Robles https://minersfigs.example/about dried figs $7 each",
+      "photos": [
+        "npp:figs.jpg"
+      ]
+    },
+    {
+      "at_s": 80,
+      "from": "mike",
+      "text": "make it $8",
+      "photos": []
+    },
+    {
+      "at_s": 140,
+      "from": "mike",
+      "text": "yes {code}-2",
+      "photos": []
+    },
+    {
+      "at_s": 200,
+      "from": "mike",
+      "text": "undo",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/figs-good.png",
+      "latency_s": 22
+    },
+    "web": {
+      "search": {},
+      "pages": {
+        "https://minersfigs.example/about": {
+          "file": "pages/miners-about-mixed.html",
+          "retrieved": "2026-11-18",
+          "content_type": "text/html"
+        }
+      },
+      "forbid_fetch": [],
+      "robots": "allow all unless stated"
+    },
+    "stubs": {
+      "extract": [
+        {
+          "slot": "nature",
+          "value": "orchard",
+          "url": "https://minersfigs.example/about",
+          "quote": "Miners is an orchard in Paso Robles."
+        },
+        {
+          "slot": "makes",
+          "value": "dried figs",
+          "url": "https://minersfigs.example/about",
+          "quote": "Miners makes dried figs."
+        },
+        {
+          "slot": "town",
+          "value": "Templeton",
+          "url": "https://minersfigs.example/about",
+          "quote": "Miners was formerly based in Templeton."
+        },
+        {
+          "slot": "makes",
+          "value": "certified organic figs",
+          "url": "https://minersfigs.example/about",
+          "quote": "Our figs are not certified organic."
+        }
+      ],
+      "verify": "supports",
+      "copy": {
+        "description": "A third-generation family orchard's figs, hand-picked at dawn.",
+        "story": "Miners is a third-generation family orchard that has hand-picked every fig at dawn since 1952."
+      }
+    },
+    "item": "dried figs",
+    "item_note": "the S2 item slot the default description is anchored on (copy-templates.json defaults.description, rung a, kind food)"
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card"
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-2, or tell me what to change."
+        ],
+        "note": "the edit builds v2; every other field is copied from v1"
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft",
+        "note": "undo drafts the hide of the posted listing; nothing is hidden until its own yes"
+      }
+    ],
+    "state": "published",
+    "research": {
+      "owner_stated_url": "https://minersfigs.example/about",
+      "kept_facts": [
+        {
+          "slot": "nature",
+          "value": "orchard"
+        },
+        {
+          "slot": "makes",
+          "value": "dried figs"
+        }
+      ],
+      "dropped": [
+        {
+          "slot": "town",
+          "reason": "negation-past-or-hedge-marker"
+        },
+        {
+          "slot": "makes",
+          "reason": "negation-past-or-hedge-marker"
+        }
+      ]
+    },
+    "calls": {
+      "search": 0,
+      "fetch": [
+        1,
+        3
+      ]
+    },
+    "story_equals": "Miners is an orchard in Paso Robles, and it makes dried figs.",
+    "description_equals": "Pick up dried figs for the kitchen. Set dried figs out on the table.",
+    "listing": {
+      "maker_panel": true,
+      "maker_url": "https://minersfigs.example/about"
+    },
+    "public_lacks": [
+      "third-generation",
+      "1952",
+      "hand-picked",
+      "dawn",
+      "organic",
+      "Templeton"
+    ],
+    "commits": 1,
+    "checks": [
+      "template_conformance",
+      "source_provenance",
+      "existing_gates",
+      "reply",
+      "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    },
+    "edit_keeps": [
+      "name",
+      "brand",
+      "origin",
+      "category",
+      "imageAlt",
+      "picture_bytes",
+      "description",
+      "maker_panel",
+      "story"
+    ]
+  }
+}

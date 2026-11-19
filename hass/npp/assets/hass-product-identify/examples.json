@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "about": "Six reviewed few-shot reads from the synthetic chaos photos (hass/tests/chaos/photos). Code injects them; each output is valid against identify.schema.json.",
+  "examples": [
+    {
+      "photo": "chaos/glue.jpg",
+      "output": {"is_product": true, "kind": "non-food", "item": "Wood glue", "brand_on_label": "Super Grip", "size_text": "2 fl oz",
+                 "label_words": ["SUPER", "GRIP", "GLUE", "USA"], "visible_claims": ["The strongest glue"], "category_guess": "general",
+                 "has_person_or_screen": false, "confidence": {"kind": 0.97, "item": 0.8, "brand": 0.9, "size": 0.85, "category": 0.8}}
+    },
+    {
+      "photo": "chaos/jam.jpg",
+      "output": {"is_product": true, "kind": "food", "item": "Raspberry jam", "brand_on_label": "Hillside Kitchen", "size_text": "10 oz",
+                 "label_words": ["HILLSIDE", "KITCHEN", "RASPBERRY", "JAM"], "visible_claims": ["Organic"], "category_guess": "pantry",
+                 "has_person_or_screen": false, "confidence": {"kind": 0.98, "item": 0.95, "brand": 0.93, "size": 0.9, "category": 0.9}}
+    },
+    {
+      "photo": "chaos/candle.jpg",
+      "output": {"is_product": true, "kind": "non-food", "item": "Lavender honey soy candle", "brand_on_label": null, "size_text": "8 oz",
+                 "label_words": ["LAVENDER", "HONEY", "SOY", "CANDLE"], "visible_claims": [], "category_guess": "general",
+                 "has_person_or_screen": false, "confidence": {"kind": 0.95, "item": 0.9, "brand": 0.2, "size": 0.85, "category": 0.85}}
+    },
+    {
+      "photo": "chaos/persimmons.jpg",
+      "output": {"is_product": true, "kind": "fresh", "item": "Persimmons", "brand_on_label": null, "size_text": null,
+                 "label_words": [], "visible_claims": [], "category_guess": "fruit",
+                 "has_person_or_screen": false, "confidence": {"kind": 0.9, "item": 0.85, "brand": 0.0, "size": 0.0, "category": 0.9}}
+    },
+    {
+      "photo": "chaos/blurry.jpg",
+      "output": {"is_product": false, "kind": "food", "item": null, "brand_on_label": null, "size_text": null,
+                 "label_words": [], "visible_claims": [], "category_guess": null,
+                 "has_person_or_screen": false, "confidence": {"kind": 0.3, "item": 0.1, "brand": 0.0, "size": 0.0, "category": 0.2}}
+    },
+    {
+      "photo": "chaos/sunset.jpg",
+      "output": {"is_product": false, "kind": "non-food", "item": null, "brand_on_label": null, "size_text": null,
+                 "label_words": [], "visible_claims": [], "category_guess": null,
+                 "has_person_or_screen": false, "confidence": {"kind": 0.2, "item": 0.0, "brand": 0.0, "size": 0.0, "category": 0.0}}
+    }
+  ]
+}

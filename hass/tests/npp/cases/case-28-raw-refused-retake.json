@@ -1,0 +1,99 @@
+{
+  "id": 28,
+  "slug": "raw-refused-retake",
+  "title": "Raw refused: a cost sticker, a phone screen, a blurry photo",
+  "contract": "R1.1 raw conditions: a photo that would be published raw but fails a condition gets the existing retake sentence, no draft and no prompt",
+  "bug": "an unsafe raw photo is published, or a draft or approval prompt is sent",
+  "path": "question",
+  "terminal": "retake",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "variants": [
+    {
+      "id": "a",
+      "title": "cost-like $ sticker",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "new honey $9 each",
+          "photos": [
+            "npp:honey-cost-sticker.jpg"
+          ]
+        }
+      ],
+      "inputs": {
+        "polish": {
+          "source": "error"
+        },
+        "raw_refused_by": "no_money_or_private_token"
+      }
+    },
+    {
+      "id": "b",
+      "title": "phone screen in frame",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "new honey $9 each",
+          "photos": [
+            "npp:phone-screen.jpg"
+          ]
+        }
+      ],
+      "inputs": {
+        "polish": {
+          "source": "error"
+        },
+        "raw_refused_by": "no_person_or_screen"
+      }
+    },
+    {
+      "id": "c",
+      "title": "blurry",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "new honey $9 each",
+          "photos": [
+            "npp:honey-blurry.jpg"
+          ]
+        }
+      ],
+      "inputs": {
+        "polish": {
+          "source": "error"
+        },
+        "raw_refused_by": "sharp"
+      }
+    }
+  ],
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "retake",
+        "source": "hass.ops.photos.RETAKE"
+      }
+    ],
+    "total_replies": 1,
+    "state": "retake",
+    "draft_rows": "none",
+    "approval_rows": 0,
+    "commits": 0,
+    "checks": [
+      "picture",
+      "reply",
+      "no_draft"
+    ]
+  }
+}

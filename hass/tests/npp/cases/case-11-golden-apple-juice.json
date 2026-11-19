@@ -1,0 +1,161 @@
+{
+  "id": 11,
+  "slug": "golden-apple-juice",
+  "title": "Golden product 11: Fair Hills Farm apple juice",
+  "contract": "R1.1 polished variant and gallery fidelity: a known maker is reused with no web, public fields match the live golden card, every section 3.2 check holds",
+  "bug": "pipeline invents a maker for a no-maker listing, researches a known maker, or drifts from the golden card fields (origin, category, panel)",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "photos_note": "gallery product picture cut out and pasted on a cluttered counter by make_npp_photos.py",
+  "golden": "hass-gallery-style/golden/photo-product-007.json",
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "made by Fair Hills Farm, Fair Hills Farm apple juice, $6 each",
+      "photos": [
+        "npp:golden-007.jpg"
+      ]
+    },
+    {
+      "at_s": 60,
+      "from": "mike",
+      "text": "make it $7",
+      "photos": []
+    },
+    {
+      "at_s": 120,
+      "from": "mike",
+      "text": "yes {code}-2",
+      "photos": []
+    },
+    {
+      "at_s": 180,
+      "from": "mike",
+      "text": "undo",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "record",
+      "latency_s": 22,
+      "note": "the real gpt-image-2 edit of this photo, taped by NPP-H on the private host (run_npp.py --record); no stand-in bytes are committed",
+      "reference": "gallery:007"
+    },
+    "known_maker": "Fair Hills Farm",
+    "note": "stand-in probe: the gallery picture used as the edit passes the real gate for 015, 002, 044, 021 only; replay needs the recorded tape"
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-1, or tell me what to change."
+        ],
+        "lacks": [
+          "picture: your own photo",
+          "picture: house style"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-2, or tell me what to change."
+        ],
+        "note": "the edit builds v2; every other field is copied from v1"
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft",
+        "note": "undo drafts the hide of the posted listing; nothing is hidden until its own yes"
+      }
+    ],
+    "state": "published",
+    "variant": "polished",
+    "picture_line": null,
+    "listing": {
+      "name_close_to": "Fair Hills Farm apple juice",
+      "name_tolerance_words": 1,
+      "brand": "Fair Hills Farm",
+      "origin": "Based in San Miguel, California",
+      "category": "drinks",
+      "price": "$7.00",
+      "maker_panel": true,
+      "description_sentences": [
+        2,
+        3
+      ],
+      "description_max_chars": 200,
+      "maker_name": "Fair Hills Farm",
+      "maker_place": "San Miguel, California"
+    },
+    "commits": 1,
+    "calls": {
+      "image_edit": 1,
+      "search": 0,
+      "fetch": 0,
+      "extract": 0,
+      "verify": 0
+    },
+    "checks": [
+      "fields_present",
+      "length",
+      "no_private_values",
+      "source_provenance",
+      "template_conformance",
+      "no_owner_chatter",
+      "no_copying",
+      "picture",
+      "render",
+      "reply",
+      "delivery_approval",
+      "existing_gates"
+    ],
+    "frozen_sha_equals_committed_file": true,
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    },
+    "edit_keeps": [
+      "name",
+      "brand",
+      "origin",
+      "category",
+      "imageAlt",
+      "picture_bytes",
+      "description",
+      "maker_panel",
+      "story"
+    ]
+  }
+}

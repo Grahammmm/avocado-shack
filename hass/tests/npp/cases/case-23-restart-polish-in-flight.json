@@ -1,0 +1,101 @@
+{
+  "id": 23,
+  "slug": "restart-polish-in-flight",
+  "title": "Restart while the image edit is in flight",
+  "contract": "R1.2 restart: no second image edit; the not-run decision is written once and the variant is raw",
+  "bug": "a restart starts a second image edit or leaves the job without a decision",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "new honey $9 each",
+      "photos": [
+        "npp:honey.jpg"
+      ]
+    },
+    {
+      "at_s": 10,
+      "from": "mike",
+      "text": null,
+      "photos": [],
+      "restart": true
+    },
+    {
+      "at_s": 120,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    },
+    {
+      "at_s": 180,
+      "from": "mike",
+      "text": "undo",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/honey-good.png",
+      "latency_s": 40
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card"
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft"
+      }
+    ],
+    "state": "published",
+    "calls": {
+      "image_edit": 1,
+      "image_edit_after_restart": 0
+    },
+    "polish_decision": {
+      "use": "house",
+      "code": "not-run"
+    },
+    "variant": "raw",
+    "cards_sent": 1,
+    "commits": 1,
+    "checks": [
+      "picture",
+      "reply",
+      "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    }
+  },
+  "control": "restart control (spec row 23: one card, restart while the polish is in flight); v1 is the only delivered version"
+}

@@ -1,0 +1,38 @@
+{
+  "$comment": "S4 extraction output and the fixed word lists the code quote checks use. Schema keywords limited to the subset the repo test validator supports.",
+  "title": "hass-maker-research facts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["facts"],
+  "properties": {
+    "facts": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slot", "value", "url", "quote"],
+        "properties": {
+          "slot": {"type": "string", "enum": ["name", "town", "makes", "founded", "nature"]},
+          "value": {"type": "string", "minLength": 1, "maxLength": 80},
+          "url": {"type": "string", "minLength": 8, "maxLength": 200},
+          "quote": {"type": "string", "minLength": 3, "maxLength": 300}
+        }
+      }
+    }
+  },
+  "slot_rules": {
+    "name": "verbatim in title, site name or main heading of the official page",
+    "town": "a place the page says the maker is based in; must equal the owner's town when the owner gave one",
+    "makes": "a product-type phrase of at most 6 words, folded value inside the quote",
+    "founded": "a four digit year 1800-2026",
+    "nature": "one of the nature_enum values"
+  },
+  "nature_enum": ["family farm", "co-op", "farm", "bakery", "creamery", "ranch", "orchard", "apiary", "roastery", "kitchen"],
+  "negation_hedge_markers": [
+    "not", "no", "never", "no longer", "formerly", "previously", "used to", "closed", "sold", "acquired", "unlike", "rather than",
+    "may", "might", "plans", "will", "hope"
+  ],
+  "not_slots": ["health", "certification", "award", "local", "ingredient origin", "price", "contact"],
+  "verdicts": ["supports", "contradicts", "unclear"]
+}

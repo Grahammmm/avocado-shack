@@ -1,0 +1,63 @@
+{
+  "id": 20,
+  "slug": "answer-after-expiry",
+  "title": "The answer to the price question arrives after the open request expired",
+  "contract": "openreq expiry: a late answer builds nothing and gets the existing expired reply",
+  "bug": "a card is built from an expired request",
+  "path": "question",
+  "terminal": "expired",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 1800
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "new honey",
+      "photos": [
+        "npp:honey.jpg"
+      ]
+    },
+    {
+      "at_s": 2400,
+      "from": "mike",
+      "text": "$9 each",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/honey-good.png",
+      "latency_s": 22
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "question"
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "expired",
+        "source": "existing expired reply"
+      }
+    ],
+    "state": "expired",
+    "draft_rows": "none",
+    "approval_rows": 0,
+    "commits": 0,
+    "checks": [
+      "reply",
+      "no_draft"
+    ]
+  }
+}

@@ -10,9 +10,11 @@ from types import SimpleNamespace
 
 from hass import editor as editor_mod, preview as preview_mod, sitegen, voice
 from hass.chat.shared import CANT_READ, load_content, LOCAL_TZ, q, STATUS_PLAIN
-from hass.content_model import _text as checked_text, ContentError, HOME_IMAGE_RE, load_and_validate, SHELF_LABELS, shop_today, validate
+from hass.content_model import _text as checked_text, ContentError, HOME_IMAGE_RE, iso_day, load_and_validate, SHELF_LABELS, shop_today, validate
 from hass.ops import catalog
 
+SHELF_MAX = 60  # AV1052-05: products listed by `shelf <name>`, then "... and N more"
+SHELF_NEW_DAYS = 14  # AV0222-09 / shop.js NEW_BADGE_DAYS: a product added 0..13 Pacific days ago shows New and comes first
 PHOTOS_TO_TAKE_MAX = 5  # AV0222-04, HASS-VOICE-1: names listed by `photos to take` (a short list, then ask again)
 
 HIDDEN_MAX = 20  # AV1222-13: lines of the hidden list
@@ -246,6 +248,39 @@ class SitePack:
             l if l.startswith("- ") else f"{l}" for l in lines] + more
             + ["To replace one, send a photo with the product's name as the caption."]), long_ok=True)
         return "photos"
+
+    def _shelf(self, rest, now) -> str:
+        """AV1052-05 (H17/SHOP-1): one shelf's active products in site order, each with the word the site shows for it.
+        Read-only: the saved writer worktree, never the live site; hidden and held products are left out; works while paused."""
+        wanted = " ".join(str(rest or "").split()).lower()
+        key = next((k for k, label in SHELF_LABELS.items() if wanted in (k, label.lower())), None)
+        if key is None:
+            self._reply("Choose a shelf: " + ", ".join(SHELF_LABELS.values()) + ".", long_ok=True)
+            return "shelf"
+        try:  # the current catalog from the writer worktree, as report; never a default or partial list
+            wt = editor_mod._load(str(self.sdir))[2]
+            content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
+            today = shop_today(now)
+            records = [p for p in content.active_products() if p.get("category") == key]
+            day = today.toordinal()
+
+            def age(p):  # the site's New rule (shop.js isNew): added 0..13 Pacific days ago
+                added = iso_day(p.get("addedOn"))
+                return day - added.toordinal() if added is not None and 0 <= day - added.toordinal() < SHELF_NEW_DAYS else None
+            fresh = sorted((p for p in records if age(p) is not None), key=lambda p: -iso_day(p["addedOn"]).toordinal())
+            records = fresh + [p for p in records if age(p) is None]  # sorted() is stable: ties keep site order
+            one = lambda name: " ".join(str(name).split())
+            lines = []
+            for p in records[:SHELF_MAX]:
+                word = sitegen.availability_label(p, content.store, today)
+                lines.append(f"- {one(p['name'])}" + (f" - {word}" if word else ""))
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            self._problem("error", "shelf-unreadable")
+            self._reply(CANT_READ)  # the spec's wording names the catalog, which voice.check refuses; nothing changed is said
+            return "shelf"
+        more = [f"... and {len(records) - SHELF_MAX} more"] if len(records) > SHELF_MAX else []
+        self._reply("\n".join([f"Shelf: {SHELF_LABELS[key]}"] + (lines + more if lines else ["No products on this shelf."])), long_ok=True)
+        return "shelf"
 
     def _hidden(self) -> str:
         """AV1222-13 (H03): read-only list of hidden products then hidden makers; held products and visible makers never."""

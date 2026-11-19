@@ -9,7 +9,8 @@ from hass import interpret_check
 from hass.content_model import FORBIDDEN_TEXT
 from hass.interpreter_prompt import RULES
 from hass.ops import load_registry
-from hass.tests.test_interpret_check import ProductionConversationTests, ask, call
+from hass.tests import test_interpret_check as _ic
+from hass.tests.test_interpret_check import ask, call
 from hass.tests.test_conversation import _ops
 
 PRICE = interpret_check.PRICE_REPLY
@@ -62,7 +63,7 @@ class CheckPriceTests(unittest.TestCase):
         self.assertEqual(FORBIDDEN_TEXT, ("<", ">", "$", "{{", "}}"))
 
 
-class ConversationPriceTests(ProductionConversationTests):
+class ConversationPriceTests(_ic.ProductionConversationTests):
     def test_no_prepare_and_price_only_fixture(self):
         before = self.commits()
         reply = self.asked("price", _ops(("product.edit", {"id": EDIT, "description": "Avocados $3"})))
@@ -77,6 +78,11 @@ class ConversationPriceTests(ProductionConversationTests):
         problems = []
         _check_value(problems, "description", Arg("text"), "Avocados $3", {}, None)
         self.assertEqual(problems, ["description: contains forbidden text '$'"])
+
+
+# Reuse the production-conversation helpers only; its own tests already run in test_interpret_check (None is not collected).
+for _name in [n for n in dir(_ic.ProductionConversationTests) if n.startswith("test_") and n not in vars(ConversationPriceTests)]:
+    setattr(ConversationPriceTests, _name, None)
 
 
 class PromptRuleTests(unittest.TestCase):

@@ -112,7 +112,7 @@ class HelpTextTests(unittest.TestCase):
                 if variant.endswith("?") and variant.count("?") > 1: continue
                 with self.subTest(text=variant):
                     self.assertEqual(conversation.parse_command(variant), ("help", None))
-        self.assertEqual(commands.COMMAND_RE.groups, 23)  # no capture group added
+        self.assertEqual(commands.COMMAND_RE.groups, 25)  # no capture group added (AV1052-05: shelf is groups 24/25)
         self.assertEqual(conversation.parse_command("history eggs"), ("history", "eggs"))
         self.assertEqual(conversation.parse_command("show a1b2"), ("show", "a1b2"))
         self.assertEqual(conversation.parse_command("post eggs"), ("post", "eggs"))

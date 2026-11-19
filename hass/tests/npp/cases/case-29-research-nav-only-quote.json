@@ -1,0 +1,186 @@
+{
+  "id": 29,
+  "slug": "research-nav-only-quote",
+  "title": "Search finds the official site, but the only supporting quote is in the navigation",
+  "contract": "G 2026-11-18 14:00 and R1.3: facts need a verbatim quote from visible page text, not nav or footer; no kept fact means no story",
+  "bug": "a nav link is accepted as evidence and a story appears",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "made by Miners, Paso Robles. dried figs $7 each",
+      "photos": [
+        "npp:figs.jpg"
+      ]
+    },
+    {
+      "at_s": 80,
+      "from": "mike",
+      "text": "make it $8",
+      "photos": []
+    },
+    {
+      "at_s": 140,
+      "from": "mike",
+      "text": "yes {code}-2",
+      "photos": []
+    },
+    {
+      "at_s": 200,
+      "from": "mike",
+      "text": "undo",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/figs-good.png",
+      "latency_s": 22
+    },
+    "web": {
+      "search": {
+        "Miners Paso Robles official site": [
+          {
+            "url": "https://minersfigs.example/",
+            "title": "Miners Dried Figs | Paso Robles, California"
+          }
+        ],
+        "Miners official site": []
+      },
+      "pages": {
+        "https://minersfigs.example/": {
+          "file": "pages/miners-home-navonly.html",
+          "retrieved": "2026-11-18",
+          "content_type": "text/html"
+        }
+      },
+      "forbid_fetch": [],
+      "robots": "allow all unless stated"
+    },
+    "stubs": {
+      "extract": [
+        {
+          "slot": "makes",
+          "value": "dried figs",
+          "url": "https://minersfigs.example/",
+          "quote": "Miners makes dried figs in Paso Robles"
+        }
+      ],
+      "verify": "supports"
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "(maker story not found)"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-2, or tell me what to change."
+        ],
+        "note": "the edit builds v2; every other field is copied from v1"
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft",
+        "note": "undo drafts the hide of the posted listing; nothing is hidden until its own yes"
+      }
+    ],
+    "state": "published",
+    "research": {
+      "located_official_site": "https://minersfigs.example/",
+      "queries_each_match": [
+        "{maker} {town} official site",
+        "{maker} official site"
+      ],
+      "queries_lack_digits": true,
+      "kept_facts": [],
+      "dropped": [
+        {
+          "slot": "makes",
+          "reason": "quote-not-in-visible-body-text"
+        }
+      ]
+    },
+    "calls": {
+      "search": [
+        1,
+        2
+      ],
+      "fetch": [
+        1,
+        3
+      ],
+      "extract": 1
+    },
+    "listing": {
+      "maker_panel": false
+    },
+    "story": null,
+    "public_lacks": [
+      "organic",
+      "certified",
+      "award"
+    ],
+    "commits": 1,
+    "checks": [
+      "source_provenance",
+      "template_conformance",
+      "no_private_values",
+      "existing_gates",
+      "reply",
+      "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    },
+    "edit_keeps": [
+      "name",
+      "brand",
+      "origin",
+      "category",
+      "imageAlt",
+      "picture_bytes",
+      "description",
+      "maker_panel",
+      "story"
+    ]
+  }
+}

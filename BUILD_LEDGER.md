@@ -2863,3 +2863,271 @@ Progress: [AV0007-06](#h05-owner-aliases-in-interpreter-requests-av0007-06--nove
 ### Issue #3 — reliable everyday operation
 
 Progress: [AV0007-08](#audit-fixed-site-copy-claims-av0007-08--november-15-2026) audits fixed site copy with no copy change, [AV0007-09](#h18-trial-proposal-and-handover-checklist-av0007-09--november-4-2026) lists open public-site decisions, and [AV0007-11](#h25-acceptance-map-for-owner-word-modules-av0007-11--november-17-2026) adds H25 fixture coverage. Still open: H25 stays a release step, and H07, H08 and H18 live requirements remain open.
+
+## Unknown approval codes and waiting drafts are named (AV2152-01) — November 5, 2026
+
+Branch rb/av2152-01 (PR #449, head f0fe70e7eac1, merged as cf3962cd973d0c3760aca616db9ee5ef79010514). For the owner: `yes a1b3` or `no a1b3` for a code that matches no draft now replies `No draft a1b3.`, and when drafts are waiting it lists each one as `<code>: <summary>; reply yes <code>.` instead of saying nothing is waiting. A code that exists in any state (expired, cancelled, replaced, applied) keeps its own state reply. Code change is in `_no_target` in `hass/conversation.py`; `hass/tests/test_cancel_question.py` was updated for the new unknown-code wording.
+
+Checks at PR head f0fe70e7eac1 (historical, recorded in PR #449): `python3 -B -m unittest hass.tests.test_unknown_approval_code` ran 11 tests, OK; the spec's baseline module sets also passed (82 and 154 tests). PREPUSH-TESTS NOT-RUN (budget used up). CI `check` SUCCESS at that head.
+
+Limits: nothing is approved, cancelled or applied by the reply; needs-details questions are not listed as waiting drafts.
+
+## H06: history words find older approved changes (AV2152-02) — November 6, 2026
+
+Branch rb/av2152-02 (PR #476, head 905aead65498, merged as 9c7122668b777429fb70b8180f725f7039b8725e). For the owner: `history <words>` lists up to 10 approved changes whose summary holds every word, newest first, so an older change's code can be found for `undo <code>`. Bare `history` is unchanged; the help line and `docs/hass/COMMANDS.md` were updated.
+
+Checks at PR head 905aead65498 (historical, recorded in PR #476): `python3 -B -m unittest hass.tests.test_history_search hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_limits_doc hass.tests.test_history_approved hass.tests.test_find` ran 55 tests, OK. PREPUSH-TESTS NOT-RUN (budget used up). CI `check` SUCCESS at that head.
+
+Limits: read-only, at most 10 results and a 1 to 60 character query; it does not undo anything by itself.
+
+## H05/H16: again re-drafts an expired proposal (AV2152-03) — November 14, 2026
+
+Branch rb/av2152-03 (PR #833, head cd95f88aab06, merged as 42df6e123dcad0398810d3365af40dc9e7cbae33). For the owner: `again <code>` re-drafts a proposal that expired at most 7 days ago as a new proposal with a new code, but only when the site would end with the same results the expired draft showed; otherwise it says the site changed and asks for the change again. The parser and command moved to `hass/chat/commands.py` and `hass/chat/core_pack.py` since the spec was written; `docs/hass/COMMANDS.md`, help and the conversation tests were updated.
+
+Checks at PR head cd95f88aab06 (historical, recorded in PR #833): `python3 -B -m unittest hass.tests.test_again hass.tests.test_conversation hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_history_search hass.tests.test_ci_shards` was part of a 22-module run of 231 tests, OK; `hass.tests.test_again` alone ran 21 tests, OK. PREPUSH-TESTS NOT-RUN (budget used up). CI `quick`, `site community` and `site static` SUCCESS at that head.
+
+Limits: again works for 7 days only and still needs a new approval (`yes <new code>`); nothing is applied or published by `again`; photo drafts are refused (send the photo again).
+
+## H12: two to four photos open separate drafts (AV2152-04) — November 14, 2026
+
+Branch rb/av2152-04 (PR #845, head 4cde81735ace, merged as 33e2101020a8f3b12fc9686674c3cff196d2664c). For the owner: a message with 2 to 4 photos opens one draft per novel photo, each with its own code and its own photo question, in the order sent. Every photo is checked before any is stored, so one refused photo saves none. `docs/hass/COMMANDS.md` and `docs/hass/LIMITS.md` were updated.
+
+Checks (historical, recorded in PR #845): at the earlier pre-merge head, `python3 -B -m unittest hass.tests.test_photo_batch hass.tests.test_media_batch` ran 19 and 8 tests, and 19 related modules (208 tests) passed, OK. PREPUSH-TESTS NOT-RUN (budget used up). At merged PR head 4cde81735ace, CI `quick`, `site community` and `site static` SUCCESS.
+
+Limits: up to four photos per message, five or more are refused with nothing saved; a photo already in a waiting draft (including an earlier photo in the same message) or on an active or hidden product opens no draft; each new draft has an independent code; a caption sent with several photos is not read.
+
+## H05: interpreter prompt lists product shelf and maker (AV2152-05) — November 14, 2026
+
+Branch rb/av2152-05 (PR #847, head 20dd6bb11312, merged as d78f10c5f323eb50892b8ed167d8ff69e17f648d). For the owner: the interpreter prompt now shows each product's shelf and maker, so a clearly named whole shelf or maker can change every listed product without asking about each one. A missing value shows as empty, never a guessed maker. Changes are in `hass/interpreter_prompt.py` and its fixture and tests.
+
+Checks at PR head 20dd6bb11312 (historical, recorded in PR #847): `python3 -B -m unittest hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_shelf_maker` and the related prompt modules ran 247 tests, OK. PREPUSH-TESTS NOT-RUN (budget used up). CI `quick`, `site community` and `site static` SUCCESS at that head.
+
+Limits: the 64 KiB prompt cap is unchanged and shelf and maker are never dropped to fit it; an unclear or incomplete group, or one over the operation limit, still asks; an older prompt rule about shelves of more than 6 products was left as it was.
+
+## H05: interpreter prompt shows whole product descriptions (AV2152-06) — November 5, 2026
+
+Branch rb/av2152-06 (PR #453, head 828a917e74f6, merged as c276adf181f3d4a7ed8ce0586fadcdd0f935d363). For the owner: the interpreter prompt lists each product's current description whole, or the marker `<omitted>`, never cut, so an edit can resend the full text. A new rule says to ask for the full description when it shows `<omitted>`.
+
+Checks at PR head 828a917e74f6 (historical, recorded in PR #453): `python3 -B -m unittest hass.tests.test_interpreter_prompt_descriptions hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_shapes hass.tests.test_interpreter_prompt_brand hass.tests.test_interpreter_prompt_design` plus the spec baseline modules ran 176 tests, OK. PREPUSH-TESTS NOT-RUN (budget used up). CI `check` SUCCESS at that head.
+
+Limits: the 64 KiB prompt cap is unchanged; over the cap, descriptions are replaced by `<omitted>` oldest first, and core content alone over the cap still fails with prompt too large.
+
+## H04/H14: optional hike cancellation note (AV2152-07) — November 6, 2026
+
+Branch rb/av2152-07 (PR #467, head e4de98414b19, merged as cf6a15d86cf75123a69a496a528367efa8d97e72). For the owner: `hike.cancel` takes an optional one-line note of at most 160 characters, shown on the cancelled hike card above the fixed sentence. Changes are in `hass/ops/hikes.py`, `hass/content_model.py`, `hass/preview.py`, `storefront-mockup/community.js` and `docs/hass/COMMANDS.md`.
+
+Checks at PR head e4de98414b19 (historical, recorded in PR #467): 257 core and preview tests passed before merging main with `hass.tests.test_hike_cancel_note` and `hass.tests.test_preview_cancel_note` among them; after merging main the affected modules passed except `test_preview_hike_results.test_started_rsvp_enabled_card_reads_closed`, which the PR recorded as also failing on origin/main. PREPUSH-TESTS NOT-RUN (budget used up). CI `check` SUCCESS at that head.
+
+Limits: the cancel note is text on the page, not a notification; nobody is messaged. A note over 160 characters or with a line break is refused.
+
+## H13: home notice can start on a later Pacific day (AV2152-08) — November 15, 2026
+
+Branch rb/av2152-08 (PR #848, head 231fa2cf4c9a, merged as cca3d29c3b3db50c56e4f5f9a4cec06768e866e5). For the owner: `store.set_notice` takes an optional first day, so a holiday notice can be set a week ahead and shows only from that day through its last day, both inclusive. Without a first day it starts today. Older notices without a first day still load and render as before.
+
+Checks at PR head 231fa2cf4c9a (historical, recorded in PR #848): `hass.tests.test_notice_start`, `hass.tests.test_notice_calendar_bounds`, `hass.tests.test_store_notice` and the other modules in the 30-file change were run; the PR recorded PREPUSH-TESTS NOT-RUN (budget used up) and a CI run instead. CI `quick`, `site community` and `site static` SUCCESS at that head.
+
+Limits: the notice window follows the Pacific calendar day; a first day already past, or after the last day, is refused; a notice is page text, not a message to anyone.
+
+## H13: editable hiking club intro (AV2152-09) — November 15, 2026
+
+Branch rb/av2152-09 (PR #849, head 78fb04cea42f, merged as 77ed368d15c62d8cb53000b56b44aff3eaebc20e). For the owner: `club.set_intro` sets the opening paragraph of the hike page (20 letters to 400 characters, no markup), and undo restores the whole earlier club record. The default page is byte-identical to the tracked hike page.
+
+Checks at an earlier PR head d5c8e0e (historical, recorded in PR #849): `python3 -B -m unittest hass.tests.test_club_intro` ran 20 tests, OK, with a real browser; focused suites ran 108 tests, OK. The merged head was 78fb04cea42f. PREPUSH-TESTS NOT-RUN (budget used up). CI `quick`, `site community` and `site static` SUCCESS at the merged head.
+
+Limits: the intro is one paragraph with no markup; the same words as the default or current text are refused; undo is refused after a later club change.
+
+## H05: claims question for health and award words (AV2152-10) — November 4, 2026
+
+Branch rb/av2152-10 (PR #400, head 8462aca0bcf3, merged as d4f5ce5fa67bf55f990fc2cba5beb878760b2305). For the owner: a draft that adds one of 16 fixed health or award terms the owner did not affirm now asks the existing claim question first. The label reader drops the same terms.
+
+Checks at PR head 8462aca0bcf3 (historical, recorded in PR #400): `python3 -B -m unittest hass.tests.test_claims_health_awards hass.tests.test_claims hass.tests.test_claims_grades hass.tests.test_claims_lists hass.tests.test_claims_negation hass.tests.test_claims_farm hass.tests.test_claims_sources hass.tests.test_hike_repeat_claims hass.tests.test_label_reader hass.tests.test_label_reader_forbidden hass.tests.test_label_matches` ran 134 tests, OK. prepush.py was not run. CI `check` SUCCESS at that head.
+
+Limits: claims ask rather than invent: the question is asked, no claim is added or checked as true; the terms are a fixed list, and `treat` and `best` are not terms.
+
+## H06: undo restores only the changed store fields (AV2152-11) — November 5, 2026
+
+Branch rb/av2152-11 (PR #450, head d5f4e796f57f, merged as fadda8c633de1dd6d03f2beccc540ed81802fa80). For the owner: undoing a store change restores only the fields that change touched and keeps other fields as they are now, so an older headline can be undone after a later story. `docs/hass/LIMITS.md` was updated.
+
+Checks at PR head d5f4e796f57f (historical, recorded in PR #450): `hass.tests.test_store_field_undo`, `hass.tests.test_store_ops`, `hass.tests.test_store_story` and `hass.tests.test_limits_doc` were the changed or added tests. PREPUSH-TESTS NOT-RUN (time budget). CI `check` SUCCESS at that head.
+
+Limits: undoing a field changed again later by another change is still refused as a conflict (same-field undo conflicts); malformed store records are refused; the home image field and the chat `undo <code>` path were not covered by the PR.
+
+## Site: text contrast audit measurement (AV2152-12) — November 6, 2026
+
+Branch rb/av2152-12 (PR #477, head f76fdb846fca, merged as 022e552b9be9239a397ebdb084a8b093796c73f0). For the owner: `reports/site-contrast-2026-11.md` lists every rendered text and background pair on the home page and the hike page at phone and desktop widths. It found 30 failing occurrences in 10 groups, all in the trail map.
+
+Checks at PR head f76fdb846fca (historical, recorded in PR #477): this is an audit, so the steps are measurement, not a unit-test claim. `node --test storefront-mockup/site-contrast.test.cjs` ran 7 tests, 0 failed; `python3 storefront-mockup/site-contrast-qa.py --write` then `python3 storefront-mockup/site-contrast-qa.py --check` (Playwright module from the builder's tools folder, `storefront-mockup/site-contrast-qa.cjs`) reported `ok: report matches`; `python3 -B -m unittest hass.tests.test_publish hass.tests.test_qa_env` ran 18 tests, OK. The report counts pass 8422, fail 30, exempt 62, unassessed 0. CI `check` SUCCESS at that head.
+
+Limits: an audit only. It measures; it does not repair CSS and does not claim the site conforms to WCAG; the 30 failures were recorded, not fixed.
+
+## H09: interpreter eval set v8 (AV2152-13) — November 15, 2026
+
+Branch rb/av2152-13 (PR #861, head 294683da4f73, merged as 98c9f92e20c39428ac2cf02456e49a10cbd0adad). For the operator: six new synthetic cases (e70 to e75) with their synthetic correct replies cover group shelf and maker requests, a description append, a cancel note, a later-start notice and the club intro. The case count went from 69 to 75.
+
+Checks at PR head 294683da4f73 (historical, recorded in PR #861): `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_out hass.tests.test_interpreter_eval_compare hass.tests.test_interpreter_eval_modes hass.tests.test_interpreter_eval_diagnostics hass.tests.test_interpreter_request_encode hass.tests.test_label_eval` ran 110 tests, OK; `git diff --check` was clean. PREPUSH-TESTS NOT-RUN (the full hass step timed out). CI `quick`, `site community` and `site static` SUCCESS at that head.
+
+Limits: the eval is offline: scoring is unchanged and no model is called, so it makes no quality claim about a live model; the replies are synthetic.
+
+## H25: phone guide and limits for the new workflows (AV2152-14) — November 17, 2026
+
+Branch rb/av2152-14 (PR #1010, head 07fe8f682b47, merged as fb927d17898cda87b94da9075bb54c3ad295effd). For the owner: `docs/hass/PHONE_GUIDE.md` has example Send lines for history search, again, several photos, a cancel note, the club intro and a later-start notice; `docs/hass/LIMITS.md` lists the again window, history search, cancel note, club intro and notice rules.
+
+Checks at PR head 07fe8f682b47 (historical, recorded in PR #1010): `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_limits_doc hass.tests.test_commands_doc` ran 49 tests, OK; `git diff --check` was clean. PREPUSH-TESTS NOT-RUN (budget used up). CI `quick`, `site community` and `site static` SUCCESS at that head.
+
+Limits: the guide and limits are documentation, not a launch or a live trial; the guide stays at 110 lines.
+
+## H25: acceptance map for AV2152 modules (AV2152-15) — November 17, 2026
+
+Branch rb/av2152-15 (PR #1000, head 28c2fa479d61, merged as 180a8614cab58d3bf585f7bc670901d11fc36a04). For the operator: the acceptance map in `hass/acceptance.py` now selects the AV2152-01 to AV2152-11 regression modules under the H04, H05, H06, H12 and H13 rows, with earlier order kept.
+
+Checks at PR head 28c2fa479d61 (historical, recorded in PR #1000): `python3 -B -m unittest hass.tests.test_acceptance_runner hass.tests.test_auto_policy` ran 39 tests, OK; the 13 newly selected modules ran 170 tests, OK (skipped=11, Playwright captures). PREPUSH-TESTS NOT-RUN (budget used up). CI `quick`, `site community` and `site static` SUCCESS at that head.
+
+Limits: H25 stays a release step; the map is not a launch and not a live trial.
+
+## AV2152 local milestone progress — November 18, 2026
+
+These three subsections are local progress notes written only in this ledger. They summarize the entries above, do not repeat their completion claims or copy any issue text, and nothing was posted to any GitHub issue.
+
+### Issue #1 (working text demo)
+
+Progress from the H01 to H09 work: unknown codes and waiting drafts are named, history words find older changes, again re-drafts an expired proposal, the prompt carries shelf, maker and whole descriptions, the cancel note, claims for health and award words, field-level store undo and the eval v8 cases. See the AV2152-01, -02, -03, -05, -06, -07, -10, -11 and -13 entries above. Still open: a live trial of any of this with the owner is not shown here.
+
+### Issue #2 (photo and voice trial)
+
+Progress from the H10 to H18 work: several photos open separate coded drafts, alongside history search, again, the cancel note, the later-start notice and the club intro. See the AV2152-01, -02, -03, -04, -07, -08 and -09 entries above. Still open: a live photo or voice trial is not shown here; the photo limits are those in the AV2152-04 entry.
+
+### Issue #3 (reliable operation)
+
+Progress toward release readiness: the site contrast audit is a measurement that supports readiness, not a newly completed H id; the phone guide and limits are documented and the acceptance map selects the new regressions. See the AV2152-12, -14 and -15 entries above. Still open: H25 stays a release step, the audit failures are not repaired, and launch is not authorised by this ledger.
+
+## AV0222 evidence roll-up
+
+The sections below record the fourteen merged AV0222 units (AV0222-01 to -14) in id order; each cites its merge commit on main, its PR, a check run again for this roll-up on November 18, 2026 and its remaining limits. Test counts are from that re-run on the branch rb/av0222-15 cut from origin/main, not copied from the PRs. They were not run on a bridge or phone, and the FEATURES rows are unchanged.
+
+## Held cheese recall evidence (AV0222-01) — November 4, 2026
+
+Branch rb/av0222-01 from origin/main (AV0222-01, issue #2, PR [#406](https://github.com/Grahammmm/avocado-shack/pull/406): merged as 9248280d45349eb9b30ce4809abd8f0b4d065c68). For Michael: `reports/held-cheese-recall-2026-11.md` compares the two held Sierra Nevada raw milk cheddars with official recall notices and states that both stay held.
+
+Review steps (source report only): `git show -s 9248280d45349eb9b30ce4809abd8f0b4d065c68` and read `reports/held-cheese-recall-2026-11.md` against `hass/content/products.json` — no runtime test exists for this prose report, so none was invented.
+
+Limits: Both products remain held; the report authorizes no release and confirms no package is safe, it is a text-only read of public pages, not exhaustive, and it changes no product record.
+
+## Shelf and availability questions in site words (AV0222-02) — November 5, 2026
+
+Branch rb/av0222-02 from origin/main (AV0222-02, issue #1, PR [#465](https://github.com/Grahammmm/avocado-shack/pull/465): merged as 1c058d957503ff1581acd2050094e743e62f1a9f). For Michael: the interpreter checker and shelf labels now ask shelf and availability questions in the site's own words.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_interpret_check_enum hass.tests.test_shelf_labels` — 8 tests, OK.
+
+Limits: Offline fixtures only; no real interpreter model was called and no site content changed.
+
+## Price and plain-text questions before drafting (AV0222-03) — November 6, 2026
+
+Branch rb/av0222-03 from origin/main (AV0222-03, issue #1, PR [#469](https://github.com/Grahammmm/avocado-shack/pull/469): merged as 5db8e74b793dc4e54efffb4f3e56c33e2ef287d9). For Michael: a request that names a price or sends plain text to publish gets an explanation first; the checker and prompt were changed and the prompt golden updated.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_interpret_check_prices hass.tests.test_interpreter_prompt_design` — 23 tests, OK.
+
+Limits: The site stays catalog-only with no prices, and the editor policy is unchanged; this is offline checker and prompt coverage, not a model-quality claim.
+
+## Photos needing replacement list (AV0222-04) — November 6, 2026
+
+Branch rb/av0222-04 from origin/main (AV0222-04, issue #2, PR [#470](https://github.com/Grahammmm/avocado-shack/pull/470): merged as 4f1e730d686186a0ea812bfd66a3322a28e1cfec). For Michael: a new command lists active products whose saved photos need replacing, and COMMANDS.md documents it.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_photos_to_take hass.tests.test_commands_doc hass.tests.test_help` — 40 tests, OK.
+
+Limits: The list is bounded and comes from saved data only; the live site and real photos were not checked.
+
+## Separate saved notes and owner aliases (AV0222-05) — November 5, 2026
+
+Branch rb/av0222-05 from origin/main (AV0222-05, issue #2, PR [#455](https://github.com/Grahammmm/avocado-shack/pull/455): merged as 73d7db71a26663a96b68cee759f7f1d28154d1a4). For Michael: saved notes and readable aliases are listed separately in memory, with capped lists and clearer wording for a missing or hidden target; COMMANDS.md and LIMITS.md were updated.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_memory_listing hass.tests.test_memory_chat hass.tests.test_memory_alias hass.tests.test_memory_unchanged hass.tests.test_limits_doc` — 67 tests, OK.
+
+Limits: Memory is fixture data in tests, with no real owner memory read; the caps are fixed in code.
+
+## Pacific approval times in history (AV0222-06) — November 17, 2026
+
+Branch rb/av0222-06 from origin/main (AV0222-06, issue #2, PR [#988](https://github.com/Grahammmm/avocado-shack/pull/988): merged as 37c3fd4c21cae78c8f8fdd681604373ae68c4429). For Michael: history shows the approval time in Pacific time and falls back to unknown wording when no approval time is stored.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_history_times hass.tests.test_history_approved hass.tests.test_history_search hass.tests.test_audit` — 47 tests, OK.
+
+Limits: Only approved changes carry a time; rows without one show unknown.
+
+## Undo and cancel phrases (AV0222-07) — November 17, 2026
+
+Branch rb/av0222-07 from origin/main (AV0222-07, issue #1, PR [#998](https://github.com/Grahammmm/avocado-shack/pull/998): merged as 58a31b2d303b5b14795ee3bf3b6a167edc835b89). For Michael: common undo and cancel phrases are recognized as commands, and COMMANDS.md lists them.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_undo_cancel_phrases hass.tests.test_commands_doc` — 17 tests, OK.
+
+Limits: An undo still needs approval before anything changes; no live bridge or phone message was sent.
+
+## Notice windows and shelf-check days in words (AV0222-08) — November 17, 2026
+
+Branch rb/av0222-08 from origin/main (AV0222-08, issue #1, PR [#992](https://github.com/Grahammmm/avocado-shack/pull/992): merged as d8bc298e6af61dd338b8d228d949c04ff83cad0e). For Michael: proposals show notice windows and shelf-check days in plain words.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_proposal_notice_words hass.tests.test_shelf_check_flow` — 42 tests, OK.
+
+Limits: Display wording only; stored summaries are unchanged.
+
+## New products first in the shop (AV0222-09) — November 7, 2026
+
+Branch rb/av0222-09 from origin/main (AV0222-09, issue #2, PR [#503](https://github.com/Grahammmm/avocado-shack/pull/503): merged as 07180a573befac16310a2d60c4e3f57507c4aac8). For Michael: the shop lists New products first while filters and deep links keep working.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_catalog_new_order` — 8 tests, OK.
+
+Limits: Ordering is checked by a local script driver, not a live browser on the deployed site; no product data changed.
+
+## Makers without a story (AV0222-10) — November 15, 2026
+
+Branch rb/av0222-10 from origin/main (AV0222-10, issue #2, PR [#863](https://github.com/Grahammmm/avocado-shack/pull/863): merged as 795e4f16675caba865f84b7bc92bde99b3f1f51d). For Michael: a maker can be added without a story and a story can be cleared, and nothing is invented to fill the gap; shop, social draft and prompt were adjusted.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_maker_optional_story hass.tests.test_field_words hass.tests.test_question_missing_fields` — 25 tests, OK.
+
+Limits: The existing 26 stories are untouched; a maker story stays optional and is never written by the tool; the live site was not checked.
+
+## Map source readiness for two routes (AV0222-11) — November 4, 2026
+
+Branch rb/av0222-11 from origin/main (AV0222-11, issue #2, PR [#410](https://github.com/Grahammmm/avocado-shack/pull/410): merged as 7c82a58fd26b9adac09e07ce314a66fe6d9bb1bd). For Michael: `reports/hiking-club/route-map-sources-2026-11.md` lists the sources and licences needed to map the Cass Hill and Fiscalini routes.
+
+Review steps (source report only): `git show -s 7c82a58fd26b9adac09e07ce314a66fe6d9bb1bd` and read `reports/hiking-club/route-map-sources-2026-11.md` against the two route ideas in `hass/content/community.json` — no runtime test exists for this prose report, so none was invented.
+
+Limits: Research only, with no map assets downloaded or created; source availability is not a finished map, access clearance or permission to publish, and the routes stay undated ideas.
+
+## Phone guide and limits for owner shortcuts (AV0222-12) — November 18, 2026
+
+Branch rb/av0222-12 from origin/main (AV0222-12, issue #3, PR [#1019](https://github.com/Grahammmm/avocado-shack/pull/1019): merged as 7ccaaacd75980b27bae28d63e3a279ec9b5b8599). For Michael: PHONE_GUIDE.md and LIMITS.md explain the owner shortcuts and the fixed shelves in owner-readable words.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_limits_doc` — 43 tests, OK.
+
+Limits: Docs only; the guide was not tried on a real phone.
+
+## Interpreter eval set v10 (AV0222-13) — November 17, 2026
+
+Branch rb/av0222-13 from origin/main (AV0222-13, issue #1, PR [#1005](https://github.com/Grahammmm/avocado-shack/pull/1005): merged as 09987e172ded9e11715216cef8eb11bc8f654cf7). For Michael: the offline interpreter eval fixtures gain cases for no-price and no-story requests.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases` — 75 tests, OK.
+
+Limits: The eval is offline with synthetic replies, so there is no model-quality claim.
+
+## Acceptance map for AV0222 regressions (AV0222-14) — November 18, 2026
+
+Branch rb/av0222-14 from origin/main (AV0222-14, issue #3, PR [#1026](https://github.com/Grahammmm/avocado-shack/pull/1026): merged as add0ceef4226d19cb0c65499aa9c1ace515a2761). For Michael: the acceptance runner registers the shelf, price and owner-command regression tests.
+
+Checks run again for this roll-up: `python3 -B -m unittest hass.tests.test_acceptance_runner` — 31 tests, OK.
+
+Limits: H25 stays a release step; this is fixture coverage only, and the live phone, trial and launch checks remain open.
+
+## AV0222 milestone issue summaries
+
+These are local Markdown drafts for the three milestone issues, not GitHub issue updates or comments. No issue was edited and no box was checked. They link the sections above and add no unit heading. No real bridge, phone trial, deployment, send or mail evidence was added, and the held cheeses stay held. The existing issue links are in `docs/hass/HERMES_START.md`.
+
+### Issue #1 — working text demo
+
+Link: [issue #1](https://github.com/Grahammmm/avocado-shack/issues/1). Progress: [AV0222-02](#shelf-and-availability-questions-in-site-words-av0222-02--november-5-2026) and [AV0222-03](#price-and-plain-text-questions-before-drafting-av0222-03--november-6-2026) tighten the shelf words and refuse prices, [AV0222-07](#undo-and-cancel-phrases-av0222-07--november-17-2026) adds undo and cancel phrases, [AV0222-08](#notice-windows-and-shelf-check-days-in-words-av0222-08--november-17-2026) shows dates in words, and [AV0222-13](#interpreter-eval-set-v10-av0222-13--november-17-2026) adds offline eval cases. Still open: every live requirement; the offline eval makes no model-quality claim.
+
+### Issue #2 — owner trial
+
+Link: [issue #2](https://github.com/Grahammmm/avocado-shack/issues/2). Progress: [AV0222-04](#photos-needing-replacement-list-av0222-04--november-6-2026) lists photos to replace, [AV0222-05](#separate-saved-notes-and-owner-aliases-av0222-05--november-5-2026) and [AV0222-06](#pacific-approval-times-in-history-av0222-06--november-17-2026) cover aliases and history, [AV0222-09](#new-products-first-in-the-shop-av0222-09--november-7-2026) and [AV0222-10](#makers-without-a-story-av0222-10--november-15-2026) cover the catalog and makers, and [AV0222-01](#held-cheese-recall-evidence-av0222-01--november-4-2026) and [AV0222-11](#map-source-readiness-for-two-routes-av0222-11--november-4-2026) are source-only reports. Still open: no trial has been run, both cheeses stay held, and the source reports release or build nothing.
+
+### Issue #3 — reliable operation
+
+Link: [issue #3](https://github.com/Grahammmm/avocado-shack/issues/3). Progress: [AV0222-12](#phone-guide-and-limits-for-owner-shortcuts-av0222-12--november-18-2026) explains shortcuts and shelves in the guide, and [AV0222-14](#acceptance-map-for-av0222-regressions-av0222-14--november-18-2026) registers the regressions in the acceptance map. Still open: H25 stays a release step and the real-device checks remain open.

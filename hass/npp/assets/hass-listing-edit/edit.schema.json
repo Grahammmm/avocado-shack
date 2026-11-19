@@ -1,0 +1,21 @@
+{
+  "$comment": "S10 model mapping output: field patches against the listing schema, or ask. Keywords limited to the subset the repo test validator supports.",
+  "title": "hass-listing-edit mapping",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action", "patches", "ask_id"],
+  "properties": {
+    "action": {"type": "string", "enum": ["patch", "ask"]},
+    "patches": {
+      "type": "array", "maxItems": 4,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["field", "value"],
+        "properties": {
+          "field": {"type": "string", "enum": ["sellingPrice", "priceUnit", "supplier", "maker", "name", "category", "description_wording", "picture_request", "add_note"]},
+          "value": {"type": "string", "maxLength": 80}
+        }
+      }
+    },
+    "ask_id": {"type": ["string", "null"], "enum": ["ask_edit_source", "ask_edit_unclear", "ask_near_maker", "ask_price", "ask_unit", null]}
+  }
+}

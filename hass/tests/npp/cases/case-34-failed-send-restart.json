@@ -1,0 +1,90 @@
+{
+  "id": 34,
+  "slug": "failed-send-restart",
+  "title": "Failed send, restart, an early yes, then a successful retry",
+  "contract": "R2.1: only a confirmed send receipt makes a version delivered; a yes before the receipt is never upgraded",
+  "bug": "an inserted but unsent row counts as delivered, or a pre-receipt yes publishes after the retry",
+  "path": "contract",
+  "terminal": "card_out",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "new honey $9 each",
+      "photos": [
+        "npp:honey.jpg"
+      ]
+    },
+    {
+      "at_s": 30,
+      "from": "mike",
+      "text": null,
+      "photos": [],
+      "restart": true
+    },
+    {
+      "at_s": 35,
+      "from": "mike",
+      "text": "yes {code}-1",
+      "photos": []
+    },
+    {
+      "at_s": 60,
+      "from": "mike",
+      "text": null,
+      "photos": [],
+      "retry_send": true
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/honey-good.png",
+      "latency_s": 22
+    },
+    "outbox": {
+      "v1": {
+        "sends": [
+          "fail",
+          "ok"
+        ],
+        "ok_at_s": 60
+      }
+    }
+  },
+  "expect": {
+    "sent_at_null_until_s": 60,
+    "replies": [
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "guard",
+        "has_all": [
+          "The card isn't ready to approve yet; use the code on it when it arrives."
+        ]
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "card"
+      }
+    ],
+    "approval_rows": 0,
+    "commits": 0,
+    "state": "card_out",
+    "v1_delivered_after_retry": true,
+    "v1_needs_fresh_yes": true,
+    "checks": [
+      "delivery_approval",
+      "reply"
+    ]
+  }
+}

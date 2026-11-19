@@ -66,6 +66,11 @@ class NewPhotoPreview(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("PLAYWRIGHT_MODULE"), "PLAYWRIGHT_MODULE is not set")
 class NewPhotoBrowser(NewPhotoPreview):
+    # Only the browser test is new here; the inherited non-browser tests already run (git worktree + full site each) in NewPhotoPreview.
+    test_render_draft_returns_the_new_photo_only = None
+    test_copy_holds_the_photo_and_the_worktree_stays_untouched = None
+    test_bad_asset_keys_are_refused = None
+
     def test_changed_image_loads_in_the_isolated_preview(self):
         record = self.draft["records"][0]
         target = preview.target_for(record, store=self.rendered["store"])

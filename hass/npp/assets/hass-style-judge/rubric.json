@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "about": "Style judge rubric (design 3.3). The judge is offline, private-host and never part of a case pass/fail.",
+  "judge": {"model": "gpt-6.2-sol", "effort": "medium", "runs_per_item": 3},
+  "scale": {"min": 1, "max": 5},
+  "dimensions": [
+    {"id": "voice", "name": "Voice", "ask": "Warm, grounded neighbourhood grocer; not corporate, not breathless."},
+    {"id": "shape", "name": "Shape", "ask": "Two to three short sentences; an everyday, specific use or pairing; a modest human beat."},
+    {"id": "restraint", "name": "Restraint", "ask": "No spec list, no superlatives, no repeated label read-back."},
+    {"id": "truth", "name": "Truth", "ask": "Every factual phrase is backed by the listed facts; origin phrased as the maker's base."},
+    {"id": "fit_for_kind", "name": "Fit for kind", "ask": "Food gets food use; non-food gets practical use and no serving words."},
+    {"id": "maker_story", "name": "Maker story", "ask": "Third person, factual, from the official site; absent rather than padded."},
+    {"id": "picture", "name": "Picture", "ask": "Same ivory background, light, centring and scale as the gallery; product identical to the input."}
+  ],
+  "references": {"gallery_screenshots": 4, "golden_cards": 5, "note": "Screenshots stay on the private host; golden cards are hass-gallery-style/golden/*.json."},
+  "pass": {"mean_at_least": 4.0, "dimension_at_least": 3},
+  "pairwise": {"blind_per_golden": true, "consistent_when_accuracy_at_most": 0.70, "goldens": 12},
+  "calibration": {
+    "runs": 3,
+    "good_each_run_at_least": 4.0,
+    "bad_each_run_at_most": 2.5,
+    "spread_at_most": 0.5,
+    "on_failure": "this judge version is not used; the reason goes to metrics.tsv",
+    "manifest": "calibration/manifest.json"
+  },
+  "asset_change_pass": {"mean_at_least": 4.0, "case_regression_at_most": 0.5, "all_validator_checks_green": true}
+}

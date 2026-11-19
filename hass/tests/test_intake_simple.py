@@ -2,8 +2,10 @@
 import json
 import unittest
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest import mock
 
+from hass.skills import intake_simple as simple
 from hass.skills import item_intake as ii
 from hass.tests import test_item_add_dispatch as base
 from hass.tests.test_label_reader import reader, recorded
@@ -12,6 +14,26 @@ from hass.tests.test_photo_detail_read import GLUE
 FINANCE = "bought 100 at $1, sell for $2"
 DETAILS = {**GLUE, "features": ["Dries Natural Color", "No Foaming", "Type II Water Resistant"],
            "printed_claims": ["Made in USA", "Incredibly Strong", "For the Toughest Jobs on Planet Earth"]}
+
+
+class PrivatePriceBasis(unittest.TestCase):
+    def test_bag_and_bundle_prices_are_private_until_owner_names_public_unit(self):
+        # A basket-only fix would still leak bare bag/bundle prices; unrelated words must not pick a unit.
+        content = SimpleNamespace(makers={})
+        for basis in ("bag", "bundle"):
+            with self.subTest(basis=basis):
+                slots = {"name": "Tayberries", "shelf": "fruit", "intake": {"price": "6.00", "sold_by": basis}}
+                self.assertNotIn("sellingPrice", simple.plan(slots, content)[0]["args"])
+                self.assertIn(f'Price: $6.00 a {basis} (not on the website: it can show a price per lb or each. '
+                              'Reply "each" to show $6.00 each.)', simple.preview(slots).splitlines())
+                with_cost, _, _ = simple.edit(slots, "cost $1/lb")
+                self.assertEqual(with_cost["intake"]["cost"], "1.00")
+                self.assertNotIn("sellingPrice", simple.plan(with_cost, content)[0]["args"])
+                revised, public, question = simple.edit(slots, "per lb")
+                self.assertEqual((public, question), ("", None))
+                self.assertEqual(revised["intake"]["sold_by"], "pound")
+                self.assertEqual(simple.plan(revised, content)[0]["args"]["sellingPrice"], "6.00 per lb")
+                self.assertIn("Price: $6.00 per lb", simple.preview(revised).splitlines())
 
 
 class SimpleIntake(unittest.TestCase):
@@ -369,7 +391,7 @@ class SimpleIntake(unittest.TestCase):
                 self.assertNotIn("Incredibly Strong", description)
                 self.assertNotIn("size", description.lower())
                 self.assertEqual(cloud, [])  # unchanged owner-finance local-only guard
-                self.assertEqual(len(requests), 0 if when == "caption" else 1)
+                self.assertEqual(requests, [])  # Text has a typed fact; the complete photo caption already skipped.
                 if requests:
                     self.assertEqual(requests[0]["format"]["additionalProperties"], False)
                 self.assertNotIn("$", json.dumps(chat.live()["texts"]))

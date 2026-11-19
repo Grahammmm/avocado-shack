@@ -1,0 +1,25 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-018",
+  "photo_path": "assets/products/photo-product-018.webp",
+  "category": "vegetables",
+  "card": {
+    "photo_alt": "Montaña de Oro Sea Salt tortilla chips (illustration)",
+    "brand": "Taco Works",
+    "name": "Montaña de Oro Sea Salt tortilla chips",
+    "price": null,
+    "origin": "Based in San Luis Obispo, California",
+    "badges": [],
+    "availability": null,
+    "description": "Taco Works chips with Montaña de Oro sea salt, made in San Luis Obispo. Open the bag when the guacamole is ready. Nobody needs a more complicated plan.",
+    "meet_the_maker": {
+      "name": "Taco Works",
+      "place": "San Luis Obispo, California",
+      "story": "Taco Works started as a San Luis Obispo restaurant in 1976. Its tortilla chips became popular enough to outgrow the restaurant and become a business of their own. The Montaña de Oro line keeps things straightforward: white corn and salt. Give them a good bowl of guacamole.",
+      "visit_url": "https://www.tacoworks.net/pages/about-us",
+      "see_all_count": null
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-018#market"
+  }
+}

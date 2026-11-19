@@ -1,0 +1,27 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-025",
+  "photo_path": "assets/products/photo-product-025.webp",
+  "category": "dairy",
+  "card": {
+    "photo_alt": "Straus half-and-half (illustration)",
+    "brand": "Straus",
+    "name": "Straus half-and-half",
+    "price": null,
+    "origin": "Based in Northern California",
+    "badges": [
+      "Organic"
+    ],
+    "availability": null,
+    "description": "Enough cream to give the coffee some body. Pour a little, taste, and let the cup tell you whether it needs more.",
+    "meet_the_maker": {
+      "name": "Straus",
+      "place": "Northern California",
+      "story": "Straus helped change the conversation about American dairy when its family farm became certified organic in 1994. The creamery carries that commitment into its milk, cream and cultured products. Good dairy earns its place in coffee, a sauce, or simply a cold glass.",
+      "visit_url": "https://www.strausfamilycreamery.com/about/our-story/",
+      "see_all_count": 7
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-025#market"
+  }
+}

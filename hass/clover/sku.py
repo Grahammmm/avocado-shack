@@ -19,7 +19,7 @@ CATEGORY_CODES = dict(zip(CATEGORIES, ("FRU", "VEG", "DAI", "EGG", "MEA", "PAN",
 GENERAL = "GEN"
 PREFIX = "AS"
 SLUG_MAX = 18
-SKU_RE = re.compile(r"AS-[A-Z]{3}-[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{2}")
+SKU_RE = re.compile(r"AS-[A-Z]{3}-[A-Z0-9]+(?:-[A-Z0-9]+)*-(?:0[1-9]|[1-9][0-9])")
 SKU_MAX = 28
 SMALL_WORDS = frozenset({"THE", "A", "AN", "OF", "AND", "WITH", "FOR", "IN", "ON"})
 
