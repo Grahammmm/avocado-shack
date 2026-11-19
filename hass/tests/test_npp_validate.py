@@ -101,3 +101,17 @@ class ValidateTests(unittest.TestCase):
         self.assertNotIn('card-copy', card(shown=['Oak Farm']).problems)
         self.assertIn('card-copy', card(name='This cures cancer.', shown=['This cures cancer.']).problems)
         self.assertIn('card-copy', card(place='Cures cancer', shown=['Cures cancer']).problems)
+
+    def test_computed_origin_line_is_shown_only_when_the_maker_place_behind_it_is_clean(self):
+        # Contract: the derived "Based in <place>" origin line cannot launder a place that fails the panel check.
+        # Bug caught: with place 'Cures cancer' and the matching computed origin rendered (no separate place node),
+        # the origin was unconditionally allowed, so the protected claim showed without card-copy.
+        self.product['producerKey'] = 'oak-farm'
+        def card(place):
+            origin = f'Based in {place}'
+            return self.verdict(makers={'oak-farm': {'name': 'Oak Farm', 'place': place, 'story': 'We grow plums.'}}, origin=origin,
+                                card_nodes=[*self.nodes, origin, 'We grow plums.', 'Oak Farm'])
+        self.assertNotIn('card-copy', card('Oakdale').problems)
+        dirty = card('Cures cancer').problems
+        self.assertIn('card-copy', dirty)
+        self.assertNotIn('origin', dirty)  # the origin line itself is the legitimate computed one; only its source place is unfit

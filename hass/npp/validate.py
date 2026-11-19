@@ -201,8 +201,11 @@ def listing(writer, ctx, copy, draft, *, finance, origin, makers, live_site, pho
     panel = [maker.get(key) for key in ('name', 'place') if _panel_clean(maker.get(key))]
     if not new_makers and _panel_clean(maker.get('story')):
         panel.append(maker.get('story'))
-    shown_ok = {_flat(v) for v in (text.get('name'), text.get('description'), text.get('story'), product.get('displayBrand'), product.get('brand'), origin,
-                                   *panel) if isinstance(v, str) and v.strip()}
+    # The computed origin line is derived from the maker's place ("Based in <place>"), so it is bound the same way: it is
+    # shown only when its source is clean (an owner-said supplier, no place, or a place with no protected claim).
+    origin_ok = bool(supplier) or not maker.get('place') or (_panel_clean(maker.get('place')) and _panel_clean(origin))
+    shown_ok = {_flat(v) for v in (text.get('name'), text.get('description'), text.get('story'), product.get('displayBrand'), product.get('brand'),
+                                   *([origin] if origin_ok else []), *panel) if isinstance(v, str) and v.strip()}
     if price and (problem := dom_problem(card_nodes, price_index, price, text.get('name'),
                                         tuple(text[k] for k in ('name', 'story') if text.get(k)), private,
                                         allowed=shown_ok,
