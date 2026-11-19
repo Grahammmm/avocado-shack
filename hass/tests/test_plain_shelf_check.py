@@ -115,6 +115,7 @@ class ModeTests:
                      "did the shelf check, all good except the eggs", "shelf check not done"):
             with self.subTest(text=text):
                 self.assertFalse(stock.plain_shelf_check(text))
+                if stock.shelf_check_except(text) is not None: continue  # AV2007-16: a separate route drafts it (hass.tests.test_shelf_check_except)
                 self.script(text, {"unsupported": "stand-in"})
                 before = len(self.drafts())
                 self.assertEqual(self.say(text), "unsupported")

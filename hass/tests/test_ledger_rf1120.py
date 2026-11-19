@@ -23,6 +23,7 @@ UNITS += tuple(f"AV0022-{n:02d}" for n in range(1, 17) if n != 5)  # AV0022-17 r
 UNITS += tuple(f"AV1422-{n:02d}" for n in range(1, 15))  # AV1422-15 roll-up (id order; the ledger has no issue headings)
 UNITS += tuple(f"AV1622-{n:02d}" for n in range(1, 14))  # AV1622-14 roll-up (id order; the ledger has no issue headings)
 UNITS += tuple(f"AV1937-{n:02d}" for n in range(1, 15))  # AV1937-15 roll-up (id order; the ledger has no issue headings)
+UNITS += tuple(f"AV2007-{n:02d}" for n in range(1, 20))  # AV2007-20 roll-up (id order; each section's Limits names its Issue #; no unit is Issue #3)
 LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
 WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
          "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
@@ -42,6 +43,8 @@ WORDS |= {"AV1422-06": ("No invented guest count",), "AV1422-13": ("Docs only",)
 WORDS |= {"AV1622-08": ("Read-only; never deploys",), "AV1622-12": ("Synthetic replies are not model output",),
           "AV1622-13": ("H25 stays a release step",)}  # AV1622-14 edge path 5
 WORDS |= {"AV1937-03": ("Nothing is ever deleted",), "AV1937-14": ("H25 stays a release step",)}  # AV1937-15 edge path 5
+WORDS |= {"AV2007-08": ("the till stays read-only",), "AV2007-16": ("nothing is marked available",),
+          "AV2007-19": ("no token and no network",)}  # AV2007-20 edge path 5
 LEDGER = (REPO_ROOT / "BUILD_LEDGER.md").read_text(encoding="utf-8")
 SHA = re.compile(r"\b[0-9a-f]{40}\b")
 GIT_HEX = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # commit ids are not phone numbers
@@ -217,6 +220,13 @@ class LedgerRF1120Tests(unittest.TestCase):
                   "AV1937-05: missing test_hike_repeatz.py": LEDGER.replace("hass.tests.test_hike_repeat ", "hass.tests.test_hike_repeatz "),
                   "AV1937-03: limit wording?": LEDGER.replace("Nothing is ever deleted", "Products are deleted"),
                   "AV1937-14: limit wording?": LEDGER.replace("H25 stays a release step", "H25 is done")}
+        cases |= {"AV2007-01: 2 headings": LEDGER + "\n" + sections(LEDGER, "AV2007-01")[0], "AV2007-19: 0 headings": LEDGER.replace("(AV2007-19)", "(AV2007-190)"),
+                  "AV2007-10: no merge sha": LEDGER.replace(sections(LEDGER, "AV2007-10")[0], SHA.sub("0af47d4", sections(LEDGER, "AV2007-10")[0])),
+                  "AV2007-14: missing test_second_questionz.py": LEDGER.replace("hass.tests.test_second_question ", "hass.tests.test_second_questionz "),
+                  "AV2007-08: limit wording?": LEDGER.replace("the till stays read-only", "the till is writable"),
+                  "AV2007-16: limit wording?": LEDGER.replace("nothing is marked available", "products are marked available"),
+                  "AV2007-19: limit wording?": LEDGER.replace("no token and no network", "a token and the network"),
+                  "AV2007-12: private data": LEDGER.replace("(AV2007-12)", "(AV2007-12)\nmail owner@example.com")}
         cases |= {f"AV2022-08: private data|{leak}": LEDGER.replace("(AV2022-08)", "(AV2022-08)\n" + leak) for leak in
                   ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242")}
         cases |= {f"RF1035-7: private data|{leak}": LEDGER.replace(one, one + leak + "\n") for leak in

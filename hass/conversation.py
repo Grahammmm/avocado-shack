@@ -103,6 +103,7 @@ RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question st
 # only thing missing was today's shelf check. Plain words only: no "selection", no "not drafted", no ids.
 SHELF_QUESTION = "Before I change that, " + SHELF_ASK[0].lower() + SHELF_ASK[1:]
 SHELF_CODE_REASON = "shelf-check"  # AV2007-15: drafts.reason of a plain shelf-check draft: its yes must name the code
+SHELF_CHECK_LIMIT = "I can take up to 5 sold-out products in one shelf check. Nothing changed."  # AV2007-16
 SHELF_NO = "Okay, nothing was changed. Tell me what is different on the shelf list and I will draft that."
 QUESTION_DROPPED = "Okay, I've dropped that question"  # AV2007-13
 SEPARATE_RE = re.compile(r"(?:what'?s|what is|whats) on special(?:s)?\??")  # AV2007-13: a lookup that is never the answer to a question
@@ -1834,6 +1835,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if stock_skill.plain_shelf_check(msg.text):
             self._expire_lapsed()
             return self._draft_shelf_check(msg, now, {})
+        if (names := stock_skill.shelf_check_except(msg.text)) is not None:  # AV2007-16
+            self._expire_lapsed()
+            return self._shelf_check_except(msg, now, names)
         if cap is not None:  # H22: counted before the call in this transaction, so a failed call still counts
             day, calls = self._calls(now)
             if calls >= cap:
@@ -1903,6 +1907,26 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self._skill_ref = f"{skill.name}@{skill.version}"
         try: return self._draft(msg, now, {"ops": ops, "revises": None}, [], skill_names=(skill,), code_reason=SHELF_CODE_REASON)
         finally: self._skill_ref = None
+
+    def _shelf_check_except(self, msg, now, names) -> str:
+        """AV2007-16: 'all good except X and Y' is today's shelf check plus X and Y sold out in ONE draft, by code. Every name is
+        resolved first (kinds.product_ref); the first one that is not exactly one active product is asked about, or refused with the
+        resolver's own words, and nothing is drafted. More than five names is refused before any lookup."""
+        from hass.skills import kinds, stock as stock_skill
+        if len(names) > stock_skill.MAX_SOLD_OUT_WITH_CHECK:
+            self._reply(SHELF_CHECK_LIMIT)
+            return "not-drafted"
+        try:
+            ctx = (self.dispatch or dispatch_mod.Dispatcher(self, None))._ctx(now, [msg.text])
+            found = [kinds.product_ref(ctx.content, name, ctx.aliases) for name in names]
+        except Exception:  # noqa: BLE001 - a content read must not raise past the owner's message
+            self._reply(dispatch_mod.PLAN_FAILED)
+            return "not-drafted"
+        for one in found:
+            if one.status != "one":
+                self._reply(one.reply)
+                return "question" if one.status == "several" else "not-drafted"
+        return self._draft_shelf_check(msg, now, {"out": [one.value for one in found]})
 
     def _keep_design(self, msg, said):
         """AV1052-11 (H24/H15): the fixed design refusal also keeps the owner's words (first 500 characters) as a dated owner note
