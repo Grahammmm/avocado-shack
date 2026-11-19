@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import unittest
 from unittest.mock import patch
 
@@ -351,5 +352,28 @@ class JobTests(unittest.TestCase):
         self.assertEqual(statebackup.restore(saved, target, restored_wt, media_into=images)["result"], "ok")
         self.assertEqual((images / png.relative_to(self.root)).read_bytes(), PNG)
         self.assertEqual(json.loads((target / "config.json").read_text())["settings"]["mediaRoot"], str(images.resolve()))
+        # Contract: a default backup of an NPP state carries the originals its open jobs resume from, so a media restore
+        # that keeps npp on can still open the source photo (bug: npp on, mediaRoot at an empty originals/).
+        sha = self.job()["photo_sha"]
+        self.assertEqual(made["media"], 1)
+        rel_orig = Path("originals") / sha[:2] / f"{sha}.jpg"
+        self.assertEqual((images / rel_orig).read_bytes(), (self.root / rel_orig).read_bytes())
+        self.assertTrue((images / rel_orig.with_suffix(".json")).is_file())
+        self.assertFalse((images / "web").exists())  # web copies are regenerable and stay out of the backup
+        self.assertTrue(json.loads((target / "config.json").read_text())["settings"]["npp"])
         (png.parent / "unrelated.json").write_text("{}")
         self.assertEqual(statebackup.create(self.repo.state, out, now=self.now)["result"], "refused")
+
+    def test_restore_without_originals_turns_npp_off(self):
+        # Contract: a backup that holds job artifacts but no source photo restores with npp off (bug: npp on, nothing to resume).
+        self.say("sell $2", photos=1)
+        self.work()
+        shutil.rmtree(self.root / "originals")
+        out = self.root.parent / "backups"
+        out.mkdir(mode=0o700)
+        saved = Path(statebackup.create(self.repo.state, out, now=self.now)["backup"])
+        restored_wt = self.root.parent / "restored-wt"
+        git(self.repo.main, "worktree", "add", "-qb", "hass/npp-drill", str(restored_wt))
+        target, images = self.root.parent / "restore", self.root.parent / "restore-media"
+        self.assertEqual(statebackup.restore(saved, target, restored_wt, media_into=images)["result"], "ok")
+        self.assertFalse(json.loads((target / "config.json").read_text())["settings"]["npp"])

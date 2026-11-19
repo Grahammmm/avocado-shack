@@ -145,11 +145,13 @@ def _media_root(raw, roots) -> Path:  # create --media: the H10 photo store (has
         raise UnsafeState("media dir must lie outside the repository, the worktrees, the state dir and the backup dir")
     return path
 
-def _scan_media(mroot: Path):
-    """(backup rels of settled originals + sidecars, refused names, unsettled names); nothing is followed."""
+def _scan_media(mroot: Path, strict=True):
+    """(backup rels of settled originals + sidecars, refused names, unsettled names); nothing is followed.
+    strict=False (the configured NPP root, never named by --media) takes only originals/ and npp/, ignoring web/ etc."""
     orig, pairs = mroot / "originals", {}
     bad = [f"unknown media entry: {e.name}" for e in os.scandir(mroot) if e.name not in ("originals", "npp") or e.is_symlink()
-           or not e.is_dir()]
+           or not e.is_dir()] if strict else [f"unsafe media entry: {e.name}" for e in os.scandir(mroot)
+                                              if e.name in ("originals", "npp") and (e.is_symlink() or not e.is_dir())]
     subs = list(os.scandir(orig)) if orig.is_dir() and not orig.is_symlink() else []
     for entry in [s for s in subs if s.is_symlink() or not s.is_dir()] + [
             e for s in subs if s.is_dir(follow_symlinks=False) for e in os.scandir(s.path)]:
@@ -196,10 +198,11 @@ def create(state, out, now=None, media=None) -> dict:
         files, bad = _scan(sdir)
         mfiles, mbad, unsettled = _scan_media(mroot) if mroot else ([], [], [])
         if nroot and nroot != mroot:
-            nfiles, nbad = _scan_npp(nroot)
-            # Only one NPP root can be restored. An explicit originals root can differ, but not claim two job trees.
+            # The configured NPP root's jobs and the originals they name travel together; an explicit originals root can
+            # differ but not claim a second job tree. The same sha names the same bytes, so a shared rel is kept once.
+            nfiles, nbad, nunsettled = _scan_media(nroot, strict=False)
             if any(rel.startswith(NPP) for rel in mfiles): nbad.append("two NPP media roots")
-            mfiles, mbad = mfiles + nfiles, mbad + nbad
+            mfiles, mbad, unsettled = sorted(set(mfiles) | set(nfiles)), mbad + nbad, unsettled + nunsettled
         if bad or mbad: return {"result": "refused", "problems": bad + mbad}
         if unsettled: return {"result": "unsettled", "problems": unsettled}  # a photo write may be in flight
         now = now or datetime.now(timezone.utc)
@@ -222,7 +225,7 @@ def create(state, out, now=None, media=None) -> dict:
                 _write_new(dest / rel, data)
                 hashes[rel] = hashlib.sha256(data).hexdigest()
                 continue
-            src = mroot / rel[len("media/"):] if rel.startswith(ORIG) else sdir / rel
+            src = next(r for r in (mroot, nroot) if r and os.path.lexists(r / rel[6:])) / rel[6:] if rel.startswith(ORIG) else sdir / rel
             if fallback := re.fullmatch(FALLBACK_JPEG, rel):
                 try: data = _read_fallback(src, fallback[1])
                 except (OSError, ValueError):
@@ -249,7 +252,7 @@ def create(state, out, now=None, media=None) -> dict:
         os.replace(dest / (MANIFEST + ".tmp"), dest / MANIFEST)  # last: a backup without it is incomplete
         _rename_noreplace(dest, final)  # a final dir that appeared meanwhile (even empty) is refused, never replaced
         undo.pop_all()  # renamed in: nothing left to clean up
-    extra = {"media": originals} if mroot else {}  # settled: one sidecar per original
+    extra = {"media": originals} if mroot or nroot else {}  # settled: one sidecar per original
     return {"result": "ok", "backup": str(final), "files": len(hashes), "contentCommit": commit,
             "contentBundle": BUNDLE in hashes, **extra}
 
@@ -437,8 +440,9 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
                 continue
             cfg = {**json.loads(_read(bdir / CONFIG).decode("utf-8")), "worktree": str(wt)}
             if isinstance(cfg.get("settings"), dict) and cfg["settings"].get("npp"):
-                # A drill with no media must not resume jobs against the original media root.
-                cfg["settings"] = {**cfg["settings"], **({"mediaRoot": str(mtarget)} if mtarget else {"npp": False})}
+                # A drill with no media, or media without the photo originals a job resumes from, must not run NPP.
+                keep = mtarget and any(r.startswith(ORIG) for r in mrels)
+                cfg["settings"] = {**cfg["settings"], **({"mediaRoot": str(mtarget)} if keep else {"npp": False})}
             _write_new(tmp / CONFIG, json.dumps(cfg, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"))
         if ctmp:
             ctmp.mkdir(mode=0o700)
