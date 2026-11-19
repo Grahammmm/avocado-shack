@@ -29,7 +29,7 @@ PLAIN_TEXT_REPLY = ("The website only takes plain words, so I haven't made any c
                     "Could you send it again without special marks?")
 LOOKUP_VERBS = frozenset({"status", "report", "history", "find", "listing", "shelf", "hidden"})  # AV1104-06: the read-only commands a question may ask for
 LOOKUP_NEEDS_ARG = frozenset({"find", "listing", "shelf"})
-LOOKUP_REFUSED = "Nothing was drafted. To look something up send status, report, find <words> or listing <id>."
+LOOKUP_REFUSED = "Nothing changed. To look something up, say status, report, or find and a few words."
 CANT_DO_YET = "I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change."
 WANTS = {"bool": "yes or no", "int": "a whole number", "text_list": "a list of words"}
 

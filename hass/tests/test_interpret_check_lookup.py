@@ -12,7 +12,7 @@ import unittest
 from hass import interpret_check
 from hass.conversation import UNREADABLE, _checked
 
-REFUSED = {"unsupported": "Nothing was drafted. To look something up send status, report, find <words> or listing <id>."}
+REFUSED = {"unsupported": "Nothing changed. To look something up, say status, report, or find and a few words."}
 ALLOWED = ("status", "report", "history", "history hours", "find eggs", "listing photo-product-001", "listing store", "shelf dairy",
            "hidden", "Status.", "  REPORT!  ", "Find Free-Range Eggs", "find eggs; yes")  # a ; inside find is only search text
 FORBIDDEN = ("yes", "no", "approve ab12", "cancel", "undo", "undo ab12", "stop", "pause changes", "resume", "remember parking: Rear lot",

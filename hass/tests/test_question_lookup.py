@@ -14,7 +14,7 @@ from hass import conversation
 from hass.tests.test_conversation import SETTINGS, T0, ConversationTestCase
 
 PREFIX = "You asked, so nothing was drafted.\n"
-REFUSED = "Nothing was drafted. To look something up send status, report, find <words> or listing <id>."
+REFUSED = "Nothing changed. To look something up, say status, report, or find and a few words."
 EXAMPLES = {"how many are coming Saturday?": "status", "is the sourdough sold out?": "listing photo-product-001",
             "what's on the dairy shelf?": "shelf dairy", "what are my hours?": "listing store"}
 

@@ -157,7 +157,7 @@ class CommandsDocTest(unittest.TestCase):
     def test_question_lookup_is_documented_but_adds_no_command(self):
         """AV1104-06: the doc names both fixed replies and the question-as-change contrast; plain questions are not parser verbs or rows."""
         doc = " ".join(DOC.read_text("utf-8").split())
-        for phrase in ("You asked, so nothing was drafted.", "Nothing was drafted. To look something up send status, report, find <words> or listing <id>.",
+        for phrase in ("You asked, so nothing was drafted.", "Nothing changed. To look something up, say status, report, or find and a few words.",
                        "`how many are coming Saturday?`", "`can you mark the eggs sold out?`) is still a change", "Nothing is drafted, approved, saved or expired by a question."):
             self.assertIn(phrase, doc)
         self.assertNotIn("Any other message is read as a change request. Hass replies", doc)
