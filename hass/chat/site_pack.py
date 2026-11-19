@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from hass import editor as editor_mod, preview as preview_mod, sitegen, voice
 from hass.chat.shared import CANT_READ, load_content, LOCAL_TZ, q, STATUS_PLAIN
-from hass.content_model import _text as checked_text, ContentError, HOME_IMAGE_RE, iso_day, load_and_validate, SHELF_LABELS, shop_today, validate
+from hass.content_model import _text as checked_text, ContentError, DEFAULT_HEADLINE, DEFAULT_INTRO, DEFAULT_STORY, HOME_IMAGE_RE, iso_day, load_and_validate, SHELF_LABELS, shop_today, validate
 from hass.ops import catalog
 
 SHELF_MAX = 60  # AV1052-05: products listed by `shelf <name>`, then "... and N more"
@@ -20,6 +20,8 @@ PHOTOS_TO_TAKE_MAX = 5  # AV0222-04, HASS-VOICE-1: names listed by `photos to ta
 HIDDEN_MAX = 20  # AV1222-13: lines of the hidden list
 LISTING_DESC_MAX = 120  # AV1622-09: characters of a product description in `listing`
 
+LISTING_STORY_MAX = 80  # AV1052-06: characters of the story in `listing store`
+LISTING_HEAD = "This is from my saved copy, not a live look at the website:"
 LISTING_USAGE = "Which one? Say it like " + q("listing Etto") + "."
 LISTING_NONE = "I don't know that one. Try " + q("find") + " and a word from its name."
 LISTING_MANY = "That fits more than one thing. Could you say a bit more of its name?"
@@ -168,12 +170,45 @@ class SitePack:
                     else f"I couldn't find anything called {q(query)}.", long_ok=True)
         return "find"
 
+    def _listing_store(self) -> str:
+        """AV1052-06 (H13/H17): `listing store` replies the saved store words as the site shows them (effective defaults, no
+        HTML): address, hours, phone, intro, headline, the first 80 characters of the story, home photo, home notice, last
+        shelf check. Read-only, writer worktree content strictly validated; one safe reply (nothing partial) when it cannot be read."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            store = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup").store
+            now = self._now()
+            today = shop_today(now)  # one Pacific day for the notice and the shelf-check sentences
+            first, second = store.get("headline") or DEFAULT_HEADLINE
+            story = store.get("story") or DEFAULT_STORY
+            home = store.get("homeImage")  # every saved word goes through q(): shown as saved, never judged by the voice check
+            lines = [LISTING_HEAD, "Store", f"Address: {q(store['streetAddress'])} · {q(store['town'])}", "Hours:"]
+            lines += [f"- {q(line)}" for line in store["hours"]]
+            if store.get("phone"): lines.append(f"Phone: {q(sitegen.phone_text(store['phone']))}")
+            lines += [f"Intro: {q(store.get('intro') or DEFAULT_INTRO)}", f"Headline: {q(first)}", q(second),
+                      "Story: " + q(story[:LISTING_STORY_MAX]) + ("…" if len(story) > LISTING_STORY_MAX else ""),
+                      f"Home photo: yours - {q(home['imageAlt'])}" if home else "Home photo: the shop's own photo"]
+            if store.get("notice"):
+                notice = self._notice_line(now)
+                if notice is None: raise ValueError("notice")
+                lines.append(q(notice))
+            checked = sitegen.checked_line(store, today)
+            lines.append(q(checked) if checked else "Shelf check: not done yet")
+            text = "\n".join(lines)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            self._problem("error", "shop-list-unreadable")
+            text = CANT_READ
+        self._reply(text, long_ok=True)
+        return "listing"
+
     def _listing(self, ident) -> str:
         """AV1622-09 (H17): read-only view of one saved product, maker, hike or route idea by exact id, from the writer
-        worktree content (strictly validated). Nothing is drafted or stored; works while paused."""
+        worktree content (strictly validated). Nothing is drafted or stored; works while paused.
+        AV1052-06: the whole word `store` (any case) is the store itself, reserved ahead of any id."""
         if not ident:
             self._reply(LISTING_USAGE)
             return "listing"
+        if ident.casefold() == "store": return self._listing_store()
         try:
             wt = editor_mod._load(str(self.sdir))[2]
             content = load_content(wt / "hass" / "content")
