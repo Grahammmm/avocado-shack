@@ -102,7 +102,7 @@ Send: `post sourdough`
 Send: `listing sourdough`
 Send: `no all`
 Send: `help undo`
-A mistyped command gets only a guess and nothing runs: `histroy` gets `Did you mean history? Send history.`, so send `history` again as a whole message. When status says Hass could not read a request (the reader was not working), nothing was drafted: send that change again once it is back; Hass does not retry by itself, and the wording need not change.
+A mistyped command gets only a guess and nothing runs: `histroy` gets `Did you mean history? Send history.`, so send `history` again as a whole message. When status says Hass could not read a written request (the reader was not working), nothing was drafted: send that change again once it is back; the wording need not change. When it could not read a photo's caption, Hass keeps the photo as a draft waiting for details: once the reader is back, reply with the product and what the photo shows. Sending the same photo again is refused as a duplicate and its caption is not read. If status says the photo's time ran out, send the photo again with its caption. Hass does not retry by itself.
 Send (plain words): `histroy`
 A layout idea Hass cannot make by message is kept on the shop computer as a design note for the developer; the website stays as it is, and the note is neither sent nor used as a preference. See it with `memory`; remove it with `forget design.<n>` and its exact key.
 Send (plain words): `Make the product cards round`

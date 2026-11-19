@@ -50,8 +50,13 @@ AV1052_EXPLAINS = {  # one phrase per safety clause; dropping or weakening any o
     "no all keeps photos": "cancels every waiting draft and question, keeps stored photos and changes nothing on the website",
     "approval keeps its own code": "each approval still needs its own code", "yes all refused": "`yes all` is refused",
     "typo gets a guess only": "gets only a guess and nothing runs", "typo reply is literal": "`Did you mean history? Send history.`",
-    "typo is resent whole": "send `history` again as a whole message", "failed read says why": "(the reader was not working), nothing was drafted",
+    "typo is resent whole": "send `history` again as a whole message", "failed read says why": "could not read a written request (the reader was not working), nothing was drafted",
     "failed read is resent": "send that change again once it is back", "no automatic retry": "does not retry by itself",
+    # AV1052-15 review: a failed photo caption leaves a needs-details draft (core_pack._reader_failed_lines), so "nothing was drafted /
+    # send it again" is true only for written requests; a doc that tells photo owners to resend would loop on "duplicate"
+    "failed photo keeps its draft": "keeps the photo as a draft waiting for details", "failed photo is answered by reply": "reply with the product and what the photo shows",
+    "resent photo is a duplicate": "Sending the same photo again is refused as a duplicate and its caption is not read",
+    "expired photo is resent": "If status says the photo's time ran out, send the photo again with its caption",
     "design note is local": "kept on the shop computer as a design note for the developer",
     "design note is not a preference": "neither sent nor used as a preference", "design note is forgotten by key": "`forget design.<n>`"}
 PRIVATE_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w+|\+\d|http://", re.I)
