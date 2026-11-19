@@ -37,8 +37,9 @@ class Maker:
 
     @property
     def research_allowed(self):
-        # New still requires official-site verification in S4; no maker fact is licensed here.
-        return self.state in {"new", "absent"}
+        # Only a maker the owner named that is not on the site yet. New still requires
+        # official-site verification in S4; an absent maker (none named) never licenses research.
+        return self.state == "new"
 
 
 @dataclass(frozen=True)
@@ -123,13 +124,14 @@ class MissingInfo:
         self.essentials = {rule["id"]: rule for rule in self.rules["essentials"]}
 
     def decide(self, reading=None, *, price=OwnerPrice(), owner_item=None, owner_texts=(), products=(), makers=None,
-               clover=None, ask_counts=None, answered=(), duplicate_confirmed=False):
+               clover=None, ask_counts=None, answered=(), duplicate_confirmed=False, near_confirmed=False):
         """Return a pure decision over S2 evidence and projected inputs.
 
         `clover` is an optional already-loaded local Snapshot, not a client; only
         names are inspected. Receipts can use rule IDs, not finance or till rows.
         `owner_item` is a field explicitly set by the owner, not a caption dump.
         History inputs are durable question IDs supplied by the composer.
+        `near_confirmed` is the owner's "yes" to the near_maker question: the matched record is reused.
         """
         evidence, makers, ask_counts = reading or {}, makers or {}, ask_counts or {}
         templates = self.replies["questions"]
@@ -176,7 +178,9 @@ class MissingInfo:
         note = ""
         if maker.state == "near":
             assert maker.record is not None
-            if not add("near_maker", templates["ask_near_maker"].format(maker=maker.record["name"]), 1):
+            if near_confirmed:
+                maker = Maker("known", maker.phrase, maker.key, maker.record)  # owner confirmed the existing maker
+            elif not add("near_maker", templates["ask_near_maker"].format(maker=maker.record["name"]), 1):
                 # Do not treat an unconfirmed near-match as grounds for a research call.
                 maker = Maker("near", maker.phrase)
         if maker.state == "contradictory":

@@ -72,6 +72,16 @@ class MissingTests(unittest.TestCase):
             self.assertEqual(self.rules.decide(jam, price=price, makers=makers, owner_texts=words).maker.state, "absent")
         near = self.rules.decide(jam, price=price, makers=makers, owner_texts=("made by Miner",))
         self.assertEqual(near.questions, (("near_maker", "Is that the Miners already on the website?"),))
+        # A "yes" to near_maker keeps the matched record (bug: it was dropped and read as no maker).
+        confirmed = self.rules.decide(jam, price=price, makers=makers, owner_texts=("made by Miner",), near_confirmed=True)
+        self.assertEqual((confirmed.maker.state, confirmed.maker.key, confirmed.maker.record), ("known", "miners", makers["miners"]))
+        self.assertEqual(confirmed.questions, ())
+        self.assertFalse(confirmed.maker.research_allowed)
+        self.assertTrue(confirmed.ready)
+        # No owner-named maker (bug: absent allowed research) and an unconfirmed near match never license research.
+        self.assertEqual(self.rules.decide(jam, price=price, makers=makers).maker.state, "absent")
+        self.assertFalse(self.rules.decide(jam, price=price, makers=makers).maker.research_allowed)
+        self.assertTrue(self.rules.decide(jam, price=price, makers=makers, owner_texts=("made by Zed",)).maker.research_allowed)
         capped = self.rules.decide(jam, makers=makers, owner_texts=("made by Miner",),
                                    products=[{"name": "Raspberry Jam"}])
         self.assertEqual(tuple(q for q, _ in capped.questions), ("selling_price", "duplicate"))
