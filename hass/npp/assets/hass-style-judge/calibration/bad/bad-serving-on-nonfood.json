@@ -1,0 +1,17 @@
+{
+  "product_id": "bad-serving-on-nonfood",
+  "synthetic": true,
+  "breaks": ["fit_for_kind", "truth"],
+  "category": "general",
+  "card": {
+    "photo_alt": "Lavender honey soy candle",
+    "brand": "From the market",
+    "name": "Lavender honey soy candle",
+    "price": null,
+    "origin": "Ask us about the source in store.",
+    "badges": [],
+    "availability": null,
+    "description": "Drizzle it over toast or stir it into tea. A sweet lavender honey to serve with cheese at dinner. Taste the difference.",
+    "meet_the_maker": null
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "about": "S6 picture policy. Adds NO new picture format, path, threshold or label: the existing install contract (hass/ops/photos.py install, photo_polish, newitem_render, house_style) is used unchanged and NPP only decides earlier, and records, which picture install will publish.",
+  "model": "openai-codex:gpt-image-2-high",
+  "prompt_ref": "hass.photo_polish.PROMPT",
+  "prompt": "Clean up this product photo for a small shop's online catalog. Keep the product exactly as it is: the same single item or group, the same shape, size proportions, colours, materials, lid or cap, and every letter of the label exactly as printed. Do not add, remove or change any item, label, text, logo, sticker or packaging, and add no props, hands, text, watermark, border or price. Only change the setting: place the product, upright and complete, large and centred, on a smooth seamless warm ivory background (about RGB 245 240 230) with soft even diffuse light from the upper left and a soft natural contact shadow under it. Remove the room, wall, counter and any clutter. True, natural colours; no stylising. Square picture.",
+  "variant_order": [
+    {"variant": "polished", "when": "photo_polish settled use: polished (edit passed frame, house_style.check_image with ALLOWED_STYLE, match and OCR words both ways)", "site_path": "assets/products/photo-<sha16>.jpg", "owner_line": null},
+    {"variant": "raw", "when": "not polished and owner_fallback (itemIntake true) with photo_polish on; install skips the house render", "site_path": "assets/products/photo-<sha16>.jpg|png", "owner_line": "picture: your own photo", "extra": "raw_conditions"},
+    {"variant": "house", "when": "not polished, photo_polish off or itemIntake false, and house_picture ok", "site_path": "assets/products/photo-<sha16>.jpg", "owner_line": "picture: house style"},
+    {"variant": "raw", "when": "polish off, house refused, owner_fallback", "site_path": "assets/products/photo-<sha16>.jpg|png", "owner_line": "picture: your own photo", "extra": "raw_conditions"},
+    {"variant": "none", "when": "install would return Retake or Refused, or it would publish raw but a raw condition fails", "owner_line": null, "reply": "the existing retake sentence (hass.ops.photos.RETAKE), no draft, job state retake"}
+  ],
+  "raw_conditions": [
+    {"id": "no_person_or_screen", "check": "S2 has_person_or_screen is false"},
+    {"id": "ocr_read_ok", "check": "tesseract reads the web copy successfully (no read means no raw)"},
+    {"id": "no_money_or_private_token", "check": "the read has no money-shaped token ($, cent sign, d.dd) and no token equal to a private value unless S2 placed that token on the product label"},
+    {"id": "no_contact_or_path", "check": "no phone, email or /home/ (hass.publish_live.PATTERNS)"},
+    {"id": "sharp", "check": "hass.ops.photos._sharpness at or above hass.ops.photos.SHARP_MIN (existing constant, not copied here)"}
+  ],
+  "no_new_thresholds": true,
+  "existing_refs": ["hass.photo_polish.PROMPT", "hass.photo_polish.MODEL", "hass.ops.photos.SHARP_MIN", "hass.ops.photos.RETAKE", "hass.ops.photos.install", "hass.house_style.OWNER_IMAGE_RE", "hass.publish_live.PATTERNS"],
+  "alt": {
+    "rule": "plain words saying what the photo shows; the copy templates alt-* produce it; checked by hass.ops.photos._alt_problem and MAX_ALT",
+    "never": "an (illustration) suffix written by Hass: shop.js adds it only for paths that are not installed owner photos"
+  },
+  "freeze": "variant, install path and bytes sha256 are frozen on the version row; preview, apply and verify must produce the same bytes",
+  "never": ["WebP", "a new framing or fidelity threshold", "a late styled picture after the write-once decision", "a second image edit after a restart"]
+}

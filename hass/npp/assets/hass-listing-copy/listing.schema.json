@@ -1,0 +1,26 @@
+{
+  "$comment": "S5 model output: reviewed template and phrase IDs only. No prose field exists, so the model cannot return prose. Keywords limited to the subset the repo test validator supports.",
+  "title": "hass-listing-copy selection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "imageAlt", "description", "story"],
+  "properties": {
+    "name": {"type": "object", "additionalProperties": false, "required": ["template_id"], "properties": {"template_id": {"type": "string", "minLength": 1, "maxLength": 40}}},
+    "imageAlt": {"type": "object", "additionalProperties": false, "required": ["template_id"], "properties": {"template_id": {"type": "string", "minLength": 1, "maxLength": 40}}},
+    "description": {
+      "type": "object", "additionalProperties": false, "required": ["template_id", "phrase_ids"],
+      "properties": {
+        "template_id": {"type": "string", "minLength": 1, "maxLength": 40},
+        "phrase_ids": {"type": "array", "maxItems": 3, "items": {"type": "string", "minLength": 1, "maxLength": 40}}
+      }
+    },
+    "story": {
+      "type": ["object", "null"], "additionalProperties": false, "required": ["template_id", "phrase_ids", "fact_ids"],
+      "properties": {
+        "template_id": {"type": "string", "minLength": 1, "maxLength": 40},
+        "phrase_ids": {"type": "array", "maxItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 40}},
+        "fact_ids": {"type": "array", "maxItems": 5, "items": {"type": "string", "minLength": 1, "maxLength": 40}}
+      }
+    }
+  }
+}

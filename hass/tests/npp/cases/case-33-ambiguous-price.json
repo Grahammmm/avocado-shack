@@ -1,0 +1,60 @@
+{
+  "id": 33,
+  "slug": "ambiguous-price",
+  "title": "Ambiguous price: '4 or 5 bucks, got 4'",
+  "contract": "section 1.9: an ambiguous parse asks and never guesses; no digit from the owner's words reaches any cloud request",
+  "bug": "a price is guessed from an ambiguous parse, or a digit from his words is sent to a cloud model",
+  "path": "question",
+  "terminal": "asking",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "ridge roast dark coffee, 4 or 5 bucks, got 4",
+      "photos": [
+        "npp:coffee.jpg"
+      ]
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/coffee-good.png",
+      "latency_s": 22
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "question",
+        "has_all": [
+          "selling price"
+        ]
+      }
+    ],
+    "total_replies": 1,
+    "state": "asking",
+    "draft_rows": "none",
+    "approval_rows": 0,
+    "commits": 0,
+    "cloud_bodies_lack_digits_from": [
+      "4",
+      "5"
+    ],
+    "checks": [
+      "reply",
+      "no_draft",
+      "no_private_values"
+    ]
+  }
+}

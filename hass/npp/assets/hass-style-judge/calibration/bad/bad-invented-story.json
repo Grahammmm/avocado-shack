@@ -1,0 +1,23 @@
+{
+  "product_id": "bad-invented-story",
+  "synthetic": true,
+  "breaks": ["truth", "maker_story"],
+  "category": "pantry",
+  "card": {
+    "photo_alt": "Dried figs",
+    "brand": "Miners",
+    "name": "Miners dried figs",
+    "price": null,
+    "origin": "Based in Anytown, California",
+    "badges": ["Organic"],
+    "availability": null,
+    "description": "Dried figs for the cheese board. Keep a bag nearby. Nobody needs a more complicated plan.",
+    "meet_the_maker": {
+      "name": "Miners",
+      "place": "Anytown, California",
+      "story": "Miners is a third-generation family orchard that has hand-picked every fig at dawn since 1952. Certified organic and award-winning, their figs are loved by chefs everywhere.",
+      "visit_url": null,
+      "see_all_count": 1
+    }
+  }
+}

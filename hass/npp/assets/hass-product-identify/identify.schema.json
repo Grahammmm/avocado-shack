@@ -1,0 +1,30 @@
+{
+  "$comment": "S2 output. Validated by code before use. Keywords limited to the subset the repo test validator supports: type, enum, required, properties, additionalProperties, items, minItems, maxItems, minimum, maximum, maxLength, minLength.",
+  "title": "hass-product-identify",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["is_product", "kind", "item", "brand_on_label", "size_text", "label_words", "visible_claims", "category_guess", "has_person_or_screen", "confidence"],
+  "properties": {
+    "is_product": {"type": "boolean"},
+    "kind": {"type": "string", "enum": ["food", "drink", "non-food", "fresh"]},
+    "item": {"type": ["string", "null"], "maxLength": 80},
+    "brand_on_label": {"type": ["string", "null"], "maxLength": 60},
+    "size_text": {"type": ["string", "null"], "maxLength": 30},
+    "label_words": {"type": "array", "maxItems": 12, "items": {"type": "string", "minLength": 1, "maxLength": 40}},
+    "visible_claims": {"type": "array", "maxItems": 8, "items": {"type": "string", "minLength": 1, "maxLength": 40}},
+    "category_guess": {"type": ["string", "null"], "enum": ["fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers", "general", null]},
+    "has_person_or_screen": {"type": "boolean"},
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "item", "brand", "size", "category"],
+      "properties": {
+        "kind": {"type": "number", "minimum": 0, "maximum": 1},
+        "item": {"type": "number", "minimum": 0, "maximum": 1},
+        "brand": {"type": "number", "minimum": 0, "maximum": 1},
+        "size": {"type": "number", "minimum": 0, "maximum": 1},
+        "category": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}

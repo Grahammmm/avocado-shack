@@ -1,0 +1,25 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-044",
+  "photo_path": "assets/products/photo-product-044.webp",
+  "category": "pantry",
+  "card": {
+    "photo_alt": "Dried mushrooms (illustration)",
+    "brand": "Mighty Cap Mushrooms",
+    "name": "Dried mushrooms",
+    "price": null,
+    "origin": "Based in Paso Robles, California",
+    "badges": [],
+    "availability": null,
+    "description": "Dried mushrooms are a pantry shortcut to a deeper meal. Soak them, strain the liquid, and use both in rice, soup, or a slow sauce.",
+    "meet_the_maker": {
+      "name": "Mighty Cap Mushrooms",
+      "place": "Paso Robles, California",
+      "story": "Mighty Cap began as Chris Batlle’s garage project and grew into a gourmet mushroom farm in Paso Robles. Small-batch cultivation and close relationships with chefs are at the heart of the business. Mushrooms deserve a hot pan, a little space, and enough patience to let them brown.",
+      "visit_url": "https://mightycapmushrooms.com/pages/about-us",
+      "see_all_count": 7
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-044#market"
+  }
+}

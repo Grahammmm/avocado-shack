@@ -1,0 +1,19 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live fresh produce / flowers (outside 105)",
+  "product_id": "photo-product-006",
+  "photo_path": "assets/products/photo-product-006.webp",
+  "category": "flowers",
+  "card": {
+    "photo_alt": "Mixed flower bouquet (illustration)",
+    "brand": "From the market",
+    "name": "Mixed flower bouquet",
+    "price": null,
+    "origin": "Ask us about the source in store.",
+    "badges": [],
+    "availability": null,
+    "description": "A little color for the kitchen table. No occasion required.",
+    "meet_the_maker": null,
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-006#market"
+  }
+}

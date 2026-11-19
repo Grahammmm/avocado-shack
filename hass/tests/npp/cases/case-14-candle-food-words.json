@@ -1,0 +1,132 @@
+{
+  "id": 14,
+  "slug": "candle-food-words",
+  "title": "A lavender honey candle: food words in the name, not food",
+  "contract": "S2 kind follows the object: a candle with food words stays a candle with practical-use copy",
+  "bug": "the candle is described as edible or given a food shelf and serving wording",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "lavender honey candle $9 each",
+      "photos": [
+        "chaos:candle.jpg"
+      ]
+    },
+    {
+      "at_s": 60,
+      "from": "mike",
+      "text": "make it $10",
+      "photos": []
+    },
+    {
+      "at_s": 120,
+      "from": "mike",
+      "text": "yes {code}-2",
+      "photos": []
+    },
+    {
+      "at_s": 180,
+      "from": "mike",
+      "text": "undo",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "record",
+      "latency_s": 22,
+      "note": "the real gpt-image-2 edit of this photo, taped by NPP-H on the private host (run_npp.py --record); no stand-in bytes are committed"
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card"
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-2, or tell me what to change."
+        ],
+        "note": "the edit builds v2; every other field is copied from v1"
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft",
+        "note": "undo drafts the hide of the posted listing; nothing is hidden until its own yes"
+      }
+    ],
+    "state": "published",
+    "listing": {
+      "name_has": "Candle",
+      "category": "general",
+      "price": "$10.00",
+      "maker_panel": false
+    },
+    "description_lacks": [
+      "edible",
+      "serve",
+      "serving",
+      "taste",
+      "eat",
+      "recipe",
+      "toast",
+      "drizzle"
+    ],
+    "commits": 1,
+    "checks": [
+      "template_conformance",
+      "fields_present",
+      "existing_gates",
+      "reply",
+      "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    },
+    "edit_keeps": [
+      "name",
+      "brand",
+      "origin",
+      "category",
+      "imageAlt",
+      "picture_bytes",
+      "description",
+      "maker_panel",
+      "story"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "product_id": "bad-spec-list",
+  "synthetic": true,
+  "breaks": ["restraint", "shape", "voice"],
+  "category": "general",
+  "card": {
+    "photo_alt": "Super Grip wood glue",
+    "brand": "From the market",
+    "name": "Super Grip Wood Glue",
+    "price": null,
+    "origin": "Ask us about the source in store.",
+    "badges": [],
+    "availability": null,
+    "description": "Super Grip Wood Glue, 2 fl oz. Features: strong bond, dries clear, interior and exterior use, sandable, non-toxic, cleans up with water, ideal for furniture, cabinets, crafts and repairs. Net weight 2 fl oz. Made in USA.",
+    "meet_the_maker": null
+  }
+}
