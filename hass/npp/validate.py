@@ -102,6 +102,15 @@ def dom_problem(nodes, price_index, price, name, approved=(), private=(), allowe
     return None
 
 
+def _panel_clean(value):
+    """A maker-panel string may be shown on the card only if it carries no protected claim (a plain farm-noun name is fine)."""
+    if not isinstance(value, str):
+        return False
+    skeleton = claims.skeleton(value)
+    names = (claims._pattern(skeleton),) if skeleton and live_policy._plain_name(skeleton) else ()
+    return not live_policy._protected(value, 'makers', names)[1]
+
+
 @dataclass(frozen=True)
 class Verdict:
     problems: tuple[str, ...]
@@ -185,11 +194,12 @@ def listing(writer, ctx, copy, draft, *, finance, origin, makers, live_site, pho
         problems.append(problem)
     elif _contact(picture_read):
         problems.append('picture-contact')
-    # The card may show only the validated copy, the checked brand/origin lines and the maker panel.
-    # An existing maker's catalog name, place and story are not part of this copy: each is shown only when it
-    # carries no protected claim (health/awards/endorsements, superlatives, ...). A new maker's story is text['story'].
-    panel = [maker.get('name'), maker.get('place')]
-    if not new_makers and not live_policy._protected(maker.get('story') or '')[1]:
+    # The card may show only the validated copy, the checked brand/origin lines and the maker panel. Every maker-panel
+    # fragment (name, place, story) is bound: a new maker's name/place are tied to ctx above and its story is text['story'];
+    # an existing maker's catalog name, place and story are not part of this copy, so each is shown only when it carries
+    # no protected claim (health/awards/endorsements, superlatives, ...).
+    panel = [maker.get(key) for key in ('name', 'place') if _panel_clean(maker.get(key))]
+    if not new_makers and _panel_clean(maker.get('story')):
         panel.append(maker.get('story'))
     shown_ok = {_flat(v) for v in (text.get('name'), text.get('description'), text.get('story'), product.get('displayBrand'), product.get('brand'), origin,
                                    *panel) if isinstance(v, str) and v.strip()}

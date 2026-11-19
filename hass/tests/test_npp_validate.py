@@ -89,3 +89,15 @@ class ValidateTests(unittest.TestCase):
                                 card_nodes=[*self.nodes, origin, story])
         self.assertNotIn('card-copy', card('We grow plums on a small hill.').problems)
         self.assertIn('card-copy', card('This cures cancer.').problems)
+
+    def test_existing_maker_name_and_place_are_shown_only_when_they_carry_no_protected_claim(self):
+        # Contract: the card-copy gate binds EVERY maker-panel fragment, not only the story. Bug caught: an existing
+        # maker whose catalog name/place was "This cures cancer." was auto-allowed on the card (no contact or number in it).
+        self.product['producerKey'] = 'oak-farm'
+        origin = 'Based in Oakdale'
+        def card(name='Oak Farm', place='Oakdale', shown=()):
+            return self.verdict(makers={'oak-farm': {'name': name, 'place': place, 'story': 'We grow plums.'}}, origin=origin,
+                                card_nodes=[*self.nodes, origin, 'We grow plums.', *shown])
+        self.assertNotIn('card-copy', card(shown=['Oak Farm']).problems)
+        self.assertIn('card-copy', card(name='This cures cancer.', shown=['This cures cancer.']).problems)
+        self.assertIn('card-copy', card(place='Cures cancer', shown=['Cures cancer']).problems)
