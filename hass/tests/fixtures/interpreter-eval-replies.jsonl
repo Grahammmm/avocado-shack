@@ -97,3 +97,9 @@
 {"id": "e96", "reply": {"ops": [{"op": "product.set_availability_all", "args": {"available": "no", "maker": "Cal Poly"}}], "revises": null}}
 {"id": "e97", "reply": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-001", "available": "no"}}], "revises": null}}
 {"id": "e98", "reply": {"unsupported": "design changes cannot be made by message yet"}}
+{"id": "e99", "reply": {"lookup": "status"}}
+{"id": "e100", "reply": {"lookup": "listing photo-product-015"}}
+{"id": "e101", "reply": {"lookup": "shelf dairy"}}
+{"id": "e102", "reply": {"lookup": "listing store"}}
+{"id": "e103", "reply": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-024", "available": "no"}}], "revises": null}}
+{"id": "e104", "reply": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "time": "10:00"}}], "revises": null}}
