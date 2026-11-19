@@ -64,7 +64,7 @@ class ReportTests(StoreMixin, ConversationTestCase):
         self.assertEqual([r[0] for r in self.conv.db.execute("SELECT name FROM control")], ["shelf-asked"])  # the question is asked once a day; nothing else
 
     def test_lookalikes_go_to_the_normal_request_path(self):
-        for text in ("report now", "reports"):
+        for text in ("report now", "reporting"):
             with self.subTest(text=text):
                 self.interp.mapping[text] = _ops((HOURS, {"hours": NEW_HOURS}))
                 self.assertEqual(self.say(text), "proposed")
