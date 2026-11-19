@@ -93,6 +93,16 @@ def is_claim(value):
     return any(term in _claim_key(value) for term in _TERMS)
 
 
+def identity_text(field, value, *, title=False):
+    """Normalize checked label identity without title-casing the printed brand."""
+    text = _clean(field, value, ())
+    if text and title:
+        # Capitalize plain words (including hyphen segments) without splitting
+        # apostrophes or changing already mixed-case label words.
+        text = re.sub(r"[^\W\d_][\w'’]*", lambda m: m[0].capitalize() if m[0].islower() or m[0].isupper() else m[0], text)
+    return text
+
+
 def keep(result, categories) -> dict:
     """Allowlisted details only; a claim in a detail is quarantined, never published."""
     found = {field: _clean(field, result.get(field), categories) for field in FIELDS}
