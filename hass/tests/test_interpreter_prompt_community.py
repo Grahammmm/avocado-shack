@@ -168,7 +168,7 @@ class HikeDetailsTest(unittest.TestCase):
         for event in events[MAX_HIKE_DETAILS:]:
             event["status"] = "completed"
         content = tiny_content(products, makers)
-        content.community = {"events": events, "routeIdeas": [{"id": f"r-{i:02d}", "title": "r" * 100} for i in range(60)]}
+        content.community = {"events": events, "routeIdeas": [{"id": f"r-{i:02d}", "title": "r" * 80} for i in range(60)]}  # AV1104-06: 80 (was 100): the lookup rule and contract line take 600 bytes of the cap
         prompt = build(TEST_REGISTRY, content)
         self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
         self.assertEqual(len(_section(prompt, DETAILS)), MAX_HIKE_DETAILS)

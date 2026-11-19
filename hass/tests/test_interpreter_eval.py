@@ -352,5 +352,37 @@ class V11BulkAndLayoutTests(EvalTestCase):
         self.assertNotIn("Cal Poly", json.dumps(summary))
 
 
+class LookupKindTests(EvalTestCase):
+    """AV1104-06: {"lookup": "<command>"} is a fourth, distinct kind: no tracked case changes, only the shape plumbing."""
+
+    def case(self, expect):
+        return {"id": "l01", "text": "how many are coming Saturday?", "pending": [], "expect": expect}
+
+    def verdict(self, expect, reply):
+        return [f["why"] for f in ev.score([self.case(expect)], {"l01": reply}, REGISTRY)["failed"]]
+
+    def test_lookup_scores_as_its_own_kind_in_both_directions(self):  # bug: lookup folds into "unsupported", so a refused lookup passes an unsupported case
+        self.assertEqual(self.verdict({"lookup": "status"}, {"lookup": "status"}), [])
+        self.assertEqual(self.verdict({"lookup": "status"}, {"lookup": "Status."}), ["lookup differs"])  # the exact command, not its meaning
+        self.assertEqual(self.verdict({"lookup": "status"}, {"lookup": "yes"}), ["expected lookup, got unsupported"])  # refused by interpret_check
+        self.assertEqual(self.verdict({"lookup": "status"}, {"lookup": 5}), ["expected lookup, got unsupported"])  # unreadable shape
+        self.assertEqual(self.verdict({"lookup": "status"}, {"question": "Which?"}), ["expected lookup, got question"])
+        self.assertEqual(self.verdict({"lookup": "status"}, {"ops": [], "revises": None}), ["expected lookup, got question"])  # no change found: a question
+        self.assertEqual(self.verdict({"unsupported": True}, {"lookup": "status"}), ["expected unsupported, got lookup"])
+        self.assertEqual(self.verdict({"question": True}, {"lookup": "status"}), ["expected question, got lookup"])
+        ops = {"ops": [{"op": "product.hide", "args": {"id": "photo-product-081"}}], "revises": None}
+        self.assertEqual(self.verdict(ops, {"lookup": "status"}), ["expected ops, got lookup"])
+        self.assertEqual(self.verdict({"lookup": "status"}, ops), ["expected lookup, got ops"])
+
+    def test_lookup_expectations_load_and_bad_ones_are_refused_without_text(self):  # bug: a malformed expectation loads, or its text is echoed
+        good = self.write("good.jsonl", [*self.rows[:97], json.dumps(self.case({"lookup": "find eggs"}))])
+        self.assertEqual(ev.load_cases(good)[-1]["expect"], {"lookup": "find eggs"})
+        for bad in ({"lookup": 5}, {"lookup": ""}, {"lookup": "status", "extra": "canary-zz"}, {"lookup": ["status"]}):
+            path = self.write("bad.jsonl", [*self.rows[:97], json.dumps(self.case(bad))])
+            code, _out, err = scored(path, REPLIES)
+            self.assertEqual((code, err), (2, "cases line 98: not a case"), bad)
+        self.assertEqual(scored(CASES, REPLIES)[0], 0)  # the tracked set is untouched: still 98 cases, 95 passing
+
+
 if __name__ == "__main__":
     unittest.main()

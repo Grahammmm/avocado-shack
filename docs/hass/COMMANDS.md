@@ -162,7 +162,14 @@ applied; reply `yes <code>` to approve). Anything else of this kind gets `Nothin
 words, or help.` They work while paused and after the daily limit, and nothing is approved. A message with any other
 word, such as `thanks, make the eggs sold out`, is read as below.
 
-Any other message is read as a change request. Hass replies with a draft and its code (or a question if details are
+Any other message is read once by the reader (one counted interpreter call). If it only asks what the site, shop or hikes
+show (`how many are coming Saturday?`, `is the sourdough sold out?`, `what's on the dairy shelf?`, `what are my hours?`), the
+reader may only pick one read-only command: `status`, `report`, `history` (with or without words), `find <words>`,
+`listing <id or store>`, `shelf <name>` or `hidden`. Hass then replies `You asked, so nothing was drafted.` followed by exactly
+that command's own reply. Nothing is drafted, approved, saved or expired by a question. Any other pick (`yes`, `no`, `undo`,
+`stop`, `resume`, `remember`, `forget`, `alias`, or a word Hass does not know) gets only `Nothing changed. To look something up,
+say status, report, or find and a few words.` Any other message is read as a change request, and a question that asks for a
+change (`can you mark the eggs sold out?`) is still a change. Hass replies with a draft and its code (or a question if details are
 missing). A draft is never applied until you reply `yes <code>`; drafts that wait too long expire and nothing changes.
 
 New products (a change request, needs `yes <code>`): a product you add shows a "New" badge on its card for its first

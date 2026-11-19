@@ -15,7 +15,7 @@ from unittest import mock
 
 from hass import interpreter_local
 from hass.interpreter_local import FAILED, MAX_BODY, LocalInterpreter
-from hass.tests.test_conversation import ConversationTestCase, _ops
+from hass.tests.test_conversation import SETTINGS, ConversationTestCase, _ops
 from hass.tests.test_editor import HOURS, NEW_HOURS
 
 URL, MODEL, PROMPT = "http://127.0.0.1:11434", "qwen-local-test", "SYSTEM-PROMPT-MARKER: reply with JSON."
@@ -192,6 +192,23 @@ class ConversationWithLocalInterpreterTests(ConversationTestCase):
                 self.assertEqual(self.drafts(), [])
                 self.assertEqual(sorted((self.repo.state / "drafts").glob("*.json")), [])
         self.assertEqual(self.commits(), 0)
+
+
+class LookupThroughLocalInterpreterTests(ConversationTestCase):
+    """AV1104-06: the adapter hands a {"lookup": ...} reply through untouched and the conversation answers it without a draft."""
+
+    def setUp(self):
+        super().setUp()
+        self.set_settings({**SETTINGS, "interpreterDailyCap": 5})
+        self.fake = FakeTransport((200, chat_reply(json.dumps({"lookup": "status"}))))
+        self.interp = LocalInterpreter(URL, MODEL, PROMPT, transport=self.fake)
+        self.conv = self.open()
+
+    def test_a_lookup_reply_is_answered_with_one_transport_call_and_no_draft(self):  # bug: the adapter or the shape check turns a lookup into a draft or a second call
+        self.assertEqual(self.say("how many are coming Saturday?"), "lookup")
+        [reply] = self.replies()
+        self.assertTrue(reply.startswith("You asked, so nothing was drafted.\n"), reply)
+        self.assertEqual((len(self.fake.calls), self.drafts(), self.commits()), (1, [], 0))
 
 
 if __name__ == "__main__":
