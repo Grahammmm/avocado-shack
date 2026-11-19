@@ -1,6 +1,7 @@
 """NPP-G: owner edit words (S10), the version-tagged reply lines (S9/S11/S13) and the legacy F4F5 price edits.
 
 Each test names the contract it protects and the believable bug that breaks it (CI-ARTICLE-1)."""
+import dataclasses
 from datetime import timedelta
 import json
 import types
@@ -205,6 +206,13 @@ class StagesTests(unittest.TestCase):
         self.assertIsNone(npp.stages_for(None, PINNED))
 
 
+@dataclasses.dataclass(frozen=True)
+class _ReplyRef(conversation.Inbound):
+    """Test-only message type carrying a replied-to card guid: the select()-level contract S11 is tested through it.
+    The production Inbound has no such field; transport wiring is deferred (SCOPE-AMENDMENTS A2)."""
+    reply_to: str = ""
+
+
 class EditLoopJobTests(unittest.TestCase):
     """The real job runner (NPP-B) with this edit segment: a delivered card, a plain edit, a new tagged card, one yes."""
 
@@ -246,10 +254,9 @@ class EditLoopJobTests(unittest.TestCase):
     def say(self, text, photos=0, reply_to=None):
         self.serial += 1
         self.now += timedelta(seconds=1)
-        msg = conversation.Inbound(f"g-{self.serial}", CHAT, OWNER, text, kind="new", received_at=self.now.isoformat(),
-                                   attachments=photos)
-        if reply_to is not None:
-            object.__setattr__(msg, "reply_to", reply_to)  # Inbound is frozen and has no such field yet: a transport that knows the replied-to guid sets it
+        kind = _ReplyRef if reply_to is not None else conversation.Inbound
+        extra = {"reply_to": reply_to} if reply_to is not None else {}
+        msg = kind(f"g-{self.serial}", CHAT, OWNER, text, kind="new", received_at=self.now.isoformat(), attachments=photos, **extra)
         return self.conv.handle(msg, forwarded_at=self.now)
 
     def work(self):
@@ -326,6 +333,25 @@ class EditLoopJobTests(unittest.TestCase):
         self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0], 0)
         self.assertEqual(self.say(f"yes {code}", reply_to="m-2"), "approved")
         self.assertIn('"sellingPrice": "4.00"', (self.repo.wt / "hass/content/products.json").read_text())
+
+    def test_production_inbound_has_no_reply_ref_and_coded_yes_after_two_cards_reasks(self):
+        # Today's real path: the production Inbound carries no reply reference (transport wiring deferred, SCOPE-AMENDMENTS A2),
+        # so a bare "yes <code>" after two delivered cards cannot name one and must fail closed: the which-card line,
+        # no approval row, nothing published. Bug if it approved the newest (or oldest) card by guess.
+        self.assertNotIn("reply_to", {f.name for f in dataclasses.fields(conversation.Inbound)})
+        self.say("sell $2", photos=1)
+        self.work()
+        self.confirm(1)
+        self.say("sell $4")
+        self.work()
+        self.confirm(2)
+        before = (self.repo.wt / "hass/content/products.json").read_text()
+        code = self.job()["job_id"]
+        self.assertEqual(self.say(f"yes {code}"), "no-target")
+        self.conv.flush(self.transport)
+        self.assertEqual(self.transport.texts[-1], REPLIES["guards"]["which_card"])
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0], 0)
+        self.assertEqual((self.repo.wt / "hass/content/products.json").read_text(), before)  # nothing published
 
     def test_posted_confirmation_names_the_item_link_only_for_a_published_listing(self):
         # Contract S13: the confirmation the live release engine sends is `Posted: <item link>` for a published listing job,
