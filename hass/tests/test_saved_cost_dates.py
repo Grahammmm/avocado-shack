@@ -8,7 +8,7 @@ from datetime import timedelta
 from hass import margins
 from hass.tests import test_purchase_cost as pc
 
-FALLBACK = "Using your saved cost; I can't read when you gave it to me.\n"
+FALLBACK = f"For Hass avocado ({pc.AVO}), using your saved cost; I can't read when you gave it to me.\n"
 BODY = margins.say(margins.compute("24", "12", "0", "35"))
 ASK = f"margin {pc.AVO} at 35%"
 
@@ -48,8 +48,8 @@ class SavedDateTests(pc.CostTestCase):
         shrunk = margins.say(margins.compute("24", "12", "5", "35"))
         for stamp in ("2026-11-02T17:00:00+00:00", "2026-11-02T09:00:00-08:00", "2026-11-02T18:00:00+01:00"):
             self.damage(stamp)
-            self.assertEqual(self.chat(ASK, "margin"), "Using the cost you gave me today at 9 am.\n" + BODY)
-            self.assertEqual(self.chat(ASK + " shrink 5%", "margin"), "Using the cost you gave me today at 9 am.\n" + shrunk)
+            self.assertEqual(self.chat(ASK, "margin"), f"For Hass avocado ({pc.AVO}), using the cost you gave me today at 9 am.\n" + BODY)
+            self.assertEqual(self.chat(ASK + " shrink 5%", "margin"), f"For Hass avocado ({pc.AVO}), using the cost you gave me today at 9 am.\n" + shrunk)
 
     def test_bad_date_read_is_readonly_and_duplicate_safe(self):
         self.saved()
