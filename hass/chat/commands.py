@@ -22,10 +22,10 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
                         r"|(show)(?:\s+(.*))?"  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
                         r"|((?:morning )?report)"  # AV1322-05 (F04): group 12; groups 1-11 keep their indices
-                        r"|(post)(?:\s+((?:hike\s+)?\S+(?:\s+\S+){0,5}))?"  # AV1322-07 (F07): groups 13/14; AV1222-11: or "hike <id>"; the id is re-read from the original text to keep its case
+                        r"|(post)(?:\s+((?s:.*)))?"  # AV1322-07 (F07): groups 13/14; AV1052-07: the id, name or alias is the whole rest (_post checks it), re-read from the original text to keep its case
                         r"|(margin)(?:\s+((?s:.*)))?"  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
                         r"|(hidden)"  # AV1222-13 (H03): group 17
-                        r"|(listing)(?:\s+(\S+(?:\s+\S+){0,5}))?"  # AV1622-09 (H17): groups 18/19; multiword names need a catalog check
+                        r"|(listing)(?:\s+((?s:.*)))?"  # AV1622-09 (H17): groups 18/19; AV1052-07: the whole rest; _listing checks it
                         r"|(photos to take)"  # AV0222-04 (H10/H17): group 20
                         r"|(backlog)"  # SKILLS-FW-3: group 21 (what I could not do yet; read-only)
                         r"|(again)(?:\s+((?s:.*)))?"  # AV2152-03 (H05/H16): groups 22/23; the code is checked by _again, never guessed
@@ -221,7 +221,10 @@ def parse_command(text: str, *, listing_names=False):
         return ("listing", ident) if listing_names or len(ident.split()) <= 1 else None
     if match[17]: return "hidden", None  # AV1222-13
     if match[15]: return "margin", match[16] or ""  # AV1102-12 (F03)
-    if match[13]: return "post", re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""  # AV1322-07: the id in its own case
+    if match[13]:  # AV1322-07: the id in its own case
+        ident = re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""
+        # AV1052-07: the whole rest is a name only for the conversation (listing_names, which then checks it names a product); the plain parser keeps its six-word window
+        return ("post", ident) if listing_names or not ident or re.fullmatch(r"(?:hike\s+)?\S+(?:\s+\S+){0,5}", ident, re.IGNORECASE) else None
     if match[12]: return "report", None  # AV1322-05 (F04)
     if match[10]: return "show", match[11] or ""  # AV0022-08: the code is checked by _show, never guessed
     if match[7]: return "help", None

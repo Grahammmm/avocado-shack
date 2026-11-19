@@ -64,6 +64,17 @@ class CommandsDocTest(unittest.TestCase):
         self.assertEqual(problems(self.table, self.verbs | {"refund"}, self.words),
                          ["no Send cell names: refund", "no example for parser verb: refund"])
 
+    def test_post_and_listing_name_alias_and_reserved_examples(self):
+        # AV1052-07 contract: the documented post/listing forms parse as those commands with the whole rest as the query.
+        # Bug caught: a name of several words (or one longer than six words) falling out of the parser to the interpreter.
+        text = DOC.read_text("utf-8")
+        for send in ("post green jam", "listing sourdough", "post hike Point Buchon", "post maker fixture-farm", "listing store"):
+            self.assertIn(send, text, send)
+        for message, want in (("post green jam", ("post", "green jam")), ("post a b c d e f g", ("post", "a b c d e f g")),
+                              ("listing sourdough", ("listing", "sourdough")), ("listing store", ("listing", "store")),
+                              ("post hike Point Buchon", ("post", "hike Point Buchon")), ("post maker Linn's.", ("post", "maker Linn's."))):
+            self.assertEqual(conv.read_command(message, listing_names=True), want, message)
+
     def test_dropped_row_fails(self):
         table = [r for r in self.table if r[0] != "`memory`"]
         self.assertEqual(problems(table, self.verbs, self.words),
