@@ -164,6 +164,13 @@ applied; reply `yes <code>` to approve). Anything else of this kind gets `Nothin
 words, or help.` They work while paused and after the daily limit, and nothing is approved. A message with any other
 word, such as `thanks, make the eggs sold out`, is read as below.
 
+A single word of four or more letters that is one letter off a command word (`histroy`, `staus`, `reprot`, `memroy`, `undp`: one
+letter added, left out or changed, or two letters swapped) gets only a guess: `Did you mean status? Send status.` (both names, in
+alphabetical order, when two fit, such as `stow`: `Did you mean show or stop? Send show or stop.`). The guess is never run: send the
+word again to run it. It uses no reader call and no part of the daily limit, works while paused, and approves, cancels or changes
+nothing. Real words (`fine`, `shop`, `past`, `most`, `hold`), `yes`, `no`, thanks, the casual yeses and every longer message are
+handled as before.
+
 Any other message is read once by the reader (one counted interpreter call). If it only asks what the site, shop or hikes
 show (`how many are coming Saturday?`, `is the sourdough sold out?`, `what's on the dairy shelf?`, `what are my hours?`), the
 reader may only pick one read-only command: `status`, `report`, `history` (with or without words), `find <words>`,

@@ -39,15 +39,12 @@ class CommandTypoTests(H06TestCase):
 
     def typo(self, text, *names, **kw):
         """The one reply is the guess; nothing ran, nothing was counted or changed."""
-        before = (self.drafts(), self.usage(), self.commits(), self.sent_count())
+        before = (self.drafts(), self.usage(), self.commits(), list(self.interp.texts))
         self.assertEqual(self.say(text, **kw), "command-typo", text)
         self.assertEqual(self.replies(), [guess(*names)], text)
         self.assertEqual(self.last(), "command-typo")
         self.assertEqual((self.drafts(), self.usage(), self.commits(), self.interp.texts, self.approvals()),
-                         (before[0], before[1], before[2], [], 0), text)
-
-    def sent_count(self):
-        return len(self.out.sent)
+                         (before[0], before[1], before[2], before[3], 0), text)
 
     def ordinary(self, text):
         """Today's handling: not a guess, and the reader is asked once."""
@@ -71,13 +68,13 @@ class CommandTypoTests(H06TestCase):
         self.typo("stow", "show", "stop")
         self.typo("approv", "approve")  # approved is two edits away
         self.assertEqual(conversation.command_typo("abcd", ("abce", "abcf", "abcd")), [])  # an exact word is never guessed
-        self.assertEqual(conversation.command_typo("abcd", ("zbcd", "abce", "abcz", "abcdx")), ["abce", "abcdx", "abcz", "zbcd"])
+        self.assertEqual(conversation.command_typo("abcd", ("zbcd", "abce", "abcz", "abcdx")), ["abcdx", "abce", "abcz", "zbcd"])
 
     # Contract: exact commands and approval words keep their own handling and a typo of one never approves. Bug caught: the
     # guess placed ahead of an exact parser, or a typo of `approve` acting on the waiting proposal.
     def test_exact_commands_and_approval_words_win(self):
         draft = self.propose("hours")[0]
-        for text, want in (("status", "status"), ("help", "help"), ("memory", "memory-none"), ("undo", "no-target"),
+        for text, want in (("status", "status"), ("help", "help"), ("memory", "memory-list"), ("undo", "no-target"),
                            (f"cancel {draft['code']}", "rejected")):
             with self.subTest(text=text): self.assertEqual(self.say(text), want); self.replies()
         draft = self.propose("hours")[0]
@@ -89,8 +86,10 @@ class CommandTypoTests(H06TestCase):
     # Contract: real words, the near approvals and thanks keep today's handling, as do longer or odd messages. Bug caught: a
     # real word (shop, past) turned into a guess, a casual yes or thanks answered with a command, or a phrase mangled.
     def test_real_words_near_approvals_thanks_and_long_requests_unchanged(self):
+        for text in ("yes", "no"):  # no guess for these two; with nothing waiting they only say so
+            with self.subTest(text=text): self.assertEqual(self.say(text), "no-target"); self.replies()
         self.proposal = self.propose("hours")[0]
-        for text in ("fine", "shop", "past", "most", "hold", "Shop!", "yes", "no", "yeh", "ok"):
+        for text in ("fine", "shop", "past", "most", "hold", "Shop!", "yeh", "ok"):
             with self.subTest(text=text):
                 self.assertNotEqual(self.say(text, pid=f"w-{text}"), "command-typo")
                 self.replies()
@@ -98,7 +97,7 @@ class CommandTypoTests(H06TestCase):
             with self.subTest(text=text): self.assertEqual(self.say(text), "near-approval"); self.replies()
         self.assertEqual(self.say("thanks"), "social")
         self.replies()
-        for text in ("thankyou", "cheers", "thx", "what is staus", "staus please", "history staus", "photos to tak", "stat", "statu s",
+        for text in ("thankyou", "cheers", "thx", "what is staus", "staus please", "photos to tak", "stat", "statu s",
                      "sta-tus", "sta tus", "staus2", "status1", "stuats?", "stauts now", "mömory", "memorry!!x",
                      "stuatss", "statuses", "xxxx", "cncl"):
             with self.subTest(text=text): self.ordinary(text)
@@ -141,8 +140,9 @@ class CommandTypoTests(H06TestCase):
     def test_expiry_is_unchanged(self):
         self.propose("hours")
         self.now += timedelta(seconds=601)  # SETTINGS approvalTtlSeconds is 600
-        self.typo("staus", "status")
-        self.assertEqual(self.drafts()[-1]["state"], "expired")
+        self.assertEqual(self.say("staus"), "command-typo")
+        self.assertEqual(self.replies(), [guess("status")])
+        self.assertEqual((self.drafts()[-1]["state"], self.interp.texts, self.approvals()), ("expired", ["hours"], 0))  # only the proposal's own request reached the reader
 
 
 if __name__ == "__main__":
