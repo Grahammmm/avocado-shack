@@ -5,6 +5,7 @@ exit-2 bad-map cases (nothing run, proven by a counter module), import errors,
 the --only subset, and test stdout never leaking into the runner output.
 """
 import contextlib, importlib, io, json, os, shutil, sys, tempfile, textwrap, unittest
+from unittest import mock
 
 from hass import acceptance
 
@@ -251,7 +252,8 @@ class RunnerTest(unittest.TestCase):
                          "test_label_question_brand", "test_photos_to_take", "test_commands_doc"))
         self.assertEqual(acceptance.MAP["H15"], ("test_memory", "test_memory_source",
                          "test_memory_alias", "test_memory_listing", "test_memory_unchanged",
-                         "test_memory_chat", "test_limits_doc"))
+                         "test_memory_chat", "test_limits_doc", "test_design_notes",
+                         "test_interpreter_notes"))
         self.assertEqual(acceptance.MAP["H13"][:8], ("test_store_ops", "test_store_intro",
                          "test_store_headline", "test_store_story",
                          "test_store_home_image", "test_store_clear_home_image", "test_notice_start",
@@ -266,8 +268,11 @@ class RunnerTest(unittest.TestCase):
                  "H12": ("test_qa1_new_item_chat",), "H13": ("test_phone_wording",),
                  "H14": ("test_hike_change_words", "test_chat_dead_end_reasons"),
                  "H17": ("test_qa1_waiting_reminders",)}
+        appended = {"H03": 6, "H05": 1, "H13": 4, "H17": 4}  # AV1052-17 tails follow these
         for id_, mods in added.items():
-            self.assertEqual(acceptance.MAP[id_][-len(mods):], mods, id_)
+            row = acceptance.MAP[id_]
+            row = row[:len(row) - appended.get(id_, 0)]
+            self.assertEqual(row[-len(mods):], mods, id_)
             for m in mods:
                 self.assertTrue(os.path.exists(os.path.join(acceptance._TESTS_DIR, m + ".py")), m)
                 self.assertEqual([k for k, v in acceptance.MAP.items() if m in v], [id_], m)
@@ -413,6 +418,132 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual((rows[1]["id"], rows[1]["result"], rows[1]["note"]),
                          ("H25", "not covered", "release step"))
         self.assertNotIn("H25", [r["id"] for r in rows if r["result"] == "pass"])
+
+    # AV1052-17 contract: the standing run covers the AV1052-03..12 modules in the five rows
+    # below. Bug caught: a dropped, duplicated, moved or mis-rowed module (e.g. test_cancel_all
+    # left out of H05) silently shrinks the acceptance evidence. Literals are written out
+    # independently of MAP.
+    AV1052 = {
+        "H03": ("test_catalog_ops", "test_clear_availability", "test_product_new",
+                "test_maker_hide_products", "test_maker_optional_url", "test_product_default_brand",
+                "test_maker_optional_story", "test_stock_product_choice", "test_plain_shelf_check",
+                "test_shelf_check_except", "test_set_availability_all", "test_interpreter_prompt_design",
+                "test_interpret_check_count", "test_post_by_name", "test_listing_by_name",
+                "test_post_command"),
+        "H05": ("test_conversation", "test_near_approval", "test_unknown_approval_code", "test_again",
+                "test_interpreter_prompt_shelf_maker", "test_interpreter_prompt_descriptions",
+                "test_claims_health_awards", "test_interpreter_no_undo", "test_field_words",
+                "test_question_missing_fields", "test_named_records", "test_interpreter_aliases",
+                "test_social_message", "test_interpret_check_enum", "test_shelf_labels",
+                "test_interpret_check_prices", "test_interpreter_prompt_design",
+                "test_proposal_notice_words", "test_shelf_check_flow", "test_repeat_outcome",
+                "test_non_hike_question_turns", "test_second_question", "test_cancel_all"),
+        "H13": ("test_store_ops", "test_store_intro", "test_store_headline", "test_store_story",
+                "test_store_home_image", "test_store_clear_home_image", "test_notice_start",
+                "test_club_intro", "test_phone_wording", "test_publish_csp", "test_publish",
+                "test_store_notice", "test_listing_store"),
+        "H15": ("test_memory", "test_memory_source", "test_memory_alias", "test_memory_listing",
+                "test_memory_unchanged", "test_memory_chat", "test_limits_doc",
+                "test_design_notes", "test_interpreter_notes"),
+        "H17": ("test_status_pause", "test_help", "test_status_photos", "test_listing_command",
+                "test_status_notice", "test_social_draft_maker", "test_post_maker_command",
+                "test_qa1_waiting_reminders", "test_shelf_command", "test_command_typo",
+                "test_status_reader_failed", "test_commands_doc"),
+    }
+    UNAFFECTED = {
+        "H01": ("test_content", "test_content_read_errors", "test_browser_freshness", "test_publish"),
+        "H02": ("test_editor", "test_maker_product_batch"),
+        "H04": ("test_hike_ops", "test_route_add", "test_route_edit", "test_route_hide",
+                "test_hike_samples", "test_hike_repeat", "test_hike_ics", "test_hike_cancel_note",
+                "test_preview_cancel_note", "test_nl_prep_calendar", "test_weekday_date_mismatch",
+                "test_nl_prep_ordinal_words"),
+        "H06": ("test_preview", "test_undo", "test_history_search", "test_store_field_undo",
+                "test_history_times", "test_undo_cancel_phrases"),
+        "H07": "needs Michael's devices",
+        "H08": ("test_bridge", "test_owner_sender_match", "test_host", "test_relay"),
+        "H09": ("test_demo_transcript", "test_demo_negative", "test_demo_browser",
+                "test_demo_transcript_photo"),
+        "H10": ("test_label_reader", "test_label_reader_amounts", "test_label_question_brand",
+                "test_photos_to_take", "test_commands_doc"),
+        "H11": ("test_media_audio",),
+        "H12": ("test_attachment_reply", "test_photo_draft", "test_photo_on_product",
+                "test_photo_new_product", "test_photo_home_image", "test_photo_batch",
+                "test_media_batch", "test_qa1_new_item_chat"),
+        "H14": ("test_hike_capacity_ceiling", "test_hike_capacity_rsvp_off", "test_hike_change_words",
+                "test_chat_dead_end_reasons"),
+        "H16": ("test_outbox_delayed", "test_late_yes", "test_writer_lock_entry"),
+        "H18": "needs Michael's devices",
+        "H19": ("test_health", "test_health_host"),
+        "H20": ("test_statebackup_drill", "test_statebackup", "test_statebackup_bundle"),
+        "H21": ("test_retention",), "H22": ("test_interpreter_cap", "test_interpreter_prompt"),
+        "H23": ("test_auto_policy",),
+        "H24": ("test_design_check", "test_design_check_modes", "test_design_check_merge_base"),
+        "H25": "release step",
+    }
+
+    @staticmethod
+    def _recording(names, imports):
+        class Recorder(unittest.TestLoader):
+            def loadTestsFromName(self, name, module=None):
+                names.append(name)
+                return unittest.TestSuite([unittest.FunctionTestCase(lambda: None)])
+        return Recorder(), mock.patch.object(acceptance.importlib, "import_module",
+                                             side_effect=imports.append)
+
+    def test_av1052_complete_tuples_and_preservation(self):
+        self.assertEqual(dict(self.AV1052, **self.UNAFFECTED), acceptance.MAP)
+        for id_, row in self.AV1052.items():
+            self.assertEqual(acceptance.MAP[id_], row, id_)
+            self.assertEqual(len(row), len(set(row)), id_)
+            self.assertFalse([m for m in row if not m.startswith("test_") or "." in m], id_)
+        # test_interpreter_prompt_design is deliberately in H03 (AV1052-04) and H05 (inherited)
+        self.assertEqual([k for k, v in acceptance.MAP.items() if "test_cancel_all" in v], ["H05"])
+
+    def test_av1052_selected_modules_once_in_order(self):
+        names, imports = [], []
+        rec, patched = self._recording(names, imports)
+        with patched:
+            for id_ in self.AV1052:
+                del names[:], imports[:]
+                rows, code, probs = acceptance.run({id_: acceptance.MAP[id_]}, rec,
+                                                   expected_ids=(id_,))
+                self.assertEqual((code, probs, rows[0]["result"]), (0, [], "pass"), id_)
+                want = ["hass.tests." + m for m in self.AV1052[id_]]
+                self.assertEqual((names, imports), (want, want), id_)
+            # mixed selection: only the selected rows load, H25 stays not covered, never a pass
+            del names[:], imports[:]
+            ids = ("H13", "H17", "H25")
+            rows, code, _ = acceptance.run({i: acceptance.MAP[i] for i in ids}, rec, expected_ids=ids)
+        want = ["hass.tests." + m for i in ids[:2] for m in self.AV1052[i]]
+        self.assertEqual((code, names, imports), (0, want, want))
+        self.assertEqual([(r["id"], r["result"]) for r in rows],
+                         [("H13", "pass"), ("H17", "pass"), ("H25", "not covered")])
+
+    def test_av1052_missing_module_fails_before_loading(self):
+        names, imports = [], []
+        rec, patched = self._recording(names, imports)
+        # a row naming a module that does not exist: exit 2 naming it, nothing imported or loaded
+        with patched:
+            rows, code, probs = acceptance.run(
+                {"H15": acceptance.MAP["H15"] + ("test_no_such_av1052",), "H25": "release step"},
+                rec, expected_ids=("H15", "H25"))
+        self.assertEqual((rows, code, names, imports), ([], 2, [], []))
+        self.assertEqual(probs, ["missing module: test_no_such_av1052"])
+        # real filesystem check, unmocked: every registered module exists
+        self.assertEqual(acceptance._validate(acceptance.MAP, acceptance._TESTS_DIR,
+                                              acceptance.ALL_IDS), [])
+
+    def test_av1052_h25_never_becomes_fixture_pass(self):
+        names, imports = [], []
+        rec, patched = self._recording(names, imports)
+        out = io.StringIO()
+        with patched, contextlib.redirect_stdout(out):
+            code = acceptance.main(["--only", "H25"])
+        self.assertEqual((code, names, imports), (0, [], []))
+        self.assertEqual(out.getvalue().splitlines(), [
+            '{"id": "H25", "result": "not covered", "tests": 0, "failures": 0, "note": "release step"}',
+            '{"summary": {"ids": 1, "pass": 0, "fail": 0, "not covered": 1}}'])
+        self.assertIsInstance(acceptance.MAP["H25"], str)
 
     def test_h25_stays_release_step(self):
         out = io.StringIO()
