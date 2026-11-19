@@ -167,6 +167,25 @@ class LinkTests(Fixture, CliCase):
             self.assertIn("Unlinked", self.ask("unlink eggs-2"))
         self.assertEqual(self.links(), {})
 
+    def test_a_till_item_held_by_sku_through_an_old_link_is_never_offered_or_linked_again(self):
+        # Contract: "taken" means what mapper.match resolves (stored id, else the one till item with the stored SKU). Bug: only a current
+        # id counted, so a recreated till item (new id, same SKU) was offered to a second product and broke the first product's link.
+        oil_sku = "AS-PAN-SUNSHINE-OLIVE-OIL-01"
+        snapshot, _ = cache.read(self.state, cache.identity_of(from_settings(BLOCK)))
+        recreated = {"lemons": {"cloverId": "OLD1", "sku": oil_sku}}   # OLD1 is gone from the till; the oil item now holds that SKU
+        self.assertEqual(links.reserved(snapshot.items, recreated), {"FAKEITEM00001"})
+        pairs, _, site_only, till_only = self.distinct(snapshot, PRODUCTS, recreated)
+        self.assertEqual(pairs, {"avocado": {"cloverId": "FAKEITEM00002"}})   # oil is not offered
+        self.assertNotIn("Sunshine olive oil", till_only)
+        self.assertIn("Sunshine  olive OIL", site_only)
+        links.write(links.table(self.state), recreated)
+        self.assertEqual(self.ask(f"link oil to {oil_sku}"), "That needs one website item and one till SKU, both not linked yet, so nothing was changed. Say unlink first to move a link.")
+        self.assertEqual(self.links(), recreated)   # no conflicting link was written
+        content, written = reports.read_inputs(self.state, self.wt)
+        self.assertNotIn("lemons", reports.till_vs_site(snapshot, content, written)["sections"]["Broken links"])
+        # A link whose id and SKU match no till item holds nothing; a current id still holds its item.
+        self.assertEqual(links.reserved(snapshot.items, {"lemons": {"cloverId": "OLD1", "sku": "NOPE"}, "x": {"cloverId": "FAKEITEM00002"}}), {"FAKEITEM00002"})
+
     def test_help_lists_the_link_and_stock_words(self):
         for word in ("link all <code>", "unlink Sunshine olive oil", "stock yes <code>", "stock no <code>"):
             self.assertIn(word, chat.HELP)

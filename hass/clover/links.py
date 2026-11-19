@@ -33,11 +33,30 @@ def _labels(products, items):
     return out
 
 
+def reserved(items, links):
+    """Till item ids that existing links already hold, resolved as mapper.match resolves them (stored cloverId first, else the one till item
+    with the link's SKU), so a recreated till item (new id, same SKU) stays held by its old link and is never offered or linked again."""
+    by_id, by_sku, held = {i.id for i in items}, {}, set()
+    for i in items:
+        if i.sku:
+            by_sku.setdefault(i.sku.casefold(), []).append(i.id)
+    for pid in sorted(links):
+        v = links[pid]
+        if not isinstance(v, dict):
+            continue
+        same = by_sku.get(str(v.get("sku", "")).casefold(), [])
+        if v.get("cloverId") in by_id and v["cloverId"] not in held:
+            held.add(v["cloverId"])
+        elif len(same) == 1 and same[0] not in held:
+            held.add(same[0])
+    return held
+
+
 def suggest(snapshot, content, links):
     """(pairs {product id: link}, clashes, site_only, till_only): the last three list EVERY item left over, never linked. A name on both
     sides with more than one item on either side is a clash and lists all its site products and till items. A name shared by several
     items carries a label unique in its whole group (see _labels); a name with one item stays plain."""
-    taken = {v.get("cloverId") for v in links.values() if isinstance(v, dict)}
+    taken = reserved(snapshot.items, links)
     site, till = {}, {}
     for p in content["products"]:
         if p.get("status") == "active" and p["id"] not in links:

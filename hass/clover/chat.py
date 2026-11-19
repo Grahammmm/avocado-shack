@@ -253,7 +253,7 @@ class TillDesk:
             linkmod.write(linkmod.table(self.state), {p: v for p, v in links.items() if p != pids[0]})
             return f"Unlinked {voice.quote(a)}. No website word was changed."
         items = [i for i in snapshot.items if i.sku and i.sku.casefold() == b.casefold()]
-        if len(items) != 1 or pids[0] in links or any(isinstance(v, dict) and v.get("cloverId") == items[0].id for v in links.values()):
+        if len(items) != 1 or pids[0] in links or items[0].id in linkmod.reserved(snapshot.items, links):
             return "That needs one website item and one till SKU, both not linked yet, so nothing was changed. Say unlink first to move a link."
         linkmod.write(linkmod.table(self.state), {**links, pids[0]: {"cloverId": items[0].id, "sku": items[0].sku}})
         return f"Linked {voice.quote(a)} to SKU {items[0].sku}. No website word was changed."
