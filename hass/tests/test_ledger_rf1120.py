@@ -20,6 +20,9 @@ UNITS += tuple(f"AV1222-{n:02d}" for n in range(1, 16))  # AV1222-16 roll-up (id
 UNITS += tuple(f"AV2022-{n:02d}" for n in range(1, 15))  # AV2022-15 roll-up
 UNITS += tuple(f"AV1322-{n:02d}" for n in range(1, 16))  # AV1322-16 roll-up
 UNITS += tuple(f"AV0022-{n:02d}" for n in range(1, 17) if n != 5)  # AV0022-17 roll-up (id order; AV0022-05 was closed unmerged, see test_unmerged_unit_has_no_section)
+UNITS += tuple(f"AV1422-{n:02d}" for n in range(1, 15))  # AV1422-15 roll-up (id order; the ledger has no issue headings)
+UNITS += tuple(f"AV1622-{n:02d}" for n in range(1, 14))  # AV1622-14 roll-up (id order; the ledger has no issue headings)
+UNITS += tuple(f"AV1937-{n:02d}" for n in range(1, 15))  # AV1937-15 roll-up (id order; the ledger has no issue headings)
 LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
 WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
          "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
@@ -35,6 +38,10 @@ WORDS |= {"AV2022-05": ("Audio is refused, never transcribed or stored",),
 WORDS |= {"AV0022-01": ("sideways photos keep only the Orientation tag (no location, camera or date)",),
           "AV0022-14": ("health only reports unused photo copies and deletes nothing",),
           "AV0022-16": ("`--live` is operator-only and no model-quality claim is made",)}  # AV0022-17 edge path 5
+WORDS |= {"AV1422-06": ("No invented guest count",), "AV1422-13": ("Docs only",), "AV1422-14": ("H25 stays a release step",)}  # AV1422-15 edge path 5
+WORDS |= {"AV1622-08": ("Read-only; never deploys",), "AV1622-12": ("Synthetic replies are not model output",),
+          "AV1622-13": ("H25 stays a release step",)}  # AV1622-14 edge path 5
+WORDS |= {"AV1937-03": ("Nothing is ever deleted",), "AV1937-14": ("H25 stays a release step",)}  # AV1937-15 edge path 5
 LEDGER = (REPO_ROOT / "BUILD_LEDGER.md").read_text(encoding="utf-8")
 SHA = re.compile(r"\b[0-9a-f]{40}\b")
 GIT_HEX = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # commit ids are not phone numbers
@@ -67,7 +74,63 @@ def git(*args):
     return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True).stdout.strip()
 
 
+# AV0222-15: status-aware checks, kept apart from UNITS (a stack commit is not a merge subject).
+AV0222_UNITS = tuple(f"AV0222-{n:02d}" for n in range(1, 15))
+AV0222_REVIEW_ONLY = ("AV0222-01", "AV0222-11")  # prose reports: review steps, no unittest module
+AV0222_WORDS = {"AV0222-01": ("Both products remain held",), "AV0222-11": ("no map assets",),
+                "AV0222-13": ("no model-quality claim",), "AV0222-14": ("H25 stays a release step",)}
+AV0222_SUMMARY = ("### Issue #1 — working text demo", "### Issue #2 — owner trial", "### Issue #3 — reliable operation")
+PR_LINK = re.compile(r"\[#\d+\]\(https://github\.com/Grahammmm/avocado-shack/pull/\d+\)")
+
+
+def av0222_problems(text, tests=REPO_ROOT / "hass" / "tests"):
+    out = []
+    for u in AV0222_UNITS:
+        found = sections(text, u)
+        clean = GIT_HEX.sub("", body := found[0] if len(found) == 1 else "")
+        mods = [f"{m}.py" for m in re.findall(r"hass\.tests\.(test_\w+)", body)]
+        out += [f"{u}: {len(found)} headings"] * (len(found) != 1) + [f"{u}: no sha"] * (not SHA.search(body))
+        out += [f"{u}: no status"] * (not re.search(r"merged as [0-9a-f]{40}\b|unmerged implementation commit [0-9a-f]{40}\b", body))
+        out += [f"{u}: no PR link"] * (not PR_LINK.search(body))
+        if u in AV0222_REVIEW_ONLY:
+            out += [f"{u}: no review steps"] * (not re.search(r"Review steps[^`\n]*: `git show -s [0-9a-f]{40}`", body))
+            out += [f"{u}: no source report"] * (not any((REPO_ROOT / p).is_file() for p in re.findall(r"`((?:reports)/[\w./-]+\.md)`", body)))
+        else:
+            out += [f"{u}: no test command"] * (not mods) + [f"{u}: missing {m}" for m in mods if not any(tests.glob(m))]
+            out += [f"{u}: no result"] * (not re.search(r"\d+ tests, OK", body))
+        out += [f"{u}: no limits"] * (not re.search(r"^Limits: \S", body, flags=re.M))
+        out += [f"{u}: limit wording?"] * (not all(s in body for s in AV0222_WORDS.get(u, ())))
+        clean = clean.replace("https://github.com/Grahammmm/avocado-shack/", "")  # the PR link is not private data
+        out += [f"{u}: private data"] * bool(private_data(clean) or PRIVATE.search(clean))
+    out += [f"summary: missing {h}" for h in AV0222_SUMMARY if text.count(h) < 1]
+    summary = text.split("## AV0222 milestone issue summaries")[-1] if "## AV0222 milestone issue summaries" in text else ""
+    out += [f"summary: no link #{n}" for n in (1, 2, 3) if f"github.com/Grahammmm/avocado-shack/issues/{n})" not in summary]
+    out += ["summary: claims live evidence"] * bool(re.search(r"\b(released|deployed|(?<!no )trial (?:was|has been) run|checked the box)\b", summary))
+    return out
+
+
+def av0222_git_problems(text):
+    out = []
+    for u in AV0222_UNITS:
+        body = sections(text, u)[0]
+        sha = SHA.findall(body)[0]
+        if git("cat-file", "-t", sha) != "commit":
+            out.append(f"{u}: sha not a commit")
+        elif subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], cwd=REPO_ROOT).returncode:
+            out.append(f"{u}: sha not reachable")
+        elif "unmerged implementation commit" in body:
+            out += [f"{u}: merge called unmerged"] * git("show", "-s", "--format=%s", sha).endswith(f"rb/{u.lower()}")
+        elif not git("show", "-s", "--format=%s", sha).endswith(f"rb/{u.lower()}"):
+            out.append(f"{u}: not a merge of its branch")
+    return out
+
+
 class LedgerRF1120Tests(unittest.TestCase):
+    def test_av1422_06_merge_date_is_pacific_date(self):
+        # PR #393 merged 2026-11-05 02:43:33 UTC, still November 4 in Pacific time.
+        heading = sections(LEDGER, "AV1422-06")[0].splitlines()[0]
+        self.assertTrue(heading.endswith(" — November 4, 2026"), heading)
+
     def test_merge_shas_exist_in_history(self):
         if not (REPO_ROOT / ".git").exists() or git("rev-parse", "--is-shallow-repository") == "true":
             self.skipTest("no .git (tarball checkout) or shallow clone: merge history not available")
@@ -143,6 +206,17 @@ class LedgerRF1120Tests(unittest.TestCase):
                   "AV0022-14: limit wording?": LEDGER.replace("health only reports unused photo copies and deletes nothing", "health deletes unused photo copies"),
                   "AV0022-16: limit wording?": LEDGER.replace("is operator-only and no model-quality claim is made", "is run by CI"),
                   "AV0022-12: private data": LEDGER.replace("(AV0022-12)", "(AV0022-12)\nmail owner@example.com")}
+        cases |= {"AV1622-01: 2 headings": LEDGER + "\n" + sections(LEDGER, "AV1622-01")[0], "AV1622-13: 0 headings": LEDGER.replace("(AV1622-13)", "(AV1622-130)"),
+                  "AV1622-06: no merge sha": LEDGER.replace(sections(LEDGER, "AV1622-06")[0], SHA.sub("3c01bd0", sections(LEDGER, "AV1622-06")[0])),
+                  "AV1622-09: missing test_listing_commandz.py": LEDGER.replace("hass.tests.test_listing_command ", "hass.tests.test_listing_commandz "),
+                  "AV1622-08: limit wording?": LEDGER.replace("Read-only; never deploys", "Read-only"),
+                  "AV1622-12: limit wording?": LEDGER.replace("Synthetic replies are not model output", "Replies are model output"),
+                  "AV1622-13: limit wording?": LEDGER.replace("H25 stays a release step", "H25 is done")}
+        cases |= {"AV1937-01: 2 headings": LEDGER + "\n" + sections(LEDGER, "AV1937-01")[0], "AV1937-14: 0 headings": LEDGER.replace("(AV1937-14)", "(AV1937-140)"),
+                  "AV1937-06: no merge sha": LEDGER.replace(sections(LEDGER, "AV1937-06")[0], SHA.sub("252bf3a", sections(LEDGER, "AV1937-06")[0])),
+                  "AV1937-05: missing test_hike_repeatz.py": LEDGER.replace("hass.tests.test_hike_repeat ", "hass.tests.test_hike_repeatz "),
+                  "AV1937-03: limit wording?": LEDGER.replace("Nothing is ever deleted", "Products are deleted"),
+                  "AV1937-14: limit wording?": LEDGER.replace("H25 stays a release step", "H25 is done")}
         cases |= {f"AV2022-08: private data|{leak}": LEDGER.replace("(AV2022-08)", "(AV2022-08)\n" + leak) for leak in
                   ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242")}
         cases |= {f"RF1035-7: private data|{leak}": LEDGER.replace(one, one + leak + "\n") for leak in
@@ -164,3 +238,66 @@ class LedgerRF1120Tests(unittest.TestCase):
         self.assertIn("no PR exists", found[0])
         self.assertFalse(SHA.search(found[0].replace("27aa3ef5c1305a752517a276722f2049afd0bdd2", "")), "RF1740-5 has no merge of its own")
         self.assertFalse((REPO_ROOT / "hass" / "tests" / "test_hike_create_repeat.py").exists())
+
+
+    def test_av0222_sections_complete(self):
+        self.assertEqual(av0222_problems(LEDGER), [])
+        self.assertEqual([u for u in AV0222_UNITS if len(sections(LEDGER, u)) != 1], [])
+        self.assertEqual(len(sections(LEDGER, "AV0222-15")), 0, "the roll-up card has no section of its own")
+
+    def test_av0222_bad_evidence_named(self):
+        sec = {u: sections(LEDGER, u)[0] for u in ("AV0222-01", "AV0222-02", "AV0222-09", "AV0222-13", "AV0222-14")}
+        sha = SHA.findall(sec["AV0222-02"])[0]
+        cases = {"AV0222-02: 0 headings": LEDGER.replace("(AV0222-02)", "(AV0222-020)"),
+                 "AV0222-02: 2 headings": LEDGER + "\n" + sec["AV0222-02"],
+                 "AV0222-02: no sha": LEDGER.replace(sec["AV0222-02"], SHA.sub("1c058d9", sec["AV0222-02"])),
+                 "AV0222-02: no status": LEDGER.replace(f"merged as {sha}", f"landed as {sha}"),
+                 "AV0222-02: no PR link": LEDGER.replace("[#465](", "[PR](").replace("pull/465", "pull/x"),
+                 "AV0222-09: no test command": LEDGER.replace(sec["AV0222-09"], sec["AV0222-09"].replace("hass.tests.test_catalog_new_order", "hass.tests.x")),
+                 "AV0222-09: missing test_catalog_new_orderz.py": LEDGER.replace("hass.tests.test_catalog_new_order`", "hass.tests.test_catalog_new_orderz`"),
+                 "AV0222-14: no result": LEDGER.replace("31 tests, OK", "31 tests"),
+                 "AV0222-14: no limits": LEDGER.replace("Limits: H25 stays", "H25 stays"),
+                 "AV0222-14: limit wording?": LEDGER.replace("H25 stays a release step", "H25 is done"),
+                 "AV0222-13: limit wording?": LEDGER.replace("no model-quality claim", "a model-quality claim"),
+                 "AV0222-01: no review steps": LEDGER.replace("Review steps (source report only): `git show -s", "Review steps (source report only): `git log"),
+                 "AV0222-01: no source report": LEDGER.replace("`reports/held-cheese-recall-2026-11.md`", "`reports/nope.md`"),
+                 "AV0222-01: limit wording?": LEDGER.replace("Both products remain held", "Both products are released"),
+                 "AV0222-02: private data": LEDGER.replace("(AV0222-02)", "(AV0222-02)\nmail owner@example.com"),
+                 "AV0222-05: private data": LEDGER.replace("(AV0222-05)", "(AV0222-05)\nsaid quokka-canary-4242"),
+                 "summary: missing ### Issue #2 — owner trial": LEDGER.replace("### Issue #2 — owner trial", "### Issue 2"),
+                 "summary: no link #3": LEDGER.replace("avocado-shack/issues/3)", "avocado-shack/issues/4)"),
+                 "summary: claims live evidence": LEDGER.replace("Still open: H25 stays a release step and", "The trial was run and")}
+        for want, text in cases.items():
+            got = av0222_problems(text)
+            self.assertIn(want, got, want)
+            self.assertFalse(any("quokka" in p or "owner@" in p for p in got), "problem lines must not echo the payload")
+
+    def test_av0222_stack_not_called_merged(self):
+        if not (REPO_ROOT / ".git").exists() or git("rev-parse", "--is-shallow-repository") == "true":
+            self.skipTest("no .git (tarball checkout) or shallow clone: history not available")
+        self.assertEqual(av0222_git_problems(LEDGER), [])
+        sec = sections(LEDGER, "AV0222-02")[0]
+        merge = SHA.findall(sec)[0]
+        impl = git("rev-parse", git("log", "-1", "--no-merges", "--format=%H", f"--grep=^\\[AV0222-02\\] Ask shelf", merge))
+        self.assertRegex(impl, SHA.pattern)
+        self.assertNotEqual(impl, merge)
+        stack = sec.replace(f"merged as {merge}", f"unmerged implementation commit {impl}").replace(merge, impl)
+        self.assertEqual(av0222_git_problems(LEDGER.replace(sec, stack)), [], "a reachable stack commit is accepted as unmerged")
+        mislabel = sec.replace(merge, impl)
+        self.assertIn("AV0222-02: not a merge of its branch", av0222_git_problems(LEDGER.replace(sec, mislabel)))
+        self.assertIn("AV0222-02: merge called unmerged",
+                      av0222_git_problems(LEDGER.replace(sec, sec.replace(f"merged as {merge}", f"unmerged implementation commit {merge}"))))
+        self.assertIn("AV0222-02: sha not a commit", av0222_git_problems(LEDGER.replace(sec, sec.replace(merge, "f" * 40))))
+        self.assertTrue(av0222_problems(LEDGER.replace(sec, stack)) == [], "text check accepts both status wordings")
+
+    def test_av0222_issue_summaries_preserve_holds(self):
+        summary = LEDGER.split("## AV0222 milestone issue summaries")[-1]
+        for h in AV0222_SUMMARY:
+            self.assertEqual(summary.count(h), 1, h)
+        for n in (1, 2, 3):
+            self.assertIn(f"https://github.com/Grahammmm/avocado-shack/issues/{n})", summary)
+        for s in ("not GitHub issue updates", "No real bridge, phone trial, deployment, send or mail evidence", "the held cheeses stay held",
+                  "no trial has been run", "H25 stays a release step"):
+            self.assertIn(s, summary)
+        self.assertFalse(re.search(r"^## .*\(AV0222-\d\d\)", summary, flags=re.M), "summaries add no unit heading")
+        self.assertFalse(re.search(r"\bhttps?://(?!github\.com/Grahammmm/avocado-shack/issues/)", summary), "no other links or API calls")

@@ -1,0 +1,41 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": null,
+    "quantity": null
+   },
+   "route": "qwen",
+   "seconds": 20.897,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "openai",
+    "last_error": null,
+    "last_fallback": true,
+    "last_model": "qwen3.8:27b-thinkingcap-q6",
+    "last_primary_error": "codex-local",
+    "last_seconds": 2.159
+   },
+   "method": "interpret",
+   "result": {
+    "question": "The website doesn't show prices, so I haven't made any change. Could you send it without the price?"
+   },
+   "route": "qwen",
+   "seconds": 2.159,
+   "turn": 1
+  }
+ ],
+ "case": "intake-two-products"
+}

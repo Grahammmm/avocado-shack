@@ -50,12 +50,13 @@ class ViewportTests(EditorTestCase):
         self.env = {"PATH": f"{self.tmp / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}", "HOME": str(self.tmp)}
         self.out, self.desktop_png = (self.tmp / "shots" / n for n in ("c1-proposal.png", "c1-proposal-desktop.png"))
 
-    def capture(self, plan, viewports=preview.VIEWPORTS):
-        """Run one capture; check the server is stopped and the temp copy gone; return (result, calls, server)."""
+    def capture(self, plan, viewports=preview.VIEWPORTS, **call):
+        """Run one capture (``call``: per-call keywords, e.g. viewports_override); return (result, calls, server)."""
         self.plan.write_text(json.dumps(plan))
         previewer = preview.Previewer(self.writer.wt, self.env, viewports)
         with mock.patch.object(tempfile, "tempdir", str(self.tmp / "temp")):
-            result = previewer.capture({}, TARGET, self.out)
+            result = previewer.capture({}, TARGET, self.out, **({"viewports": call["override"]} if "override" in call else {}))
+        self.assertEqual(previewer.viewports, tuple(viewports))  # AV1922-01: a call-local override never sticks
         server = previewer.last_server
         if server is not None:
             with self.assertRaises(ProcessLookupError):
@@ -124,6 +125,27 @@ class ViewportTests(EditorTestCase):
         self.assertEqual(result, {"ok": True, "png": str(self.out), "checks": PASS, "error": None})
         self.assertEqual([c["viewport"] for c in calls], ["phone"])
         self.assertFalse(self.desktop_png.exists())
+
+    def test_capture_viewport_override_is_local(self):
+        """AV1922-01: viewports=("phone",) on a default (phone + desktop) previewer gives the phone-only result and a 0600
+        file for that call only (no desktop picture); an invalid override fails closed; None keeps the instance's viewports."""
+        plan = {"phone": {"checks": PASS}, "desktop": {"checks": PASS}}
+        result, calls, _server = self.capture(plan, override=("phone",))
+        self.assertEqual(result, {"ok": True, "png": str(self.out), "checks": PASS, "error": None})
+        self.assertEqual([c["viewport"] for c in calls], ["phone"])
+        self.assertPrivatePng(self.out)
+        self.assertFalse(self.desktop_png.exists())
+        for leftover in (self.log, self.out):
+            leftover.unlink(missing_ok=True)
+        result, calls, _server = self.capture(plan, override=None)  # None: today's dual capture, unchanged
+        self.assertEqual([c["viewport"] for c in calls], ["phone", "desktop"])
+        self.assertEqual(result["desktopPng"], str(self.desktop_png))
+        for override in (("desktop",), ("tablet",), (), "phone"):
+            with self.subTest(override=override):
+                self.log.unlink(missing_ok=True)
+                result, calls, server = self.capture({}, override=override)
+                self.assertEqual((result["ok"], result["png"], calls, server), (False, None, [], None))
+                self.assertTrue(result["error"].startswith("ValueError: unsupported viewports"), result["error"])
 
     def test_unsupported_viewports_are_refused_without_raising(self):
         for viewports in (("tablet",), ("desktop",), ("desktop", "phone"), ("phone", "phone"), (), "phone"):

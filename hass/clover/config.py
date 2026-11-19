@@ -60,7 +60,7 @@ def from_settings(raw):
     cmap = raw.get("categoryMap", {})
     checks = {
         "environment": raw.get("environment") in ("sandbox", "production"),
-        "merchantId": isinstance(raw.get("merchantId"), str) and 8 <= len(raw["merchantId"]) <= 20 and raw["merchantId"].isalnum(),
+        "merchantId": isinstance(raw.get("merchantId"), str) and 8 <= len(raw["merchantId"]) <= 20 and raw["merchantId"].isascii() and raw["merchantId"].isalnum(),
         "tokenFile": isinstance(raw.get("tokenFile"), str) and 0 < len(raw["tokenFile"]) <= 4096 and raw["tokenFile"].startswith("/"),
         "writeTokenFile": isinstance(raw.get("writeTokenFile", ""), str) and ("writeTokenFile" not in raw or (raw["writeTokenFile"].startswith("/") and raw["writeTokenFile"] != raw.get("tokenFile"))),
         "writes": type(raw.get("writes", False)) is bool,

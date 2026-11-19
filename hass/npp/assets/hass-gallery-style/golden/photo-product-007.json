@@ -1,0 +1,25 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-007",
+  "photo_path": "assets/products/photo-product-007.webp",
+  "category": "drinks",
+  "card": {
+    "photo_alt": "Fair Hills Farm apple juice (illustration)",
+    "brand": "Fair Hills Farm",
+    "name": "Fair Hills Farm apple juice",
+    "price": null,
+    "origin": "Based in San Miguel, California",
+    "badges": [],
+    "availability": null,
+    "description": "Apple juice from Fair Hills Farm in San Miguel. Pour it cold with breakfast: the orchard belongs at the table as much as the toast does.",
+    "meet_the_maker": {
+      "name": "Fair Hills Farm",
+      "place": "San Miguel, California",
+      "story": "An organic orchard in San Miguel, turning a harvest into more than a pretty piece of fruit. Fair Hills presses apples into unfiltered juice and uses orchard apple juice to gently sweeten its teas. The point is the fruit: grown with care, carried through into the bottle.",
+      "visit_url": "https://www.fairhillsfarmorganic.com/thefarm",
+      "see_all_count": 5
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-007#market"
+  }
+}

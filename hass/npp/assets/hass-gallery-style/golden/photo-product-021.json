@@ -1,0 +1,25 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-021",
+  "photo_path": "assets/products/photo-product-021.webp",
+  "category": "meat",
+  "card": {
+    "photo_alt": "Alle-Pia Calabrese salamini (illustration)",
+    "brand": "Alle-Pia",
+    "name": "Alle-Pia Calabrese salamini",
+    "price": null,
+    "origin": "Based in California’s Central Coast",
+    "badges": [],
+    "availability": null,
+    "description": "Calabrese salamini from Alle-Pia on the Central Coast. Slice thin, bring out bread and cheese, and let the table fill up slowly.",
+    "meet_the_maker": {
+      "name": "Alle-Pia",
+      "place": "California’s Central Coast",
+      "story": "Alle-Pia brings old-world Italian family recipes to the Central Coast, making small batches of cured meat under chef Antonio Varia’s direction. Cut a few thin slices. Add bread, cheese, maybe a tomato. You have the beginnings of a meal that needs very little explaining.",
+      "visit_url": "https://www.allepiasalumi.com/flavor-of-italy",
+      "see_all_count": 3
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-021#market"
+  }
+}

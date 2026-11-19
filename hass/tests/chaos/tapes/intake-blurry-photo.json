@@ -1,0 +1,43 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": 500,
+    "quantity": null
+   },
+   "route": "codex-sub",
+   "seconds": 3.934,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": 5.064
+   },
+   "method": "label",
+   "result": {
+    "category": "general",
+    "colour": "Burgundy, gold and white",
+    "description": "The packaging is burgundy with a gold-coloured top and a white rectangular front label. The label text is too blurred to read."
+   },
+   "route": "codex",
+   "seconds": 5.064,
+   "turn": 1
+  }
+ ],
+ "case": "intake-blurry-photo"
+}

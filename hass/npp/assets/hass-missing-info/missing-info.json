@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "about": "S3 rule table. Code only: no model decides what is essential. Every question id names a fixed template in hass-npp-reply/reply-templates.json.",
+  "max_questions": 2,
+  "max_asks_per_essential": 2,
+  "essentials": [
+    {
+      "id": "identity",
+      "needed_when": "is_product is false, or confidence.item is below min_confidence",
+      "min_confidence": 0.6,
+      "question": "ask_identity",
+      "never_from": [],
+      "note": "Owner words or a clearer photo settle it. A guessed name is never published."
+    },
+    {
+      "id": "selling_price",
+      "needed_when": "no public price span tagged price by the caption parser, the price answer or the edit grammar, or the parse is in conflict, unresolved or ambiguous",
+      "question": "ask_price_unit",
+      "never_from": [
+        "photo",
+        "model",
+        "label",
+        "web_page"
+      ],
+      "note": "Selling price is public but only ever the owner's words, in a span separate from any cost span (design 1.9). With no price and no unit said the one question is ask_price_unit (design 1.4); when his words already give the unit, ask_price.",
+      "question_when_unit_said": "ask_price"
+    },
+    {
+      "id": "price_unit",
+      "needed_when": "a price is known and its unit is ambiguous (basket rule, PR 1046: a basket or bundle price stays off the card until the owner says each)",
+      "question": "ask_unit",
+      "never_from": [
+        "photo",
+        "model",
+        "label",
+        "web_page"
+      ],
+      "note": "Never invent a unit such as per lb for a jar."
+    }
+  ],
+  "ask_order": [
+    "identity",
+    "selling_price",
+    "price_unit"
+  ],
+  "combine": [],
+  "omit_dont_ask": [
+    "brand",
+    "maker",
+    "town",
+    "story",
+    "size",
+    "organic",
+    "origin",
+    "description",
+    "category",
+    "imageAlt",
+    "availability",
+    "isNew"
+  ],
+  "omit_rules": {
+    "brand_maker_town": "Never asked for. Public only from the owner's own words or from the maker's verified official website (hass-maker-research); otherwise the card shows From the market and the renderer's own source line.",
+    "origin_line": "Falls back to the renderer's own 'Ask us about the source in store.'",
+    "claims": "Label claims are dropped with a one-line note unless the existing claims rule passes them.",
+    "category": "Taken from S2 category_guess when confident; otherwise the default for the kind (food: pantry, drink: drinks, fresh: fruit, non-food: general). Household items go to general."
+  },
+  "kind_default_category": {
+    "food": "pantry",
+    "drink": "drinks",
+    "fresh": "fruit",
+    "non-food": "general"
+  },
+  "duplicate_rule": {
+    "checks": [
+      "catalog product name (folded)",
+      "producers.json key or name (folded)",
+      "read-only Clover cache name (local only, never sent to a cloud model)"
+    ],
+    "on_hit": "Say once that it looks like an existing listing and ask whether to add another, within the two-question budget. Never overwrite."
+  },
+  "maker_resolution": {
+    "known_maker": {
+      "match": "exact after claims.fold of a producers.json key or name",
+      "action": "reuse the existing record, no web"
+    },
+    "near_match": {
+      "match": "fold-equal after removing punctuation and one plural s, not exact",
+      "question": "ask_near_maker",
+      "if_budget_used": "omit the maker"
+    },
+    "contradiction": {
+      "when": "owner maker words and S2 brand_on_label share no folded token and S2 brand confidence is at least 0.8",
+      "action": "omit the maker, no research, reply bracket maker_left_off_label"
+    },
+    "new_maker": {
+      "needs": "a town from the owner's words or from the maker's verified official website",
+      "else": "no maker.add and no panel"
+    }
+  },
+  "never": [
+    "ask for cost or quantity",
+    "read back any field",
+    "explain approval rules",
+    "send a placeholder listing",
+    "send a second reply to one message"
+  ],
+  "combine_note": "No combining step is needed: a missing price already carries the unit in one question."
+}

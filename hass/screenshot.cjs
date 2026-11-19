@@ -30,7 +30,7 @@ const allowed=req=>{
   if(!base||new URL(base).hostname!=='127.0.0.1')throw new Error('PREVIEW_URL must be a 127.0.0.1 address');
   const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
   try{
-    const page=await browser.newPage({viewport:VIEWPORTS[vp]}),errors=[],blocked=[],checks={};let unshown=false;
+    const page=await browser.newPage({viewport:VIEWPORTS[vp]}),errors=[],blocked=[],checks={};let unshown=false,cardShot=null;
     if(target.effectiveDay)await page.clock.setFixedTime(new Date(target.effectiveDay+'T12:00:00-08:00'));
     page.on('pageerror',e=>errors.push(e.message));
     await page.route('**/*',route=>allowed(route.request())?route.continue():(blocked.push(route.request().method()),route.abort()));
@@ -148,9 +148,13 @@ const allowed=req=>{
           const count=await card.count();
           checks.productShown=count===(target.status==='active'?1:0);
           if(count===1){
+            if(target.cardOnly)cardShot=card;
             await card.scrollIntoViewIfNeeded();
+            await card.locator('details').evaluateAll(els=>els.forEach(e=>e.open=true));
+            await card.locator('img').first().evaluate(e=>e.decode()).catch(()=>{});
             if(target.status==='active'){
               checks.description=(await card.locator('.food-description').textContent())===target.description;
+              if('price' in target){const price=card.locator('.product-price');checks.priceShown=(await price.count()===1)&&await price.isVisible()&&(await price.textContent())===target.price;}
               if('availability' in target){const a=card.locator('.availability');checks.availabilityShown=(await a.count()?await a.first().textContent():null)===target.availability;}
               if(target.image){const img=card.locator('img').first();await img.scrollIntoViewIfNeeded();
                 checks.imageShown=await img.evaluate((e,src)=>e.getAttribute('src')===src&&e.complete&&e.naturalWidth>0,target.image).catch(()=>false);}
@@ -209,9 +213,10 @@ const allowed=req=>{
       else await page.evaluate(()=>window.scrollTo(0,0));
     }
     await page.waitForTimeout(150);
-    await page.screenshot({path:out});
+    if(cardShot)await cardShot.screenshot({path:out});
+    else await page.screenshot({path:out});
     checks.noPageErrors=errors.length===0;
     checks.noPosts=!blocked.some(m=>m!=='GET'&&m!=='HEAD');
-    console.log(JSON.stringify({checks,blockedRequests:blocked.length,...(unshown?{unshown:true}:{})}));
+    console.log(JSON.stringify({checks,blockedRequests:blocked.length,...(cardShot?{cardText:await cardShot.innerText()}:{}),...(unshown?{unshown:true}:{})}));
   }finally{await browser.close();}
 })().catch(e=>{console.error(String((e&&e.message)||e).split('\n')[0]);process.exit(1);});

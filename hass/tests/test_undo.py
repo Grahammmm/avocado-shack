@@ -98,8 +98,8 @@ class UndoTests(H06TestCase):
         self.assertEqual(listed[0]["ops"], [f'history.revert {{"changeId": "{a["change_id"]}"}}'])
         self.assertEqual(self.say("history"), "history")
         lines = self.replies()[0].splitlines()
-        self.assertEqual(lines[1:], [f"- {r['summary']}: saved, but I'm not sure it's on the website" for r in (rev, b)]
-                         + [f"- {a['summary']}: undone"])
+        self.assertEqual(lines[1:], [f"- {r['summary']}, approved Mon Nov 2 9:00 am: saved, but I'm not sure it's on the website" for r in (rev, b)]
+                         + [f"- {a['summary']}, approved Mon Nov 2 9:00 am: undone"])
         self.assertEqual(self.say(f"undo {a['code']}"), "not-drafted")
         self.assertEqual(self.replies(), ["I couldn't undo that, so nothing changed. Could you say it another way?"])
         self.assertEqual((len(self.drafts()), self.commits()), (3, 3))

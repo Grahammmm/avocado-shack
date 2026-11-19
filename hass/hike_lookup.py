@@ -344,7 +344,7 @@ class CachedTransport:
         try:
             rec = json.loads(self._path(key).read_text("utf-8"))
             return rec["body"], date.fromisoformat(rec["retrieved"])
-        except (OSError, ValueError, KeyError):
+        except (OSError, ValueError, KeyError, TypeError):  # TypeError: valid JSON with a wrong root or a non-text date is a miss too
             return None
 
     def _write(self, key, request, body, day):

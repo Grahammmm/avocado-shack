@@ -376,6 +376,14 @@ def stratified(corpus, n):
     return [c for c in corpus if c["id"] in keep]
 
 
+def positive_int(text):
+    """argparse type for --every / --limit / --sample: zero and negative counts would select an unintended set of cases."""
+    try: value = int(text)
+    except ValueError: raise argparse.ArgumentTypeError(f"invalid int value: {text!r}") from None
+    if value <= 0: raise argparse.ArgumentTypeError("must be a positive integer")
+    return value
+
+
 def main(argv=None, transport=None) -> int:
     parser = argparse.ArgumentParser(description="HASS-NL-1 natural-language interpreter eval; --live is operator only")
     parser.add_argument("command", nargs="?", choices=("score", "report", "compare"))
@@ -388,11 +396,11 @@ def main(argv=None, transport=None) -> int:
     parser.add_argument("--retry-timeout", type=int, default=0, help="live: ask a timed-out call once more with this many seconds (0 = off)")
     parser.add_argument("--think", choices=("true", "false"))
     parser.add_argument("--api", choices=("ollama", "openai"), default="ollama", help="live: Ollama /api/chat or OpenAI-style /v1/chat/completions")
-    parser.add_argument("--every", type=int)
-    parser.add_argument("--limit", type=int)
+    parser.add_argument("--every", type=positive_int)
+    parser.add_argument("--limit", type=positive_int)
     parser.add_argument("--ids", help="live: only these case ids, comma separated")
     parser.add_argument("--same-as", help="live: only the cases already in this replies file (pairs a before and an after run)")
-    parser.add_argument("--sample", type=int, help="live: about N cases spread over every intent (deterministic)")
+    parser.add_argument("--sample", type=positive_int, help="live: about N cases spread over every intent (deterministic)")
     parser.add_argument("--warmup-timeout", type=int, default=900)
     args = parser.parse_args(argv)
     try:

@@ -1,0 +1,70 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": null,
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": null
+   },
+   "method": "answer.fields",
+   "result": {
+    "cost_cents": null,
+    "price_cents": 700,
+    "quantity": null
+   },
+   "route": "codex-sub",
+   "seconds": 2.963,
+   "turn": 1
+  },
+  {
+   "attrs": {
+    "last_backend": "codex",
+    "last_error": null,
+    "last_fallback": false,
+    "last_model": null,
+    "last_primary_error": null,
+    "last_seconds": 5.55
+   },
+   "method": "label",
+   "result": {
+    "brand": "Hillside Kitchen",
+    "category": "pantry",
+    "colour": "Burgundy with a gold-coloured lid and an off-white label",
+    "description": "Hillside Kitchen Raspberry Jam comes in a burgundy jar with a gold-coloured lid and an off-white label. The label lists a net weight of 10 oz.",
+    "name": "Raspberry Jam",
+    "printed_claims": [
+     "Organic"
+    ],
+    "product_type": "Jam",
+    "size": "10 oz"
+   },
+   "route": "codex",
+   "seconds": 5.55,
+   "turn": 1
+  },
+  {
+   "attrs": {},
+   "method": "capture",
+   "result": {
+    "cardText": "Hillside Kitchen\n\nRaspberry Jam\n\n$7.00\n\nAsk us about the source in store.\n\nNew\n\nHillside Kitchen Raspberry Jam comes in a burgundy jar with a gold-coloured lid and an off-white label. The label lists a net weight of. 10 oz. Burgundy with a gold-coloured lid and an off-white label. Label says: “Organic”.\n\nLink to this",
+    "checks": {
+     "description": true,
+     "imageShown": true,
+     "noPageErrors": true,
+     "noPosts": true,
+     "priceShown": true,
+     "productShown": true
+    },
+    "error": null,
+    "ok": true
+   },
+   "route": "browser",
+   "seconds": 2.097,
+   "turn": 1
+  }
+ ],
+ "case": "intake-photo-jam-organic-label"
+}

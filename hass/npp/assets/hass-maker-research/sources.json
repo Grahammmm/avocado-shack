@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "about": "Policy for locating a maker's own official website (G decision 2026-11-18 14:00). Edited only by a reviewed G-maintained change. allowlist is G's optional list of extra official hosts for a maker and starts empty: discovery does not need it.",
+  "allowlist": [],
+  "allowlist_entry_shape": {"maker": "folded maker name", "domain": "registered domain, exact, no wildcard", "added_by": "G", "reviewed_in": "PR number"},
+  "discovery": {
+    "mode": "locate-official-site",
+    "search": {
+      "enabled": true,
+      "purpose": "locate only: results give candidate addresses, never facts",
+      "max_queries": 2,
+      "max_results_per_query": 5,
+      "max_candidates_checked": 3,
+      "query_forms": ["{maker} {town} official site", "{maker} official site"],
+      "query_slots_allowed": ["maker", "town"],
+      "query_forbidden": ["digits", "price", "cost", "quantity", "owner_sentence", "photo_text"]
+    },
+    "owner_stated_url": {"allowed": true, "still_requires": "official_site checks"},
+    "seed": {"owner_maker_words": true, "label_brand_min_confidence": 0.8}
+  },
+  "official_site": {
+    "all_required": [
+      "scheme_https_and_public_address",
+      "registered_domain_not_in_deny_domains",
+      "name_in_title_or_site_name_or_main_heading",
+      "page_presents_itself_as_the_makers_own_site",
+      "town_named_in_visible_text_when_a_town_is_known",
+      "no_different_base_town_named_when_a_town_is_known",
+      "redirects_stay_on_same_registered_domain"
+    ],
+    "own_site_signals": ["copyright or footer line naming the maker", "about or our-story page on the same registered domain"],
+    "unique_candidate": "exactly one registered domain passes; two or more passing, or none, is not confident",
+    "extra_evidence_not_proof": ["domain contains a folded token of the maker name", "title and item match"],
+    "when_unsure": "no story"
+  },
+  "fetch": {
+    "pages_max": 3,
+    "same_registered_domain_only": true,
+    "reuse": "hass.maker_site safeguards (robots.txt, public addresses, deadline, redirects, byte limits, no cookies)",
+    "stage_budget_seconds": 40
+  },
+  "deny_domains": [
+    "amazon.com", "ebay.com", "etsy.com", "walmart.com", "target.com", "instacart.com", "doordash.com", "ubereats.com", "grubhub.com",
+    "yelp.com", "tripadvisor.com", "foursquare.com", "mapquest.com", "yellowpages.com", "manta.com", "bbb.org", "chamberofcommerce.com",
+    "facebook.com", "instagram.com", "tiktok.com", "x.com", "twitter.com", "pinterest.com", "linkedin.com", "youtube.com", "reddit.com",
+    "wikipedia.org", "localharvest.org", "google.com", "bing.com", "duckduckgo.com"
+  ],
+  "deny_note": "A cheap pre-filter for pages that are never a maker's own site. It is not identity: a domain missing from this list still has to pass every official_site check."
+}

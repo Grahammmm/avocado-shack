@@ -15,9 +15,9 @@ import re
 import unicodedata
 
 from hass import voice
-from hass.content_model import AVAILABILITY, CATEGORIES, TEXT_LIMITS, checked_on, shop_today
+from hass.content_model import AVAILABILITY, CATEGORIES, TEXT_LIMITS, checked_on, shop_today, valid_supplier
 from hass.field_words import field_list
-from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
+from hass.ops import INTAKE_PRICE, Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
 
 PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
 # storefront-mockup/shop.js organic(): name matches /\borganic\b/i or the maker is one of these.
@@ -121,6 +121,8 @@ def _touch(collection, key, before, after):
 def _product_add(content, args, ctx):
     if problem := _too_long(args, "product", PRODUCT_LIMITED):
         return problem
+    if "supplier" in args and not valid_supplier(args["supplier"]):
+        return Refused("give just the supplier name")
     if twin := _twin(content, args["name"], args["brand"]):
         tail = {"active": "already has this name and brand; edit it instead",
                 "hidden": "has this name and brand and is hidden; restore it instead"}.get(
@@ -138,7 +140,8 @@ def _product_add(content, args, ctx):
     image = args.get("image")
     if "photo" in args:
         from hass.ops import photos  # lazy: photos imports this module
-        if isinstance(image := photos.install(ctx, args["photo"], args["imageAlt"]), Refused):
+        if isinstance(image := photos.install(ctx, args["photo"], args["imageAlt"],
+                                              owner_fallback=ctx.settings.get("itemIntake") is True), Refused):
             return image
     numbers = [int(m.group(1)) for p in content.products if (m := PRODUCT_ID_RE.fullmatch(p["id"]))]
     record = {"id": "photo-product-%03d" % (max(numbers, default=0) + 1)}
@@ -148,6 +151,22 @@ def _product_add(content, args, ctx):
         "From the market" if args["brand"] == "Producer not identified" else args["brand"])  # absence alone defaults
     record.update(producerKey=key, displayBrand=shown, status="active")
     record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
+    if "sellingPrice" in args:
+        record["sellingPrice"] = args["sellingPrice"]
+    if "supplier" in args:
+        record["supplier"] = args["supplier"]
+    if "labelText" in args:
+        from hass import product_claims
+        evidence = product_claims.source(ctx.settings.get("mediaRoot"), args.get("photo"), args["labelText"])
+        if evidence is None:
+            return Refused("label text must come from the stored photo read")
+        record["labelSource"] = evidence
+    if "ownerText" in args:
+        from hass import product_claims
+        evidence = product_claims.source(ctx.settings.get("mediaRoot"), args.get("photo"), args["ownerText"], 'owner')
+        if evidence is None:
+            return Refused("origin claims must come from the owner's typed words")
+        record["ownerSource"] = evidence
     if args.get("showNew") is not False:  # HASS-INTAKE-2: the owner said no New label; with no day the shop shows none (shop.js isNew)
         record["addedOn"] = shop_today(ctx.now).isoformat()  # AV1622-06: Pacific day of this add; no other op sets it
     content.products.append(record)
@@ -246,6 +265,25 @@ def _product_set_availability(content, args, ctx):
     product["available"] = args["available"]
     product["available_on"] = day.isoformat()
     return _touch("products", product["id"], before, product)
+
+
+def _product_set_availability_all(content, args, ctx):
+    """AV1052-04: set one availability word on every active product of a shelf and/or maker that does not have it yet.
+    Words only: available_on and the store's shelf-check day stay exactly as they are (store.confirm_selection owns the check)."""
+    shelf, maker = args.get("shelf"), args.get("maker")
+    if shelf is None and maker is None:
+        return NeedsDetails(["shelf", "maker"], "Which shelf or maker should change?")
+    changing = sorted((p for p in content.active_products()
+                       if (shelf is None or p.get("category") == shelf) and (maker is None or p.get("producerKey") == maker)
+                       and p.get("available") != args["available"]), key=lambda p: p["id"])
+    if not changing:
+        return Refused("No active products would change availability; nothing to change")
+    touched = []
+    for product in changing:
+        before = copy.deepcopy(product)
+        product["available"] = args["available"]
+        touched += _touch("products", product["id"], before, product)
+    return touched
 
 
 def _product_clear_availability(content, args, ctx):
@@ -401,13 +439,18 @@ _ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
 
 OPS = (
     Op("product.add", {**_PRODUCT_FIELDS, "displayBrand": Arg("text", required=False), "image": Arg("image", required=False), "photo": Arg("id", required=False),
-                       "showNew": Arg("bool", required=False), **_OPTIONAL}, _product_add),
+                       "showNew": Arg("bool", required=False), "labelText": Arg("text_list", required=False),
+                       "ownerText": Arg("text_list", required=False), "sellingPrice": Arg(INTAKE_PRICE, required=False),
+                       "supplier": Arg("text", required=False),
+                       **_OPTIONAL}, _product_add),
     Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
                         **_OPTIONAL, "clearProducer": Arg("bool", required=False),
                         "clearImageAlt": Arg("bool", required=False)}, _product_edit),
     Op("product.hide", _ID, _product_hide),
     Op("product.restore", _ID, _product_restore),
     Op("product.set_availability", {**_ID, "available": Arg("enum", choices=AVAILABILITY)}, _product_set_availability),
+    Op("product.set_availability_all", {"available": Arg("enum", choices=AVAILABILITY), "shelf": Arg("enum", required=False, choices=CATEGORIES),
+                                         "maker": Arg("maker_key", required=False)}, _product_set_availability_all),
     Op("product.clear_availability", _ID, _product_clear_availability),
     Op("maker.add", {"key": Arg("text"), **{k: Arg("url", required=False) if k == "url" else Arg("text", required=k != "story")
                                            for k in MAKER_EDITABLE}},

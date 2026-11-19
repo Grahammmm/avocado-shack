@@ -4,8 +4,8 @@ hass/content/*.json is the single editable source for catalog products, maker
 profiles, community events/route ideas and store information. The site files
 under storefront-mockup/ are generated from it by hass/sitegen.py.
 
-Standard library only. Validation is strict and closed: unknown fields are
-rejected, so commerce fields (prices, units, baskets) cannot enter the source.
+Standard library only. Validation is strict and closed: the optional public
+selling price is the only finance field admitted to product records.
 """
 
 from __future__ import annotations
@@ -25,18 +25,21 @@ SITE_DIR = REPO_ROOT / "storefront-mockup"
 SCHEMA_VERSION = 1
 
 # Category values offered by the catalog filter buttons in index.html.
-CATEGORIES = ("fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers")
+CATEGORIES = ("fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers", "general")
 # Shelf names as the filter buttons in index.html show them (AV0222-02); a test ties this table to those buttons.
 SHELF_LABELS = {"fruit": "Fruit", "vegetables": "Vegetables", "dairy": "Dairy & cheese", "eggs": "Eggs", "meat": "Meat",
-                "pantry": "Pantry", "drinks": "Drinks & coffee", "bread": "Bread", "flowers": "Flowers"}
+                "pantry": "Pantry", "drinks": "Drinks & coffee", "bread": "Bread", "flowers": "Flowers", "general": "General"}
 
 # Public product fields, emitted to catalog-products.js. Records keep their own
 # key order (the migrated records use three historical orders; the generator
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
-PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn")  # public when present; never required (any status)
+PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn", "sellingPrice", "supplier")  # public when present
+# Canonical intake USD decimal, up to $999999.99, with the basis only if supplied.
+SELLING_PRICE_RE = re.compile(r"(?:0|[1-9][0-9]{0,5})\.[0-9]{2}(?: per lb| each)?")
+SELLING_PRICE_ERROR = "must be 0.00 to 999999.99 in USD, optionally followed by ' per lb' or ' each'"
 PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available", "available_on",  # owner-set word + its check day (SHOP-1)
-                           "restock_on")  # AV1109-03: private day more is expected; never published
+                           "restock_on", "labelSource", "ownerSource")  # private provenance, never emitted to the site
 PRODUCT_STATUSES = ("active", "hidden", "held")
 AVAILABILITY = ("yes", "limited", "no")
 SHOP_TZ = ZoneInfo("America/Los_Angeles")
@@ -243,6 +246,15 @@ def _closed_keys(problems, where, rec, allowed, required=()):
     return True
 
 
+def valid_selling_price(value):
+    return isinstance(value, str) and SELLING_PRICE_RE.fullmatch(value) is not None
+
+
+def valid_supplier(value):
+    return (isinstance(value, str) and len(value) <= 60
+            and re.fullmatch(r"[^\W\d_][^\W_]*(?:[ &'’\-][^\W_]+){0,4}", value) is not None)
+
+
 def validate_products(problems, products, makers, site_dir: Path | None, checked: date | None = None):
     if not isinstance(products, list):
         problems.append("products: must be a list")
@@ -268,6 +280,18 @@ def validate_products(problems, products, makers, site_dir: Path | None, checked
         for field in ("name", "brand"):
             _text(problems, f"{where}.{field}", rec.get(field), limit=limits[field])
         category = rec.get("category")
+        if "sellingPrice" in rec and not valid_selling_price(rec["sellingPrice"]):
+            problems.append(f"{where}.sellingPrice: {SELLING_PRICE_ERROR}")
+        if "supplier" in rec and not valid_supplier(rec["supplier"]):
+            problems.append(f"{where}.supplier: must be a short supplier name")
+        if "labelSource" in rec:
+            from hass.product_claims import valid_source
+            if not valid_source(rec["labelSource"]):
+                problems.append(f"{where}.labelSource: invalid label provenance")
+        if "ownerSource" in rec:
+            from hass.product_claims import valid_source
+            if not valid_source(rec["ownerSource"], 'owner'):
+                problems.append(f"{where}.ownerSource: invalid owner provenance")
         if isinstance(category, str) and len(category) > limits["category"]:
             problems.append(f"{where}.category: longer than {limits['category']} characters")
         elif category not in CATEGORIES:

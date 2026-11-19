@@ -1393,7 +1393,8 @@
    "pantry",
    "drinks",
    "bread",
-   "flowers"
+   "flowers",
+   "general"
   ],
   "highest_id_number": 174,
   "id_pattern": "photo-product-NNN (next = highest + 1)",
@@ -1482,11 +1483,15 @@
    "hold",
    "available",
    "available_on",
-   "restock_on"
+   "restock_on",
+   "labelSource",
+   "ownerSource"
   ],
   "product_optional_public": [
    "imageAlt",
-   "addedOn"
+   "addedOn",
+   "sellingPrice",
+   "supplier"
   ],
   "product_public_fields": [
    "id",
@@ -1518,6 +1523,7 @@
    "eggs": "Eggs",
    "flowers": "Flowers",
    "fruit": "Fruit",
+   "general": "General",
    "meat": "Meat",
    "pantry": "Pantry",
    "vegetables": "Vegetables"

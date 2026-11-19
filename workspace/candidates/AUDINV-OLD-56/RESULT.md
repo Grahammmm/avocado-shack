@@ -12,7 +12,7 @@ transport replies below are inputs, not observed model reasoning or semantic acc
 Inspected main: `b83d3615a2ff8802c5b82339b7802e6e62c8d97d`. It already persists bounded generic-question context via
 Conversation and the real OpenRequests store; the historical no-persistence claim is
 not current fact. A read-only open-PR query during this run confirmed #878 remains
-open at `f2e7cb1d1b52d67e139abfe7d3cc54765ee113f4`, touching conversation.py.
+open at `13040cd999a0bc2ef9be8bf879d56010ea5a0848`, touching conversation.py.
 #879, #881, #875, #874 and #870 also overlap production Conversation. No equivalent
 OLD-56 package existed in the clone or the open PR path lists. This package neither
 modifies nor copies those production changes. No retention patch is warranted by

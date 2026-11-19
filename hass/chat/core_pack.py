@@ -4,12 +4,12 @@ AVB-12: moved verbatim out of hass/conversation.py, which imports every name bac
 unchanged). The methods run on the Conversation (self is the conversation): they use its store, replies and
 settings exactly as before. Command routing stays in Conversation._command.
 """
-import contextlib, copy, json, re, sqlite3  # noqa: E401
+import contextlib, copy, json, os, re, sqlite3, stat  # noqa: E401
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from hass import owner_answers as answers, audit as audit_mod, editor as editor_mod, memory as memory_mod, morning_report as shelf, voice
-from hass.chat.shared import ALIAS_NAME_MAX, CANT_READ, CONTROL, COST_USAGE, _is_undo, _iso, load_content, NOTHING, q, STATUS_PLAIN
+from hass.chat.shared import ALIAS_NAME_MAX, CANT_READ, CONTROL, COST_USAGE, LOCAL_TZ, _is_undo, _iso, load_content, NOTHING, q, STATUS_PLAIN
 from hass.chat.wording import proposal_text, _record_lines
 from hass.content_model import _text as checked_text
 from hass.ops import catalog, hikes
@@ -20,20 +20,48 @@ ALIAS_LIST_MAX = 20  # AV0222-05: `memory` lists this many aliases apart from th
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 
 HISTORY_SEARCH_MAX, HISTORY_TEXT_MAX = 10, 60  # AV2152-02 (H06/H17): `history <words>`; docs/hass/COMMANDS.md
+TIME_UNKNOWN = "time unknown"  # AV0222-06: a history line whose approval row is missing or unreadable
+_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")  # fixed English names: no process-locale %a/%b/%p
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 HISTORY_USAGE = "Tell me a word or two to look for, like " + q("history opening hours") + "."
 
 AGAIN_WINDOW_DAYS = 7  # AV2152-03 (H05/H16): `again <code>` works for a proposal that expired at most this long ago; COMMANDS.md
 AGAIN_USAGE = "Send " + q("again") + " and an expired draft code, e.g. " + q("again a1b2") + "."
 AGAIN_PHOTO_OPS = ("product.set_photo", "store.set_home_image")  # ops that carry a stored photo; any op with args.photo does too
 AGAIN_DRIFT = "the site changed since {code}; send the change again"
+AGAIN_UNDO = "That code is for an undo. Use again with the original change's code."
 
 
 class CorePack:
     """Core pack commands, mixed into Conversation."""
 
+    def _history_when(self, r) -> str:
+        """AV0222-06: when this change's owner approval was recorded, in Pacific time ("Tue Nov 3 2:14 pm"), from the approval row
+        bound to the draft (change id, hash, base, expiry and chat); anything missing or unreadable says "time unknown", never a guess."""
+        try:
+            bind = tuple(r[k] for k in ("change_id", "draft_hash", "base", "expires_at", "chat"))
+            if any(not isinstance(v, str) or not v for v in bind): return TIME_UNKNOWN
+            row = self.db.execute("SELECT approved_at FROM approvals WHERE change_id = ? AND draft_hash = ? AND base = ? AND expires_at = ? "
+                                  "AND chat = ? ORDER BY id DESC LIMIT 1", bind).fetchone()
+            raw = row["approved_at"] if row is not None else None
+        except (ValueError, TypeError, OverflowError, OSError, KeyError, IndexError, sqlite3.Error): return TIME_UNKNOWN
+        return self._history_time(raw)
+
+    @staticmethod
+    def _history_time(raw) -> str:
+        try:
+            if not isinstance(raw, str): return TIME_UNKNOWN
+            at = datetime.fromisoformat(raw[:-1] + "+00:00" if raw.endswith(("Z", "z")) else raw)
+            if at.tzinfo is None or at.utcoffset() is None: return TIME_UNKNOWN
+            at = at.astimezone(LOCAL_TZ)
+            hour = at.hour % 12 or 12
+            return f"{_DAYS[at.weekday()]} {_MONTHS[at.month - 1]} {at.day} {hour}:{at.minute:02d} {'am' if at.hour < 12 else 'pm'}"
+        except (ValueError, TypeError, OverflowError, OSError): return TIME_UNKNOWN
+
     def _history_line(self, r) -> str:
         """One `history` line. HASS-OWNERS-2: with several owners it says whose change it was (`Mike's change`, `Your change`)."""
-        words = f"{q(r['summary'])}: {answers.history_words(dict(r), self._install(r))}"
+        when = self._history_when(r)
+        words = f"{q(r['summary'])}, {when if when == TIME_UNKNOWN else 'approved ' + when}: {answers.history_words(dict(r), self._install(r))}"
         return f"- {self._whose(r['chat'])}, {words}" if self._shared else f"- {words}"
 
     def _history_lines(self, limit) -> list:
@@ -48,7 +76,10 @@ class CorePack:
             if e["target"] == "site" and e.get("draft"):
                 row = self.db.execute("SELECT * FROM drafts WHERE code = ?", (e["draft"],)).fetchone()
                 if row is not None and row["state"] in HISTORY_STATES: lines.append(self._history_line(row))
-            elif e["target"] == "till": lines.append(audit_mod.till_line(e))
+            elif e["target"] == "till":
+                when = self._history_time(e.get("at"))  # the audit entry's approved step, not its later result
+                head, sep, state = audit_mod.till_line(e).partition(":")
+                lines.append(f"{head}, {when if when == TIME_UNKNOWN else 'approved ' + when}{sep}{state}")
             if len(lines) >= limit: return lines
         try: logged = self.audit.approved_drafts()
         except Exception: logged = set()  # noqa: BLE001,E701
@@ -93,10 +124,46 @@ class CorePack:
         try:
             out = self.editor.show(row["change_id"])
             draft, ops = out.get("draft") if out.get("result") == "ok" else None, json.loads(row["ops_json"])
+            if draft is None and row["state"] == "reverted": draft = self._again_stored(row["change_id"])  # AV2137-01: show() gives an applied change, not its draft
             if not isinstance(draft, dict) or not isinstance(ops, list) or not ops or draft.get("ops") != ops: return None
             if any(not (isinstance(c, dict) and isinstance(c.get("op"), str) and isinstance(c.get("args"), dict)) for c in ops): return None
             if any(draft.get(k) != row[k] for k in ("change_id", "draft_hash", "base")) or self._again_final(draft.get("records")) is None: return None
             return copy.deepcopy(draft)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, editor_mod.UnsafeState): return None
+
+    def _again_stored(self, change_id):
+        """AV2137-01: <state>/drafts/<id>.json of this change when it is a regular file holding an object for that id; else None."""
+        try:
+            if not editor_mod.CHANGE_ID_RE.fullmatch(str(change_id)): return None
+            path = Path(self.sdir) / "drafts" / f"{change_id}.json"
+            if not stat.S_ISREG(os.lstat(path).st_mode): return None
+            doc = json.loads(path.read_text("utf-8"))
+            return doc if isinstance(doc, dict) and doc.get("change_id") == change_id else None
+        except (OSError, ValueError, RecursionError): return None
+
+    @staticmethod
+    def _has_revert(row) -> bool:
+        """AV2137-01: any history.revert call among the draft's ops (a mixed draft too); unparsable counts as none."""
+        try: ops = json.loads(row["ops_json"])
+        except (TypeError, ValueError, RecursionError): return False
+        return isinstance(ops, list) and any(isinstance(c, dict) and c.get("op") == "history.revert" for c in ops)
+
+    def _again_undone_at(self, row):
+        """AV2137-01: when the applied undo that reverted `row` was applied (aware datetime), read ONLY from the original's change
+        record `revertedBy` -> the undo's change record, whose stored draft must revert this change and whose draft row is in
+        this chat; None when any link is missing or inconsistent."""
+        try:
+            change = self.editor.show(row["change_id"]).get("change")
+            undo_id = change.get("revertedBy") if isinstance(change, dict) else None
+            if not isinstance(undo_id, str) or not editor_mod.CHANGE_ID_RE.fullmatch(undo_id): return None
+            if change.get("state") != "applied" or change.get("change_id") != row["change_id"]: return None
+            undo, stored = self.editor.show(undo_id).get("change"), self._again_stored(undo_id)
+            if not isinstance(undo, dict) or undo.get("state") != "applied" or undo.get("change_id") != undo_id or stored is None: return None
+            if not any(isinstance(c, dict) and c.get("op") == "history.revert" and (c.get("args") or {}).get("changeId") == row["change_id"]
+                       for c in stored.get("ops") or []): return None
+            if not any(self._mine(r) and _is_undo(r) and r["state"] in ("applied", "verified") for r in self._drafts("change_id = ?", undo_id)): return None
+            at = datetime.fromisoformat(undo["applied_at"])
+            return at if at.tzinfo is not None else None
         except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, editor_mod.UnsafeState): return None
 
     def _again_same(self, row, new) -> bool:
@@ -113,19 +180,23 @@ class CorePack:
         if not re.fullmatch(r"[0-9a-f]{4,12}", arg or ""): return self._reply(AGAIN_USAGE) or "again"
         code, row = arg, self._by_code(arg)
         if row is None: return self._reply(f"No draft {q(code)}.") or "again"
-        if row["state"] != "expired":  # a live, cancelled, replaced, saved or failed draft is refused with its own state
+        if self._has_revert(row): return self._reply(AGAIN_UNDO) or "again"  # AV2137-01: an undo, or a draft with any undo call
+        if row["state"] not in ("expired", "reverted"):  # a live, cancelled, replaced, saved or failed draft is refused with its own state
             self._reply({"proposed": f"{q(code)} is still waiting for your yes, so there is nothing to draft again.",
                          "needs-details": f"{q(code)} is still waiting for details, so there is nothing to draft again."}.get(row["state"]) or self._state_text(row))
             return "again"
         if not row["change_id"] or not row["draft_hash"]: return self._reply(f"{q(code)} expired before it was a proposal; send the change again.") or "again"
-        try:
-            expiry = datetime.fromisoformat(row["expires_at"])
-            age = now - expiry if expiry.tzinfo is not None else None
+        try:  # expired: the age since its expiry; undone (AV2137-01): the age since the linked undo was applied
+            since = datetime.fromisoformat(row["expires_at"]) if row["state"] == "expired" else self._again_undone_at(row)
+            age = now - since if since is not None and since.tzinfo is not None else None
         except (TypeError, ValueError): age = None
         if age is None or age < timedelta(0): return self._reply(f"{q(code)}: the draft details are not available any more.") or "again"
-        if age > timedelta(days=AGAIN_WINDOW_DAYS): return self._reply(f"{q(code)} expired more than {AGAIN_WINDOW_DAYS} days ago; send the change again.") or "again"
+        if age > timedelta(days=AGAIN_WINDOW_DAYS):
+            return self._reply(f"{q(code)} expired more than {AGAIN_WINDOW_DAYS} days ago; send the change again." if row["state"] == "expired" else
+                               f"{q(code)} was undone more than {AGAIN_WINDOW_DAYS} days ago; send the change again.") or "again"
         old = self._again_original(row)
-        if old is None: return self._reply(f"{q(code)}: the draft details are not available any more.") or "again"
+        if old is None or (row["state"] == "reverted" and self._again_final((self.editor.show(row["change_id"]).get("change") or {}).get("records")) != self._again_final(old["records"])):
+            return self._reply(f"{q(code)}: the draft details are not available any more.") or "again"
         if old.get("assets") or any(c["op"] in AGAIN_PHOTO_OPS or "photo" in c["args"] for c in old["ops"]):
             return self._reply(f"{q(code)} is a photo draft; send the photo again.") or "again"
         if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)
@@ -202,7 +273,8 @@ class CorePack:
             has_table = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
             if has_table and self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
             every = self.memory.list() if has_table else []
-            rows = [r for r in every if not r["key"].startswith("alias.")]
+            design = [r for r in every if r["key"].startswith("design.")]  # AV1052-11: kept design requests, listed apart
+            rows = [r for r in every if not r["key"].startswith(("alias.", "design."))]
             aliases = [r for r in every if r["key"].startswith("alias.")]
             lines = [f"- {q(r['key'])}: {q(r['value'])} (since {voice.natural(datetime.fromisoformat(r['created_at']), self._now())})"
                      for r in rows[:MEMORY_LIST_MAX]]
@@ -210,7 +282,11 @@ class CorePack:
             notes = "\n".join(["Notes I'm keeping:"] + lines + more) if rows else "I'm not keeping any notes."
             amore = ["And a few more."] if len(aliases) > ALIAS_LIST_MAX else []
             self._reply("\n".join([notes] + (["Nicknames:"] + self._alias_lines(aliases[:ALIAS_LIST_MAX]) + amore if aliases else
-                                            ["I don't have any nicknames."])), long_ok=True)
+                                            ["I don't have any nicknames."])
+                        + ([f"Design notes ({len(design)}):"] + [
+                            f"- {r['key']}: {q(r['value'])} (owner, since {voice.natural(datetime.fromisoformat(r['created_at']), self._now())})"
+                            for r in design[:MEMORY_LIST_MAX]] + (["And a few more."] if len(design) > MEMORY_LIST_MAX else []) if design else [])),
+                        long_ok=True)
             return "memory-list"
         if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
         if verb == "alias": return self._alias(msg, key, value)
@@ -364,6 +440,7 @@ class CorePack:
             lines.append("I'm close to the number of new requests I can read today.")
         waiting = self._waiting_lines(now)
         lines += waiting or [NOTHING]
+        lines += [f"Waiting for your answer: {ask}"] if (ask := self._legacy_question(now)) else []  # AV2007-14
         with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
             lines.append(shelf.check_line(f))  # AV1102-05

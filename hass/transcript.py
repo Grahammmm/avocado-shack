@@ -145,6 +145,8 @@ def main(argv=None):
                 doc = dict(row)
                 if 'attachments' in doc:
                     doc['attachments'] = json.loads(doc['attachments'])
+                    if not isinstance(doc['attachments'], list):
+                        raise ValueError('attachments must be an array')
                 print(json.dumps(doc, ensure_ascii=True))
     except (OSError, ValueError, sqlite3.Error):
         print('transcript-unavailable', file=sys.stderr)

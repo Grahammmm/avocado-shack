@@ -13,8 +13,9 @@ import json
 import unicodedata
 
 from hass import voice
-from hass.content_model import AVAILABILITY, CATEGORIES, FORBIDDEN_TEXT, SHELF_LABELS
+from hass.content_model import AVAILABILITY, CATEGORIES, FORBIDDEN_TEXT, SHELF_LABELS, valid_selling_price
 from hass.editor import MAX_OPS
+from hass.ops import INTAKE_PRICE
 
 HIDDEN = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn"}
 STRING_KINDS = ("id", "maker_key", "text", "url", "enum", "date", "time", "image", "deal")  # deal: the owner's special deal line (AVO-SPECIALS-1)
@@ -66,7 +67,7 @@ def _enum_question(op_name: str, arg_name: str, value, choices) -> str:
     return f"For {voice.field_phrase(arg_name)}, I can use: {', '.join(_clean(voice.value_words(c, arg_name)) for c in choices)}. {AGAIN}"
 
 
-def _problem(result: dict, registry, pending_codes):
+def _problem(result: dict, registry, pending_codes, from_intake):
     calls = result["ops"]
     if not calls: return "I couldn't find a change in that message. What would you like to change?"
     if len(calls) > MAX_OPS:  # RF2030-7: counted before shapes, repeats and the revises code
@@ -92,6 +93,12 @@ def _problem(result: dict, registry, pending_codes):
             arg = op.args.get(name)
             if arg is None:
                 return CANT_DO_YET
+            if call["op"] == "product.add" and name == "supplier" and not from_intake:
+                return CANT_DO_YET
+            if arg.kind == INTAKE_PRICE:
+                if not from_intake: return CANT_DO_YET
+                if not valid_selling_price(value): return f"I couldn't read the selling price. {AGAIN}"
+                continue
             if not _kind_ok(arg.kind, value):
                 return f"I need {voice.field_phrase(name)} as {WANTS.get(arg.kind, 'words')}. {AGAIN}"
             reply = _forbidden_reply(arg.kind, value)
@@ -104,10 +111,10 @@ def _problem(result: dict, registry, pending_codes):
     return None
 
 
-def check(result: dict, registry, pending_codes) -> dict:
+def check(result: dict, registry, pending_codes, *, from_intake=False) -> dict:
     """``result`` unchanged when it is fine (or is already a question/unsupported reply), else {"question": text}."""
     if "ops" not in result: return result
-    problem = _problem(result, registry, set(pending_codes))
+    problem = _problem(result, registry, set(pending_codes), from_intake)
     return result if problem is None else {"question": problem}
 
 

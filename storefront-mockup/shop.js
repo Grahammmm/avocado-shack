@@ -9,7 +9,7 @@ function organic(p){return /\borganic\b/i.test(p.name)||['Ocean Ranch','Straus',
 // AV1352-01: only an installed owner photo (same shape as content_model.HOME_IMAGE_RE) is not an illustration; JS $ without the m flag is a true end.
 const installedImage=s=>typeof s==='string'&&/^assets\/products\/photo-[0-9a-f]{16}\.(jpg|png)$/.test(s);
 function photo(p){return `<img loading=\"lazy\" width=\"800\" height=\"800\" src=\"${esc(p.image)}\" alt=\"${esc((p.imageAlt||p.name)+(installedImage(p.image)?'':' (illustration)'))}\">`}
-function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
+function origin(p){return p.supplier?`From ${p.supplier}`:maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
 function badges(p){const tags=(organic(p)?'<span>Organic</span>':'')+(isNew(p,pinNow||undefined)?'<span>New</span>':'');return (tags?`<div class="food-badges">${tags}</div>`:'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
 function brand(p){return p.displayBrand||(p.brand==='Producer not identified'?'From the market':p.brand)}
 // AV0222-10: a maker's story is optional. Story: story paragraph; no story but a link: place only; neither: no panel at all.
@@ -18,7 +18,8 @@ function makerStory(p){const m=maker(p);if(!m)return'';const story=typeof m.stor
 // The maker's key and name are always on the card (screen-reader only), so a preview finds the card with or without the panel.
 function card(p){
  const m=maker(p);
- return `<article data-product-id="${esc(p.id)}" data-category="${esc(p.category)}"${m?` data-maker-key="${esc(p.producerKey)}"`:''}><div class="food-card-top"><div class="product-image">${photo(p)}</div><div class="food-identity"><p class="product-meta">${esc(brand(p))}</p><h3>${esc(p.name)}</h3><p class="origin-label">${esc(origin(p))}</p>${m?`<span class="sr-only maker-name">${esc(m.name)}</span>`:''}${badges(p)}</div></div><p class="food-description">${esc(p.description)}</p>${makerStory(p)}<a class="text-link card-link" href="?item=${esc(encodeURIComponent(p.id))}#market">Link to this</a></article>`;
+ const amount=p.sellingPrice?`<p class="product-meta product-price">$${esc(p.sellingPrice)}</p>`:'';
+ return `<article data-product-id="${esc(p.id)}" data-category="${esc(p.category)}"${m?` data-maker-key="${esc(p.producerKey)}"`:''}><div class="food-card-top"><div class="product-image">${photo(p)}</div><div class="food-identity"><p class="product-meta">${esc(brand(p))}</p><h3>${esc(p.name)}</h3>${amount}<p class="origin-label">${esc(origin(p))}</p>${m?`<span class="sr-only maker-name">${esc(m.name)}</span>`:''}${badges(p)}</div></div><p class="food-description">${esc(p.description)}</p>${makerStory(p)}<a class="text-link card-link" href="?item=${esc(encodeURIComponent(p.id))}#market">Link to this</a></article>`;
 }
 [...new Set(catalog.map(p=>p.brand))].sort().forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=b==='Producer not identified'?'Other market selections':b;$('#brand-filter').append(o)});
 // AV1622-04: shelf-check words and the selection line are worked out here, in the visitor's browser, from the recorded dates

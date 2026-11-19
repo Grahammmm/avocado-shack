@@ -1,0 +1,22 @@
+{
+ "calls": [
+  {
+   "attrs": {
+    "last_backend": "openai",
+    "last_error": null,
+    "last_fallback": true,
+    "last_model": "qwen3.8:27b-thinkingcap-q6",
+    "last_primary_error": "codex-local",
+    "last_seconds": 17.54
+   },
+   "method": "interpret",
+   "result": {
+    "question": "Which honey should I add: the Stepladder avocado blossom honey or the Big Sur honey?"
+   },
+   "route": "qwen",
+   "seconds": 17.54,
+   "turn": 1
+  }
+ ],
+ "case": "intake-no-units"
+}

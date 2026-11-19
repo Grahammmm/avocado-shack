@@ -1,0 +1,25 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-042",
+  "photo_path": "assets/products/photo-product-042.webp",
+  "category": "pantry",
+  "card": {
+    "photo_alt": "Big Sur Honey Company honey (illustration)",
+    "brand": "Big Sur Honey Company",
+    "name": "Big Sur Honey Company honey",
+    "price": null,
+    "origin": "Based in Big Sur, California",
+    "badges": [],
+    "availability": null,
+    "description": "Honey from a family apiary in Big Sur. Raw and unfiltered, with a place behind the jar. Start with a spoonful, then bring out the bread.",
+    "meet_the_maker": {
+      "name": "Big Sur Honey Company",
+      "place": "Big Sur, California",
+      "story": "Dylan and Jessie’s small family apiary works along Big Sur’s wild south coast. Their bees forage among native plants; the honey is raw and unfiltered. This is a landscape you can put on toast. Or into yogurt. Or taste, quietly, from the end of a spoon.",
+      "visit_url": "https://www.bigsurhoneycompany.com/about",
+      "see_all_count": null
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-042#market"
+  }
+}

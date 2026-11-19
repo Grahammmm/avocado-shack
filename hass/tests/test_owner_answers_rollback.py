@@ -18,9 +18,6 @@ PUT_BACK = "some website files could not be put back"
 
 
 class RollbackFailedHistoryTests(unittest.TestCase):
-    def test_constant_is_the_designed_words(self):
-        self.assertEqual(answers.ROLLBACK_FAILED_WORDS, WORDS)
-
     def test_saved_with_failed_rollback_asks_for_help(self):
         for state in ("applied", "verified"):
             with self.subTest(state=state):

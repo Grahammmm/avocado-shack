@@ -1,0 +1,25 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-015",
+  "photo_path": "assets/products/photo-product-015.webp",
+  "category": "bread",
+  "card": {
+    "photo_alt": "Brian's sourdough bread (illustration)",
+    "brand": "Brian's",
+    "name": "Brian's sourdough bread",
+    "price": null,
+    "origin": "Based in Atascadero, California",
+    "badges": [],
+    "availability": null,
+    "description": "Sourdough from Brian’s in Atascadero. A crust worth tearing, a loaf that belongs beside soup. Butter is enough; the rest is optional.",
+    "meet_the_maker": {
+      "name": "Brian's",
+      "place": "Atascadero, California",
+      "story": "Brian’s Artisan Bread makes old-world-style loaves in Atascadero, using a sourdough starter kept alive with flour and water. The dough gets time; the loaves are scored by hand. Bread like this asks for butter, a bowl of soup, or a tomato at its best.",
+      "visit_url": "https://briansartisanbread.com/about",
+      "see_all_count": 4
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-015#market"
+  }
+}

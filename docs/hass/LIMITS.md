@@ -5,7 +5,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 ## Photos
 
 - Send up to **4** <!-- media.MAX_PHOTOS_PER_MESSAGE --> photos per message, each a JPEG or PNG up to **20 MB** <!-- media.MAX_BYTES -->.
-  Each photo gets its own code and question, and a caption sent with several photos is not read. Every photo is checked
+  Each newly accepted photo gets its own code and question. A photo already waiting, repeated in the same message, or
+  already on a product gets no new draft code; Hass tells you instead. A caption sent with several photos is not read. Every photo is checked
   before any is saved: if one is refused (another picture format, too large, or unreadable), none is saved and the reply
   names which one. More than that many in one message are refused.
 - Phone photos taken upright or sideways are fine; the website shows them the way they were taken.
@@ -36,13 +37,17 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 - A proposal or a question waits for your reply only for the time the operator has set. After that it expires and nothing
   happens; send the change again. The expiry is judged at the time you sent your reply, so a `yes` sent in time still
   counts if the shop computer handles it later.
+- `again` and a code renews an expired text proposal only if it expired at most **7** <!-- conversation.AGAIN_WINDOW_DAYS --> days ago (exactly seven days still counts) and the website still matches what it showed. It gives a new code and expiry and you approve it with a separate `yes` and that new code. A photo draft, a question, a cancelled, replaced or applied change is never renewed, and resuming applies nothing by itself.
 - A reply sent more than 15 minutes after the message it answers (queued while the shop computer was offline, or a send that
   failed and was retried) starts with `Late reply to your message from <day> <time>:` so you know which message it is for.
 - One message can change at most **20** <!-- editor.MAX_OPS --> things. Split bigger jobs into several messages.
+- Stopping a maker is one thing however many products it hides, and has no cap of its own. A live change still touches at most
+  **10** <!-- live_policy.MAX_RECORDS --> records, and the maker and each product hidden with it count as one record each.
 
 ## Lists
 
 - `history` shows the last **5** <!-- conversation.HISTORY_MAX --> approved changes.
+- `history` and some words shows up to **10** <!-- conversation.HISTORY_SEARCH_MAX --> approved changes whose summary has every word, newest first; the words are at most **60 characters** <!-- conversation.HISTORY_TEXT_MAX -->.
 - `memory` shows the first **20** <!-- conversation.MEMORY_LIST_MAX --> saved notes and says how many more there are.
 - `memory` shows the first **20** <!-- conversation.ALIAS_LIST_MAX --> aliases apart from the notes and says how many more there are.
 - A search by name offers at most **10** <!-- ops.catalog.MAX_CANDIDATES --> matching listings; use more words to narrow it.
@@ -54,10 +59,13 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 Longer text is refused and nothing is changed; shorten it and send it again.
 
-- Product: name **80 characters** <!-- content_model.TEXT_LIMITS[product][name] -->, brand **60 characters** <!-- content_model.TEXT_LIMITS[product][brand] -->, category **40 characters** <!-- content_model.TEXT_LIMITS[product][category] -->, description **600 characters** <!-- content_model.TEXT_LIMITS[product][description] -->, photo description **200 characters** <!-- content_model.TEXT_LIMITS[product][imageAlt] -->.
+- Product: name **80 characters** <!-- content_model.TEXT_LIMITS[product][name] -->, brand **60 characters** <!-- content_model.TEXT_LIMITS[product][brand] -->, description **600 characters** <!-- content_model.TEXT_LIMITS[product][description] -->, photo description **200 characters** <!-- content_model.TEXT_LIMITS[product][imageAlt] -->.
+- A product is on exactly one shelf: Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread, Flowers, General. Hass cannot add a shelf. <!-- content_model.SHELF_LABELS -->
 - Maker: name **80 characters** <!-- content_model.TEXT_LIMITS[maker][name] -->, place **60 characters** <!-- content_model.TEXT_LIMITS[maker][place] -->, story **600 characters** <!-- content_model.TEXT_LIMITS[maker][story] -->.
 - Hike: title **80 characters** <!-- content_model.TEXT_LIMITS[event][title] -->, description **800 characters** <!-- content_model.TEXT_LIMITS[event][description] -->, meeting point **160 characters** <!-- content_model.TEXT_LIMITS[event][meetingPoint] -->, recap **2000 characters** <!-- content_model.TEXT_LIMITS[event][recap] -->, other details such as what to bring **400 characters** <!-- content_model.TEXT_LIMITS[event][bring] -->.
 - Route idea: each text field **600 characters** <!-- content_model.TEXT_LIMITS[routeIdea][description] -->.
+- Cancelling a hike: the optional note is one line of at most **160 characters** <!-- content_model.TEXT_LIMITS[event][cancelNote] -->; it shows on the cancelled card and guests are not messaged.
+- Hiking club opening paragraph: at most **400 characters** <!-- content_model.MAX_CLUB_INTRO -->; it is club page copy only and, like every change, a draft you approve.
 - Hiking club: name, organizer and sender **400 characters** <!-- content_model.TEXT_LIMITS[club][clubName] --> each.
 - Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->, at most **7** <!-- content_model.MAX_HOURS_LINES --> lines of hours.
 - A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->; spaces in its name become `-`, and the stored name stays 1-64 of a-z, 0-9, `.` or `-`.
@@ -67,12 +75,16 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - The store phone is a US number of **10 digits** <!-- ops.store.PHONE_DIGITS --> (spaces, dashes and brackets are fine); anything else is refused.
 - A purchase cost (`cost`, `margin`) is private and up to **100000 dollars** <!-- margins.PACK_COST_MAX --> for **1** <!-- margins.UNITS_MIN -->–**10000** <!-- margins.UNITS_MAX --> units.
 
+## New badge
+
+- A product you add through Hass normally shows New for **14** <!-- shop.NEW_BADGE_DAYS --> Pacific calendar days, counting the day it was added. In the sandbox, you can ask for no New badge. Products already on the shop before this feature have no added date and do not show it. Editing or restoring a product does not start or restart the badge period; a recently added product can still show New after an edit or restore.
+
 ## Home page
 
 - Intro: at most **160 characters** <!-- content_model.MAX_INTRO -->.
 - Headline: each line at most **40 characters** <!-- content_model.MAX_HEADLINE_LINE -->.
 - Story: at most **400 characters** <!-- content_model.MAX_STORY -->.
-- Notice: at most **160 characters** <!-- content_model.MAX_NOTICE -->; its last day can be today or up to **60** <!-- content_model.MAX_NOTICE_DAYS --> days ahead.
+- Notice: at most **160 characters** <!-- content_model.MAX_NOTICE -->; its last day can be today or up to **60** <!-- content_model.MAX_NOTICE_DAYS --> days ahead. A notice can start later: its first day is today or later, never after its last day; with no first day it starts today. Both days count and are Pacific dates. Before the first day the page keeps it hidden; without JavaScript it appears at the next regeneration, and no message is sent.
 - Home photo: JPEG or PNG, up to **20 MB** <!-- media.MAX_BYTES -->.
 - The home photo needs a real description of at least three letters; a file name like IMG_1234 is refused.
 

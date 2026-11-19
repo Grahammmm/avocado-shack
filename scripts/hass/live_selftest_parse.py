@@ -22,7 +22,7 @@ def _last_object(text):
         raise ValueError("no report")
     try:
         obj = json.loads(lines[-1])
-    except ValueError:
+    except (ValueError, RecursionError):
         raise ValueError("report is not JSON") from None
     if not isinstance(obj, dict):
         raise ValueError("report is not a JSON object")
@@ -46,7 +46,7 @@ def health(text):
     ids = set()
     for p in problems:
         check = p.get("check") if isinstance(p, dict) else None
-        if not isinstance(check, str) or not CHECK_ID.match(check):
+        if not isinstance(check, str) or not CHECK_ID.fullmatch(check):
             raise ValueError("a problem has no valid check id")
         ids.add(check)
     if ok == bool(problems):

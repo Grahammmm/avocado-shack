@@ -50,18 +50,18 @@ env:
   # version here and in docs/hass/PILLOW-HOST.md (the host install); change both together.
   PILLOW_VERSION: "12.0.0"
   # Hass shard jobs on the full tier. The suite is ~1150 s of measured module time (hass/tests/ci_weights.json),
-  # so 4 shards are ~290 s each; 4 shards + quick + 2 site jobs fit in the 8 avocado-shack runners with one
-  # free. Retune with the repo variable HASS_SHARD_JOBS (1-8) without a code change.
+  # so 4 shards are ~290 s each; 4 shards + quick + 2 site jobs are 7 concurrent hosted jobs (the free
+  # public-repo limit is 20). Retune with the repo variable HASS_SHARD_JOBS (1-8) without a code change.
   HASS_SHARD_JOBS: ${{ vars.HASS_SHARD_JOBS || 4 }}
 
-# Self-hosted on AgentOrange (operator 2026-11-02). avocado-shack is PRIVATE, so this repo
-# receives no fork pull requests and needs no same-repo guard; GitHub-hosted minutes are
-# billable for private repos and were blocked by the account spend limit, which stopped every
-# check job at 0 steps. Runners agentorange-avo-1..8 carry the avocado-shack label.
+# GitHub-hosted (AVO-PUBLIC-1, 2026-11-17). The repository is PUBLIC: hosted minutes are free and
+# every job runs on a fresh GitHub VM. NEVER add a self-hosted job to this repository: a fork's
+# pull_request runs the fork's own copy of the workflow files, so no `if:` guard here can stop a
+# fork from targeting a self-hosted label. The AgentOrange runners are deregistered from this repo.
 jobs:
   quick:
     name: quick
-    runs-on: [self-hosted, Linux, X64, avocado-shack]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
@@ -137,7 +137,7 @@ jobs:
     name: hass shard ${{ matrix.shard }}
     needs: quick
     if: needs.quick.outputs.tier == 'full'
-    runs-on: [self-hosted, Linux, X64, avocado-shack]
+    runs-on: ubuntu-latest
     # A shard is ~290 s of measured module time; 30 min leaves >5x for a loaded host.
     timeout-minutes: 30
     strategy:
@@ -195,7 +195,7 @@ jobs:
 
   site:
     name: site ${{ matrix.part }}
-    runs-on: [self-hosted, Linux, X64, avocado-shack]
+    runs-on: ubuntu-latest
     # Measured inside the old single job: catalog + community 5.7 min, static site 3.8 min.
     timeout-minutes: 30
     strategy:
@@ -268,7 +268,7 @@ jobs:
     name: check
     needs: [quick, hass, site]
     if: ${{ !cancelled() }}
-    runs-on: [self-hosted, Linux, X64, avocado-shack]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

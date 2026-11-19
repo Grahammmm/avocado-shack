@@ -50,6 +50,20 @@ class SocialDraftTests(unittest.TestCase):
                          "Sourdough\nA crust worth tearing.\nFrom Brian's in Atascadero, California.\n\n#AvocadoShack #Bread")
         self.assertLessEqual(out["caption"].count("#"), 5)
 
+    def test_illustration_flag_follows_the_owner_photo_form(self):
+        for image, want in (("assets/products/photo-0123456789abcdef.jpg", False), ("assets/products/photo-0123456789abcdef.png", False),
+                            ("assets/products/p1.webp", True), ("assets/products/photo-0123456789abcde.jpg", True),
+                            ("assets/products/photo-0123456789abcdef0.jpg", True), ("assets/products/photo-0123456789ABCDEF.jpg", True),
+                            ("assets/products/photo-0123456789abcdef.jpeg", True), ("assets/other/photo-0123456789abcdef.jpg", True)):
+            with self.subTest(image=image):
+                (self.site / Path(image).parent).mkdir(parents=True, exist_ok=True)
+                out = self.build("p1", product("p1", image=image))
+                self.assertIs(out["illustration"], want)
+                self.assertEqual(out["image"], image)
+        content = self.load(product("p1", image="assets/products/photo-0123456789abcdef.jpg"))
+        content.products[0]["image"] = "assets/products/photo-ffffffffffffffff.jpg"  # an owner-photo name with no file: refusal, no flag
+        self.assertEqual(social_draft.build(content, "p1", self.site), {"draft": False, "reason": "no photo on the site"})
+
     def test_alt_uses_image_alt_and_no_maker_sentence(self):
         out = self.build("p1", product("p1", producerKey=None, imageAlt="A round loaf"))
         self.assertEqual(out["alt"], "A round loaf")

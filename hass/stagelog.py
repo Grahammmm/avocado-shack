@@ -5,12 +5,13 @@ missing directory or a bad path just means no line. The file stops growing at MA
 `table()` joins the Mac log and the host log into the stage table (offsets from the first stage of each message).
 Nothing here reads a clock the callers do not pass in, opens a socket or changes any state.
 """
-import hashlib, json, math, os, time  # noqa: E401
+import hashlib, json, math, os, stat, time  # noqa: E401
 from pathlib import Path
 
 MAX_BYTES = 512 * 1024
 ORDER = ("sent", "webhook-in", "accepted", "ack-start", "ack-end", "post-start", "receiver-accepted", "post-end", "worker-pickup",
-         "interp-start", "interp-end", "handled", "reply-queued", "reply-pulled", "bb-send-start", "bb-send-end")
+         "finance-start", "finance-end", "interp-start", "interp-end", "style-start", "label-start", "label-end", "style-ready",
+         "card-start", "card-end", "handled", "reply-queued", "reply-pulled", "bb-send-start", "bb-send-end")
 
 
 def short(value) -> str:
@@ -31,8 +32,10 @@ class StageLog:
             try:
                 if os.stat(self.path).st_size > MAX_BYTES: os.replace(self.path, self.path + ".1")
             except FileNotFoundError: pass
-            fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-            try: os.write(fd, line.encode("utf-8"))
+            # O_NONBLOCK: a FIFO with no reader fails the open instead of waiting; only a regular file is ever written.
+            fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+            try:
+                if stat.S_ISREG(os.fstat(fd).st_mode): os.write(fd, line.encode("utf-8"))
             finally: os.close(fd)
         except Exception:  # noqa: BLE001 - a log line is never worth a crash; nothing is kept about the error
             pass
@@ -51,8 +54,14 @@ def _usable(t) -> bool:
 def read(path) -> list:
     """The valid lines of one stage log, in file order; unreadable or malformed lines are skipped."""
     out = []
-    try: text = Path(path).read_text("utf-8", "replace")
+    # Non-blocking open so a FIFO without a writer cannot hang; the open descriptor (not the path) decides regularness.
+    try: fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    except (OSError, ValueError): return out
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode): return out
+        with open(fd, "r", encoding="utf-8", errors="replace", closefd=False) as fh: text = fh.read()
     except OSError: return out
+    finally: os.close(fd)
     # Records end at LF only (read_text already folded CRLF/CR to LF). str.splitlines would also cut at U+0085/U+2028/U+2029,
     # which are legal literal characters inside a JSON string, and the two fragments would both be dropped as malformed.
     for raw in text.split("\n"):

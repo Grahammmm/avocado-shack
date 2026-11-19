@@ -16,7 +16,7 @@ def verb(text):
 
 def parser_verbs() -> set:
     """Verbs found by calling the parsers on the words in their own regexes (bare and with a code), never a copied list."""
-    words = set(re.findall(r"[a-z]{2,}", conv.COMMAND_RE.pattern + conv.MEMORY_RE.pattern + conv.KEYWORD_RE.pattern))
+    words = set(re.findall(r"[a-z]{2,}", conv.COMMAND_RE.pattern + conv.MEMORY_RE.pattern + conv.KEYWORD_RE.pattern + "look"))  # AV1922-01: look is parsed by commands._look, not COMMAND_RE
     return {v for w in words for text in (w, f"{w} a1b2", "photos to take") if (v := verb(text))}  # AV0222-04: the compound command
 
 
@@ -85,6 +85,18 @@ class CommandsDocTest(unittest.TestCase):
         undo = {conv.parse_command(ex) for ex in self.examples if verb(ex) == "undo"}
         self.assertEqual(undo, {("undo", None), ("undo", "a1b2")})
 
+    def test_undo_cancel_aliases_documented_and_parsed(self):
+        doc = " ".join(DOC.read_text("utf-8").split())
+        for phrase in conv.UNDO_PHRASES + conv.CANCEL_PHRASES:
+            self.assertIn(f"`{phrase}`", doc)
+            self.assertEqual(conv.parse_command(phrase.upper() + "!.") if phrase in conv.UNDO_PHRASES
+                             else conv.parse_keyword(" " + phrase.title() + "! "),
+                             ("undo", None) if phrase in conv.UNDO_PHRASES else ("reject", None))
+        self.assertIsNone(conv.parse_command("undo that a1b2"))
+        self.assertIsNone(conv.parse_keyword("never mind the eggs"))
+        self.assertEqual(conv.parse_memory("forget it"), ("forget", "it", None))
+        self.assertIsNone(conv.parse_keyword("forget it"))
+
     def test_note_command_punctuation_exceptions(self):
         """The intro's remember/forget exceptions match parse_memory (t_527e1533 RETURN item 1)."""
         doc = " ".join(DOC.read_text("utf-8").split())
@@ -121,6 +133,17 @@ class CommandsDocTest(unittest.TestCase):
         for phrase in ("at most 7 days ago", "exactly 7 days still counts", "fresh expiry", "never calls the interpreter",
                        "the site changed since <code>; send the change again", "any photo draft", "works while paused", "needs `yes <new code>`"):
             self.assertIn(phrase, cell)
+
+    def test_help_detail_row(self):
+        """AV1052-12: `help <command>` has its own row, whose example parses as help with that command's name."""
+        [(send, example, line)] = [r for r in self.table if r[0].startswith("`help <command>`")]
+        self.assertEqual(conv.parse_command(re.findall(r"`([^`]+)`", example)[0]), ("help", "undo"))
+        cell = " ".join(line.split())
+        for phrase in ("Unknown command. Send help with one of:", "`help yes` approves nothing", "never goes to the model", "works while paused"):
+            self.assertIn(phrase, cell)
+        for word in ("stop changes", "photos to take"):  # multiword names the plain-word scan cannot find
+            self.assertEqual(conv.parse_command(f"help {word}"), ("help", word))
+        self.assertEqual(problems([r for r in self.table if not r[0].startswith("`help <command>`")], self.verbs, self.words), [])  # help stays covered by its own bare row
 
     def test_commands_note_section(self):
         """AV2152-07: the prose after the table describes the optional hike.cancel note (it adds no parser verb)."""

@@ -56,10 +56,10 @@ class SearchTests(StoreMixin, HistoryTestCase):
         self.row("c1", "applied", "Open the Café at nine")
         self.row("c2", "applied", "Cafe closed on Monday")
         self.row("c3", "applied", "Hours for the market")
-        self.assertEqual([ln.split(":")[0] for ln in self.search("history CAFÉ")[1:]], ["- Cafe closed on Monday", "- Open the Café at nine"])
-        self.assertEqual([ln.split(":")[0] for ln in self.search("history cafe\u0301")[1:]], ["- Cafe closed on Monday", "- Open the Café at nine"])
-        self.assertEqual([ln.split(":")[0] for ln in self.search("history nine CAFE nine")[1:]], ["- Open the Café at nine"])
-        self.assertEqual([ln.split(":")[0] for ln in self.search("history afe clo")[1:]], ["- Cafe closed on Monday"])  # substring-AND
+        self.assertEqual([ln.split(", ")[0] for ln in self.search("history CAFÉ")[1:]], ["- Cafe closed on Monday", "- Open the Café at nine"])
+        self.assertEqual([ln.split(", ")[0] for ln in self.search("history cafe\u0301")[1:]], ["- Cafe closed on Monday", "- Open the Café at nine"])
+        self.assertEqual([ln.split(", ")[0] for ln in self.search("history nine CAFE nine")[1:]], ["- Open the Café at nine"])
+        self.assertEqual([ln.split(", ")[0] for ln in self.search("history afe clo")[1:]], ["- Cafe closed on Monday"])  # substring-AND
         self.assertEqual(self.search("history cafe market"), ["I found no changes that match cafe market."])
 
     def test_only_summary_is_searched(self):
@@ -74,8 +74,8 @@ class SearchTests(StoreMixin, HistoryTestCase):
         for i in range(30): self.row(f"x{i:02}", "verified", f"other {i}")
         got = self.search("history needle")
         self.assertEqual(got[0], "These match:")
-        self.assertEqual([ln.split(":")[0] for ln in got[1:]], [f"- needle {i}" for i in range(11, 1, -1)])
-        self.assertEqual([ln.split(":")[0] for ln in self.search("history OLD")[1:]], ["- needle old"])  # older than five
+        self.assertEqual([ln.split(", ")[0] for ln in got[1:]], [f"- needle {i}" for i in range(11, 1, -1)])
+        self.assertEqual([ln.split(", ")[0] for ln in self.search("history OLD")[1:]], ["- needle old"])  # older than five
         self.assertEqual(len(self.search("history other")), 1 + 10)
 
     def test_states_and_current_location_equal_history(self):
@@ -141,7 +141,7 @@ class SearchTests(StoreMixin, HistoryTestCase):
                               "after": {"name": "Cal Poly eggs", "available": "no"}}], "warnings": []}
         self.row("e1", "applied", conversation._summary(draft))
         self.row("e2", "applied", "Open the Café at nine")
-        self.assertEqual([ln.split(":")[0] for ln in self.search("history eggs")[1:]], ["- the shelf word for Cal Poly eggs"])
+        self.assertEqual([ln.split(", ")[0] for ln in self.search("history eggs")[1:]], ["- the shelf word for Cal Poly eggs"])
 
 
 if __name__ == "__main__":

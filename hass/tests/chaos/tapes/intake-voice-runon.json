@@ -1,0 +1,22 @@
+{
+ "case": "intake-voice-runon",
+ "calls": [
+  {
+   "turn": 1,
+   "method": "interpret",
+   "result": {
+    "question": "Kiwis are new to the shelf, so I can add them as a new item. Which maker should I list: Etto (the pasta maker) or a new maker called Etto Farms?"
+   },
+   "attrs": {
+    "last_error": null,
+    "last_backend": "openai",
+    "last_fallback": true,
+    "last_primary_error": "codex-local",
+    "last_seconds": 2.288,
+    "last_model": "qwen3.8:27b-thinkingcap-q6"
+   },
+   "seconds": 2.288,
+   "route": "qwen"
+  }
+ ]
+}

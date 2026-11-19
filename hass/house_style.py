@@ -419,12 +419,13 @@ def check_product(rec: dict, makers: dict, spec=None) -> dict:
     unknown = rec.get("brand") == "Producer not identified"
     shown_ok = rec.get("displayBrand") == ("From the market" if unknown else rec.get("brand"))
     img = rec.get("image", "")
+    pid = rec.get("id", "")  # nontext ids fail the id check instead of raising in re.fullmatch
     text_problems: list = []  # same validator the content loader uses; never raises on odd value types
     for field in ("name", "brand"):
         _text(text_problems, field, rec.get(field), limit=TEXT_LIMITS["product"][field])
     checks = [_c("fields", need <= set(rec) <= allowed, sorted(set(rec) ^ need), 3, True),
               _c("shelf is one of the nine", rec.get("category") in CATEGORIES, str(rec.get("category")), 3, True),
-              _c("id photo-product-NNN", re.fullmatch(r"photo-product-\d{3,}", rec.get("id", "")) is not None, rec.get("id", ""), 1),
+              _c("id photo-product-NNN", isinstance(pid, str) and re.fullmatch(r"photo-product-\d{3,}", pid) is not None, pid, 1),
               _c("displayBrand follows brand", shown_ok, f"{rec.get('brand')} -> {rec.get('displayBrand')}", 2),
               _c("maker link", key is None or (isinstance(key, str) and key in makers), str(key), 3, True),  # nontext keys fail, never hashed
               _c("unknown producer has no maker key", not (unknown and key), str(key), 1),

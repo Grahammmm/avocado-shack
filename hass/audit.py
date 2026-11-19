@@ -108,7 +108,7 @@ def check(row) -> list:
         if key not in KEYS: continue
         if key == "seq": ok = type(value) is int and 1 <= value <= 10 ** 9
         elif key in ONE_OF: ok = isinstance(value, str) and value in ONE_OF[key]
-        elif key in PATTERNS: ok = isinstance(value, str) and bool(PATTERNS[key].fullmatch(value))
+        elif key in PATTERNS: ok = isinstance(value, str) and bool(PATTERNS[key].fullmatch(value)) and (key != "at" or _real_time(value))
         elif key == "subjects": ok = _list_of(value, SUBJECT_RE, MAX_SUBJECTS)
         elif key == "fields": ok = _list_of(value, FIELD_RE, MAX_FIELDS)
         else: ok = type(value) is dict and bool(value) and all(k in REFS and isinstance(v, str) and REFS[k].fullmatch(v) for k, v in value.items())
@@ -117,6 +117,15 @@ def check(row) -> list:
             problems.append(f"digit run: {key}")
     if row.get("step") == "approved" and "approved_by" not in row: problems.append("missing: approved_by")
     return problems
+
+
+def _real_time(text) -> bool:
+    """A width-checked `at` that is a real UTC date and clock time (no leap second, no year 0)."""
+    try:
+        datetime(int(text[:4]), int(text[5:7]), int(text[8:10]), int(text[11:13]), int(text[14:16]), int(text[17:19]))
+        return True
+    except ValueError:
+        return False
 
 
 def _list_of(value, pattern, limit) -> bool:

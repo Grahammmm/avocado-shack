@@ -3,7 +3,8 @@ Pure protocol plus one small store. The Mac pulls owner replies (the host never 
 `ack` -> sealed `acked`. Control envelopes are v2, keyed by control_key(secret), so a v1 inbound envelope never verifies
 as a control one. Nothing here opens a socket, reads the environment or logs; error messages never carry a path or bytes.
 """
-import base64, hmac, json, os, sqlite3, stat  # noqa: E401
+import base64, hmac, json, os, re, sqlite3, stat  # noqa: E401
+from datetime import timezone
 from hashlib import sha256
 from pathlib import Path
 
@@ -64,11 +65,14 @@ def _shots(v) -> bool:
 
 
 def _item(i) -> bool:
-    return (type(i) is dict and set(i) in ({"id", "chat", "text", "pictures"}, {"id", "chat", "text", "pictures", "shots"})
+    if type(i) is not dict: return False
+    keys = set(i) - {"card"}
+    return (keys in ({"id", "chat", "text", "pictures"}, {"id", "chat", "text", "pictures", "shots"})
             and type(i["id"]) is int
             and type(i["chat"]) is str and type(i["text"]) is str and len(i["text"]) <= MAX_TEXT
             and type(i["pictures"]) is int and 0 <= i["pictures"] <= 10 and ("shots" not in i or _shots(i["shots"]))
-            and not bridge.SURROGATE_RE.search(i["chat"] + i["text"]))
+            and not bridge.SURROGATE_RE.search(i["chat"] + i["text"])
+            and ("card" not in i or (i["card"] is True and i["pictures"] == 0 and len(i.get("shots", ())) <= 1)))
 
 
 def _b64(s) -> bool:
@@ -78,6 +82,21 @@ def _b64(s) -> bool:
 
 def _ints(v, lo, hi) -> bool:
     return type(v) is list and lo <= len(v) <= hi and all(type(x) is int and x > 0 for x in v)
+
+
+def valid_receipt_guid(value):
+    return type(value) is str and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", value) is not None
+
+
+def _receipt_ack(b):
+    if not _ints(b["ids"], 1, 1) or b["ids"][0] >= 2**63: return False
+    r = b["receipt"]
+    if type(r) is not dict: return False
+    if r.get("outcome") == "sent":
+        return (set(r) == {"outcome", "png_sha256", "provider_guid"}
+                and type(r["png_sha256"]) is str and bridge.MAC_RE.fullmatch(r["png_sha256"])
+                and (r["provider_guid"] is None or valid_receipt_guid(r["provider_guid"])))
+    return set(r) == {"outcome"} and r["outcome"] in ("failed", "abandoned", "missing-file")
 
 
 def _photo_index(b):
@@ -105,8 +124,9 @@ SHAPES = {  # body op -> [(keys, validator)]; picture has request and answer for
     "photo-refused": [({"op", "guid", "idx", "count", "code"}, lambda b: _photo_count(b)
                        and type(b["code"]) is str and b["code"] in PHOTO_REFUSED_CODES)],
     "photo-ok": [({"op", "guid", "idx"}, _photo_index)],
-    "pull": [({"op", "max"}, lambda b: type(b["max"]) is int and 1 <= b["max"] <= 5)],
-    "ack": [({"op", "ids"}, lambda b: _ints(b["ids"], 1, 20))],
+    "pull": [({"op", "max"}, lambda b: type(b["max"]) is int and 1 <= b["max"] <= 5),
+             ({"op", "max", "card_receipts"}, lambda b: b["card_receipts"] is True and type(b["max"]) is int and 1 <= b["max"] <= 5)],
+    "ack": [({"op", "ids"}, lambda b: _ints(b["ids"], 1, 20)), ({"op", "ids", "receipt"}, _receipt_ack)],
     "replies": [({"op", "items"}, lambda b: type(b["items"]) is list and len(b["items"]) <= 5
                  and all(map(_item, b["items"])))],
     "acked": [({"op", "ids"}, lambda b: _ints(b["ids"], 0, 20))],
@@ -159,16 +179,27 @@ class RelayStore:
             " pictures INTEGER NOT NULL, created_at INTEGER NOT NULL, handed_at INTEGER, acked_at INTEGER);"
             "CREATE TABLE IF NOT EXISTS meta(name TEXT PRIMARY KEY, value TEXT);"
             "CREATE TABLE IF NOT EXISTS picture(relay_id INTEGER NOT NULL, idx INTEGER NOT NULL, sha256 TEXT NOT NULL,"
-            " size INTEGER NOT NULL, data BLOB, PRIMARY KEY(relay_id, idx));")
+            " size INTEGER NOT NULL, data BLOB, PRIMARY KEY(relay_id, idx));"
+            "CREATE TABLE IF NOT EXISTS card_receipt(outbox_id INTEGER PRIMARY KEY, relay_id INTEGER UNIQUE NOT NULL,"
+            " png_sha256 TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', provider_guid TEXT, confirmed_at TEXT);")
 
-    def add(self, chat, text, pictures, now, shots=()) -> int:
+    def add(self, chat, text, pictures, now, shots=(), *, card=None) -> int:
         """`shots`: PNG bytes (already checked) stored with the row, in one transaction."""
         self.db.execute("BEGIN IMMEDIATE")
         try:
+            if card is not None:
+                row = self.db.execute("SELECT c.relay_id,r.chat,c.png_sha256 FROM card_receipt c JOIN relay r ON r.id=c.relay_id"
+                                      " WHERE c.outbox_id=?", (card[0],)).fetchone()
+                if row:
+                    if row[1:] != (chat, card[1]): raise RelayRefused("card binding changed")
+                    self.db.execute("COMMIT")
+                    return row[0]
             rid = self.db.execute("INSERT INTO relay(chat, text, pictures, created_at) VALUES (?, ?, ?, ?)",
                                   (chat, text, pictures, int(now))).lastrowid
             self.db.executemany("INSERT INTO picture VALUES (?, ?, ?, ?, ?)",
                                 [(rid, n, sha256(d).hexdigest(), len(d), d) for n, d in enumerate(shots)])
+            if card is not None:
+                self.db.execute("INSERT INTO card_receipt(outbox_id,relay_id,png_sha256) VALUES (?,?,?)", (card[0], rid, card[1]))
         except BaseException:
             self.db.execute("ROLLBACK")
             raise
@@ -184,14 +215,15 @@ class RelayStore:
                               " AND p.idx = ? AND r.acked_at IS NULL AND p.data IS NOT NULL", (rid, idx)).fetchone()
         return tuple(row) if row else None
 
-    def pull(self, n, now) -> list:
+    def pull(self, n, now, *, card_receipts=False) -> list:
         """Unacked rows never handed, or handed more than 60 s ago, oldest first; marks them handed."""
         now = int(now)
         self.db.execute("BEGIN IMMEDIATE")
         try:
-            rows = self.db.execute("SELECT id, chat, text, pictures FROM relay WHERE acked_at IS NULL AND"
-                                   " (handed_at IS NULL OR ? - handed_at > ?) ORDER BY id LIMIT ?",
-                                   (now, HAND_AFTER_S, n)).fetchall()
+            rows = self.db.execute("SELECT r.id,r.chat,r.text,r.pictures,c.relay_id FROM relay r"
+                                   " LEFT JOIN card_receipt c ON c.relay_id=r.id WHERE acked_at IS NULL AND"
+                                   " (? OR c.relay_id IS NULL) AND (handed_at IS NULL OR ? - handed_at > ?) ORDER BY r.id LIMIT ?",
+                                   (card_receipts, now, HAND_AFTER_S, n)).fetchall()
             self.db.executemany("UPDATE relay SET handed_at = ? WHERE id = ?", [(now, r[0]) for r in rows])
             self.db.execute("INSERT OR REPLACE INTO meta(name, value) VALUES ('last_pull_at', ?)", (str(now),))
         except BaseException:
@@ -199,6 +231,8 @@ class RelayStore:
             raise
         self.db.execute("COMMIT")
         items = [{"id": r[0], "chat": r[1], "text": r[2], "pictures": r[3]} for r in rows]
+        for item, row in zip(items, rows):
+            if row[4] is not None: item["card"] = True
         for item in items:
             shots = self.db.execute("SELECT idx, sha256, size FROM picture WHERE relay_id = ? ORDER BY idx", (item["id"],)).fetchall()
             if shots: item["shots"] = [{"idx": a, "sha256": b, "size": c} for a, b, c in shots]
@@ -208,10 +242,44 @@ class RelayStore:
         """Idempotent; unknown ids are ignored. Returns how many rows this call newly acknowledged."""
         n = 0
         for i in ids:
-            n += self.db.execute("UPDATE relay SET acked_at = ? WHERE id = ? AND acked_at IS NULL", (int(now), i)).rowcount
-            self.db.execute("UPDATE picture SET data = NULL WHERE relay_id = ?", (i,))
+            n += self._ack_one(i, now)
         self.db.execute("DELETE FROM picture WHERE relay_id IN (SELECT id FROM relay WHERE acked_at < ?)", (int(now) - 30 * 86400,))
         return n
+
+    def _ack_one(self, rid, now, receipt=None):
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            stamp = int(now.timestamp()) if receipt is not None else int(now)
+            sql = "UPDATE relay SET acked_at=? WHERE id=? AND acked_at IS NULL"
+            if receipt is not None: sql += " AND handed_at IS NOT NULL AND id IN (SELECT relay_id FROM card_receipt)"
+            changed = self.db.execute(sql, (stamp, rid)).rowcount
+            if changed:
+                state, digest, guid, at = "unconfirmed", None, None, None
+                if receipt is not None:
+                    state, digest = "failed", receipt.get("png_sha256")
+                    if receipt["outcome"] == "sent" and self.db.execute(
+                            "SELECT 1 FROM card_receipt c JOIN picture p ON p.relay_id=c.relay_id AND p.idx=0"
+                            " WHERE c.relay_id=? AND c.png_sha256=? AND p.sha256=c.png_sha256", (rid, digest)).fetchone():
+                        at = now.astimezone(timezone.utc).isoformat(timespec="microseconds")  # same ordering as inbox.enqueued_at
+                        state, guid = "confirmed", receipt["provider_guid"]
+                self.db.execute("UPDATE card_receipt SET state=?,provider_guid=?,confirmed_at=? WHERE relay_id=?", (state, guid, at, rid))
+                self.db.execute("UPDATE picture SET data=NULL WHERE relay_id=?", (rid,))
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
+        return changed
+
+    def acknowledge_receipt(self, rid, receipt, now):
+        self._ack_one(rid, now, receipt)
+        self.db.execute("DELETE FROM picture WHERE relay_id IN (SELECT id FROM relay WHERE acked_at < ?)",
+                        (int(now.timestamp()) - 30 * 86400,))
+
+    def receipt_for(self, outbox_row_id):
+        """Read only. No tracked delivery yet is pending, never a legacy send stamp."""
+        row = self.db.execute("SELECT state,png_sha256,provider_guid,confirmed_at FROM card_receipt WHERE outbox_id=?",
+                              (outbox_row_id,)).fetchone()
+        return dict(zip(("state", "png_sha256", "provider_guid", "confirmed_at"), row or ("pending", None, None, None)))
 
     def status(self) -> dict:
         waiting = self.db.execute("SELECT COUNT(*) FROM relay WHERE acked_at IS NULL").fetchone()[0]
@@ -267,3 +335,17 @@ class RelaySender:
                 data = read_shot(path, self.shots_dir)
                 if data is not None: shots.append(data)
         return self.store.add(chat, text, len(attachments) - len(shots), self.clock(), shots)
+
+    def send_card(self, outbox_row_id, chat, text, png_path, png_sha256):
+        """Queue once by outbox id; success here is enqueue only, never a receipt."""
+        if (type(outbox_row_id) is not int or not 0 < outbox_row_id < 2**63
+                or chat not in self.owner_chats or chat not in self.picture_chats
+                or len(text) > MAX_TEXT or bridge.SURROGATE_RE.search(text)
+                or type(png_sha256) is not str or not bridge.MAC_RE.fullmatch(png_sha256)):
+            raise RelayRefused("card refused")
+        data = read_shot(png_path, self.shots_dir) if self.shots_dir is not None else None
+        shots = (data,) if data is not None and sha256(data).hexdigest() == png_sha256 else ()
+        return self.store.add(chat, text, 0, self.clock(), shots, card=(outbox_row_id, png_sha256))
+
+    def receipt_for(self, outbox_row_id):
+        return self.store.receipt_for(outbox_row_id)

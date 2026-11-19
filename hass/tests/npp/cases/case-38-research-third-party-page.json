@@ -1,0 +1,177 @@
+{
+  "id": 38,
+  "slug": "research-third-party-page",
+  "title": "Only a retailer page and a directory page describe the maker",
+  "contract": "G 2026-11-18 14:00: a page that merely lists or sells the maker is not its official site; a denied domain is never fetched",
+  "bug": "a retailer or directory page supplies facts, or a denied domain is fetched",
+  "path": "listing",
+  "terminal": "published",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "turns": [
+    {
+      "at_s": 0,
+      "from": "mike",
+      "text": "made by Miners, Paso Robles. dried figs $7 each",
+      "photos": [
+        "npp:figs.jpg"
+      ]
+    },
+    {
+      "at_s": 80,
+      "from": "mike",
+      "text": "make it $8",
+      "photos": []
+    },
+    {
+      "at_s": 140,
+      "from": "mike",
+      "text": "yes {code}-2",
+      "photos": []
+    },
+    {
+      "at_s": 200,
+      "from": "mike",
+      "text": "undo",
+      "photos": []
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "file",
+      "file": "npp:edits/figs-good.png",
+      "latency_s": 22
+    },
+    "web": {
+      "search": {
+        "Miners Paso Robles official site": [
+          {
+            "url": "https://www.yelp.com/biz/miners-paso-robles",
+            "title": "Miners - Paso Robles - Yelp"
+          },
+          {
+            "url": "https://localfoodmarket.example/vendors/miners",
+            "title": "Miners dried figs - Local Food Market"
+          }
+        ],
+        "Miners official site": []
+      },
+      "pages": {
+        "https://localfoodmarket.example/vendors/miners": {
+          "file": "pages/foodmarket-vendor-miners.html",
+          "retrieved": "2026-11-18",
+          "content_type": "text/html"
+        }
+      },
+      "forbid_fetch": [
+        "https://www.yelp.com/biz/miners-paso-robles"
+      ],
+      "robots": "allow all unless stated"
+    },
+    "stubs": {
+      "extract": [],
+      "note": "extraction must never be called"
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "(maker story not found)"
+        ]
+      },
+      {
+        "turn": 1,
+        "count": 1,
+        "kind": "card",
+        "has_all": [
+          "Post this? Reply yes <code>-2, or tell me what to change."
+        ],
+        "note": "the edit builds v2; every other field is copied from v1"
+      },
+      {
+        "turn": 2,
+        "count": 1,
+        "kind": "posted"
+      },
+      {
+        "turn": 3,
+        "count": 1,
+        "kind": "undo_draft",
+        "note": "undo drafts the hide of the posted listing; nothing is hidden until its own yes"
+      }
+    ],
+    "state": "published",
+    "research": {
+      "identity": [
+        {
+          "url": "https://www.yelp.com/biz/miners-paso-robles",
+          "passed": false,
+          "reason": "denied-domain",
+          "fetched": false
+        },
+        {
+          "url": "https://localfoodmarket.example/vendors/miners",
+          "passed": false,
+          "reason": "not-the-makers-own-site"
+        }
+      ]
+    },
+    "calls": {
+      "extract": 0,
+      "verify": 0,
+      "fetch": [
+        0,
+        1
+      ]
+    },
+    "story": null,
+    "listing": {
+      "maker_panel": false
+    },
+    "commits": 1,
+    "checks": [
+      "source_provenance",
+      "template_conformance",
+      "no_private_values",
+      "existing_gates",
+      "reply",
+      "delivery_approval"
+    ],
+    "versions": [
+      {
+        "n": 1,
+        "delivered": true
+      },
+      {
+        "n": 2,
+        "delivered": true,
+        "approved": true
+      }
+    ],
+    "undo": {
+      "draft": "hide",
+      "commits": 1
+    },
+    "edit_keeps": [
+      "name",
+      "brand",
+      "origin",
+      "category",
+      "imageAlt",
+      "picture_bytes",
+      "description",
+      "maker_panel",
+      "story"
+    ]
+  }
+}

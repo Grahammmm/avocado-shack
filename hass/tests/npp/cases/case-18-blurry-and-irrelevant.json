@@ -1,0 +1,78 @@
+{
+  "id": 18,
+  "slug": "blurry-and-irrelevant",
+  "title": "A blurry photo, and a sunset: one question, nothing else",
+  "contract": "S3: not a product or unreadable gives exactly one question, no draft, no prompt, no image edit and no research",
+  "bug": "a card or approval prompt goes out for a non-product, or an image edit is spent on it",
+  "path": "question",
+  "terminal": "asking",
+  "settings": {
+    "npp": true,
+    "houseRender": true,
+    "photo_polish": true,
+    "itemIntake": true,
+    "liveSite": true,
+    "approvalTtlSeconds": 7200
+  },
+  "variants": [
+    {
+      "id": "a",
+      "title": "blurry.jpg",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "add this",
+          "photos": [
+            "chaos:blurry.jpg"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b",
+      "title": "sunset.jpg",
+      "turns": [
+        {
+          "at_s": 0,
+          "from": "mike",
+          "text": "add this",
+          "photos": [
+            "chaos:sunset.jpg"
+          ]
+        }
+      ]
+    }
+  ],
+  "inputs": {
+    "polish": {
+      "source": "none",
+      "note": "any image-edit tape call is a failure"
+    }
+  },
+  "expect": {
+    "replies": [
+      {
+        "turn": 0,
+        "count": 1,
+        "kind": "question",
+        "source": "hass-npp-reply questions.ask_identity"
+      }
+    ],
+    "total_replies": 1,
+    "state": "asking",
+    "draft_rows": "none",
+    "approval_rows": 0,
+    "commits": 0,
+    "calls": {
+      "image_edit": 0,
+      "search": 0,
+      "fetch": 0,
+      "extract": 0
+    },
+    "checks": [
+      "reply",
+      "no_draft"
+    ]
+  }
+}

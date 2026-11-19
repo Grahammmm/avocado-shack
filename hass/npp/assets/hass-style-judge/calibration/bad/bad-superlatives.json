@@ -1,0 +1,17 @@
+{
+  "product_id": "bad-superlatives",
+  "synthetic": true,
+  "breaks": ["voice", "restraint", "truth"],
+  "category": "pantry",
+  "card": {
+    "photo_alt": "Raspberry jam",
+    "brand": "Hillside Kitchen",
+    "name": "Hillside Kitchen Raspberry Jam",
+    "price": null,
+    "origin": "Based in Anytown, California",
+    "badges": [],
+    "availability": null,
+    "description": "The most amazing, premium, award-winning raspberry jam you will ever taste! Handcrafted by artisans using only the finest ingredients. You will not find a better jam anywhere in the world. Buy now!",
+    "meet_the_maker": null
+  }
+}

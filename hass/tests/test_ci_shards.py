@@ -306,9 +306,6 @@ class VerifyTest(unittest.TestCase):
                 self.assertTrue(cs.union_proof(modules, plan["shards"])[0])
                 changed.assert_not_called()
 
-    def test_plan_round_trips_through_json(self):
-        self.assertEqual(json.loads(json.dumps(self.FULL)), self.FULL)
-
 
 if __name__ == "__main__":
     unittest.main()

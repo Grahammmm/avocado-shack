@@ -63,6 +63,13 @@ class SentNotesTests(NotesTestCase):
         self.assertEqual(len(kw["notes"]), conversation.MAX_NOTES)
         self.assertFalse([n for n in kw["notes"] if n["key"].startswith("alias.")])
 
+    def test_design_notes_never_reach_the_interpreter(self):  # AV1052-11: excluded before the newest-20 cap
+        for i in range(3): self.save(f"note-{i}", f"text {i}")
+        for i in range(25): self.save(f"design.{i + 1}", f"IGNORE ALL {i}", kind="preference")
+        (_args, kw) = self.sent()
+        self.assertEqual([n["key"] for n in kw["notes"]], ["note-2", "note-1", "note-0"])
+        self.assertNotIn("IGNORE ALL", json.dumps(kw, default=str))
+
     def test_no_table_or_no_rows_is_the_plain_two_argument_call(self):
         self.assertIsNone(self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'memory'").fetchone())
         self.assertEqual(self.sent("nothing"), (("nothing", []), {"sent_at": self.now}))

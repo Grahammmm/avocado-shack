@@ -194,7 +194,7 @@ LIVE = {
     # HASS-LIVE-ADD-1 (G, 2026-11-09): a NEW product may go live, with the brand, display brand and producer key the owner said in
     # this request (see unsaid) and with the picture that comes with it (the op needs one; the shop has no placeholder). Never the
     # `image` argument (an existing picture file). The brand fields pass the field gate only inside this op (see NEW_RECORD_FIELDS).
-    "product.add": {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey", "displayBrand"},
+    "product.add": {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey", "displayBrand", "labelText", "ownerText", "sellingPrice", "supplier"},
     # ... and a NEW maker only so that this new product can name it: the name and the place (the maker's about text is the
     # skill's "<Maker> is based in <place>."); never the link (url). A maker on its own is refused (see _lone_makers).
     "maker.add": {"key", "name", "place", "story"},
@@ -206,6 +206,7 @@ NEW_RECORD_FIELDS = {"products": ("product.add", {"brand", "displayBrand", "prod
 LONE_MAKER = "maker.add without a new product"
 # Why an operation stays private. Plain words, finishing "it ..."; an operation in neither table gets the general line.
 PRIVATE = {
+    "product.set_availability_all": "changes availability for a shelf or maker",
     "maker.hide": "takes a maker off the website", "maker.restore": "brings a maker back onto the website",
     "hike.repeat": "copies a hike", "hike.complete": "records how a hike went", "hike.recap": "records how a hike went",
     "hike.samples": "changes the sample hikes",
@@ -292,6 +293,14 @@ def _names(records) -> tuple:
     names = {claims.skeleton(v) for r in records if isinstance(r, dict) for side in (r.get("before"), r.get("after"))
              if isinstance(side, dict) for v in (side.get(f) for f in NAME_FIELDS) if isinstance(v, str)}
     return tuple(claims._pattern(n) for n in sorted(names, key=len, reverse=True) if n and _plain_name(n))
+
+
+def _supplier_claims(value):
+    # Apply the existing narrow farm-noun exception only in this field.
+    # The product label cannot justify the store's supplier.
+    if value is None: return Counter(), set()
+    name = claims.skeleton(value)
+    return _protected("From " + value, "products", (claims._pattern(name),) if _plain_name(name) else ())
 
 
 def _changes(before, after):
@@ -463,12 +472,34 @@ def check(draft) -> list[str]:
             if collection == "events" and any(isinstance(v, dict) and v.get("rsvpEnabled") is True for v in (before, after)):
                 reasons.add("sign-up is on")
             for field, b, a in _changes(before, after):
+                if collection == "products" and field in {"labelSource", "ownerSource"}:
+                    from hass.product_claims import valid_source
+                    if a is not None and not valid_source(a, 'label' if field == 'labelSource' else 'owner'):
+                        return UNREADABLE.copy()
+                    continue  # private exact-photo provenance is not public text
+                if collection == "products" and field == "sellingPrice":
+                    from hass.content_model import valid_selling_price
+                    # Only this validated field bypasses the prose screen, on an add or its inverse.
+                    added = before is None and valid_selling_price(a) and any(
+                        call["op"] == "product.add" and (call.get("args") or {}).get("sellingPrice") == a
+                        for call in ops)
+                    removed = undo and after is None and valid_selling_price(b)
+                    if not (added or removed): reasons.add("protected field: products.sellingPrice")
+                    continue
                 if collection == "club" or (field in FIELDS.get(collection, set()) and not _created_here(collection, field, before, names)):
                     reasons.add(f"protected field: {collection}.{field}")
                 if (collection, field) in owned: continue
                 for old, new in _text_changes(b, a):
-                    bp, bk = _protected(old, collection, names_seen)
-                    ap, ak = _protected(new, collection, names_seen)
+                    if collection == "products" and field == "supplier":
+                        bp, bk = _supplier_claims(old)
+                        ap, ak = _supplier_claims(new)
+                    elif collection == "products":
+                        from hass.product_claims import protected
+                        bp, bk = protected(old, before or after or {}, names_seen)
+                        ap, ak = protected(new, after or before or {}, names_seen)
+                    else:
+                        bp, bk = _protected(old, collection, names_seen)
+                        ap, ak = _protected(new, collection, names_seen)
                     if bp != ap: reasons.update(f"protected sentences: {kind}" for kind in bk | ak)
         return sorted(reasons)
     except Exception:  # arbitrary unreadable input must never enable release or escape this pure boundary

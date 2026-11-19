@@ -289,3 +289,86 @@ class GuestTotalTests(StoreMixin, H06TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NearControlGuidanceTests(StoreMixin, ConversationTestCase):
+    """AV2007-05 (QA1-12): near-command texts get the exact command words by code; nothing is paused, resumed or interpreted."""
+    STOP = "To stop changes, send exactly: stop changes"
+    RESUME = "To resume changes, send exactly: resume changes"
+
+    def setUp(self):
+        super().setUp()
+        self.seen = []
+        real = self.interp.interpret
+        self.interp.interpret = lambda text, *a, **k: (self.seen.append(text), real(text, *a, **k))[1]
+
+    def state(self):
+        return (self.drafts(), self.approvals(), self.conv.db.execute("SELECT * FROM control").fetchall()
+                if "control" in self.tables() else None, self.commits(), self.editor.applies)
+
+    def test_stop_pause_and_resume_decorations_give_exact_hint_without_call(self):
+        cases = [("stop changes now", self.STOP), ("Pause changes please", self.STOP), ("please stop", self.STOP),
+                 ("STOP CHANGES THANKS", self.STOP), ("pause now!", self.STOP), ("stop changes please.", self.STOP),
+                 ("Please pause changes now", self.STOP), ("Resume changes please", self.RESUME), ("resume now.", self.RESUME),
+                 ("thanks resume changes", self.RESUME), ("  Resume please!!  ", self.RESUME)]
+        for i, (text, want) in enumerate(cases):
+            with self.subTest(text=text):
+                self.assertEqual(self.say(text, pid=f"n{i}"), "near-control")
+                self.assertEqual(self.replies(), [want])
+                self.assertEqual(self.disposition(f"n{i}"), "near-control")
+        self.assertEqual((self.seen, self.approvals(), self.commits(), self.editor.applies), ([], 0, 0, 0))
+
+    def test_exact_punctuation_commands_keep_h17_precedence(self):
+        for text, disposition in (("STOP!", "pause"), ("Pause changes.", "pause"), ("Resume!", "resume"), ("stop changes", "pause"), ("resume changes", "resume")):
+            with self.subTest(text=text):
+                self.assertEqual(self.say(text), disposition)
+                self.replies()
+        for text in ("pause changes now", "please stop changes", "Pause changes please"):
+            self.assertIsNone(conversation.parse_command(text))
+        self.assertEqual(self.say("what can you do"), "help")
+        self.replies()
+        self.assertEqual(self.seen, [])
+
+    def test_hint_does_not_change_running_or_paused_control_with_pending_draft(self):
+        self.propose("hours")
+        self.seen.clear()
+        before = self.state()
+        self.assertEqual(self.say("stop changes now"), "near-control")
+        self.assertEqual(self.say("Resume changes please"), "near-control")
+        self.replies()
+        self.assertEqual(self.state(), before)
+        self.assertEqual(self.say("pause changes"), "pause")
+        self.replies()
+        paused = self.state()
+        self.assertEqual(self.say("Pause changes please"), "near-control")
+        self.assertEqual(self.say("Resume changes please"), "near-control")
+        self.replies()
+        self.assertEqual(self.state(), paused)
+        self.assertEqual(self.status()[0].startswith("Changes are paused"), True)
+        self.assertEqual(self.seen, [])
+
+    def test_whole_message_boundaries_leave_unrelated_text_untouched(self):
+        for text in ("pause the hike", "stop selling eggs", "please stop changes and hide eggs", "resume changes?", "stop\nchanges now",
+                     "stop resume", "pause, please", "undo that", "statsu", "please", "stop changes now now?"):
+            with self.subTest(text=text):
+                self.assertIsNone(conversation.near_control(text))
+        self.assertEqual(self.say("pause the hike"), "unsupported")
+        self.assertEqual(self.replies(), ["Sorry, I can't do that yet."])
+        self.assertEqual(self.seen, ["pause the hike"])
+
+    def test_hint_respects_sender_attachment_and_duplicate_gates(self):
+        self.assertEqual(self.say("stop changes now", sender=STRANGER), "ignored")
+        self.assertEqual(self.say("stop changes now", kind="edited"), "not-read")
+        self.assertEqual(self.say("stop changes now", from_me=True), "echo")
+        self.assertEqual(self.replies(), [conversation.NOT_READ_REPLY])
+        self.assertEqual(self.say("stop changes now", pid="d1"), "near-control")
+        self.assertEqual(self.say("stop changes now", pid="d1"), "duplicate")
+        self.assertEqual(self.replies(), [self.STOP])
+        self.assertEqual(self.seen, [])
+
+    def test_repeat_hints_are_guidance_only(self):
+        for i in range(3):
+            self.assertEqual(self.say("Pause changes please"), "near-control")
+        self.assertEqual(self.replies(), [self.STOP] * 3)
+        self.assertEqual((self.seen, self.approvals(), self.commits()), ([], 0, 0))
+        self.assertEqual(self.status()[0], "Everything is ready.")

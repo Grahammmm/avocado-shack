@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "source": "hass-gallery-style/gallery-fields.tsv",
+  "method": "code points; whitespace words; nearest rank ceil(p*n); non-empty values only",
+  "records": 105,
+  "fields": {
+    "brand": {
+      "present": 105,
+      "words": {
+        "p50": 2,
+        "p90": 3
+      },
+      "chars": {
+        "p50": 9,
+        "p90": 20
+      }
+    },
+    "name": {
+      "present": 105,
+      "words": {
+        "p50": 3,
+        "p90": 5
+      },
+      "chars": {
+        "p50": 23,
+        "p90": 29
+      }
+    },
+    "origin": {
+      "present": 105,
+      "words": {
+        "p50": 5,
+        "p90": 6
+      },
+      "chars": {
+        "p50": 32,
+        "p90": 36
+      }
+    },
+    "description": {
+      "present": 105,
+      "words": {
+        "p50": 25,
+        "p90": 28
+      },
+      "chars": {
+        "p50": 140,
+        "p90": 156
+      }
+    },
+    "maker_name": {
+      "present": 96,
+      "words": {
+        "p50": 2,
+        "p90": 3
+      },
+      "chars": {
+        "p50": 8,
+        "p90": 20
+      }
+    },
+    "maker_place": {
+      "present": 96,
+      "words": {
+        "p50": 3,
+        "p90": 4
+      },
+      "chars": {
+        "p50": 22,
+        "p90": 27
+      }
+    },
+    "maker_story": {
+      "present": 96,
+      "words": {
+        "p50": 44,
+        "p90": 47
+      },
+      "chars": {
+        "p50": 271,
+        "p90": 280
+      }
+    },
+    "maker_url": {
+      "present": 96,
+      "words": {
+        "p50": 1,
+        "p90": 1
+      },
+      "chars": {
+        "p50": 40,
+        "p90": 45
+      }
+    },
+    "image": {
+      "present": 105,
+      "words": {
+        "p50": 1,
+        "p90": 1
+      },
+      "chars": {
+        "p50": 38,
+        "p90": 38
+      }
+    },
+    "image_alt": {
+      "present": 105,
+      "words": {
+        "p50": 4,
+        "p90": 6
+      },
+      "chars": {
+        "p50": 38,
+        "p90": 44
+      }
+    },
+    "link_to_this": {
+      "present": 105,
+      "words": {
+        "p50": 1,
+        "p90": 1
+      },
+      "chars": {
+        "p50": 56,
+        "p90": 56
+      }
+    }
+  },
+  "description_sentence_endings": {
+    "2": 88,
+    "3": 17
+  },
+  "badges": {
+    "organic": 13,
+    "new": 0
+  },
+  "availability_present": 0,
+  "selling_price_present": 0,
+  "fixed_labels": {
+    "meet_the_maker": {
+      "text": "Meet the maker",
+      "present": 96,
+      "words": 3,
+      "chars": 14
+    },
+    "link_to_this": {
+      "text": "Link to this",
+      "present": 105,
+      "words": 3,
+      "chars": 12
+    }
+  },
+  "limits": {
+    "description": {
+      "soft_max_chars": 156,
+      "hard_max_chars": 200,
+      "sentences_min": 2,
+      "sentences_max": 3,
+      "soft_target_words": 25,
+      "soft_target_chars": 140
+    },
+    "maker_story": {
+      "soft_max_chars": 280,
+      "hard_max_chars": 340
+    }
+  }
+}

@@ -33,7 +33,7 @@ OWNER_FACING = {
     "conversation.py": ["_choices", "_waiting_note", "_no_target", "_state_text", "_request", "_photo", "_outcome", "_command", "_handle", "_for_g",
                         "_proposal_reply", "_plain", "_asked_again", "_late", "_delayed", "_handle_message"],
     # AVB-12: the pack commands and the proposal wording moved out of conversation.py into hass/chat/
-    "chat/core_pack.py": ["_history_search", "_show", "_memory", "_memory_words", "_alias", "_alias_lines", "_control", "_status",
+    "chat/core_pack.py": ["_history_search", "_show", "_memory", "_memory_words", "_alias", "_alias_lines", "_control", "_status", "_again",
                           "_reader_failed_lines", "_waiting_lines", "_photo_lines", "_hike_lines"],
     "chat/site_pack.py": ["_find", "_listing", "_photos_to_take", "_hidden"],
     "chat/reports_pack.py": ["_report", "_margin", "_margin_saved", "_post", "_post_hike", "_pick", "_cost"],
@@ -46,10 +46,10 @@ OWNER_FACING = {
 }
 MODULE_CONSTANTS = {  # names of module-level owner text
     "conversation.py": ["PAUSED_LINE", "ATTACHMENT_REPLY", "NOT_READ_REPLY", "PHOTO_QUESTION", "FETCH_FAILED", "DAILY_LIMIT", "TOO_LONG",
-                        "SOCIAL_REPLY", "UNREADABLE", "HELD_REPLY", "HOSTILE_REPLY"],
+                        "SOCIAL_REPLY", "UNREADABLE", "HELD_REPLY", "HOSTILE_REPLY", "NEAR_STOP_REPLY", "NEAR_RESUME_REPLY"],
     "chat/shared.py": ["COST_USAGE", "NOTHING", "CANT_READ", "STATUS_PLAIN"],  # AVB-12: moved with their commands
     "chat/commands.py": ["HELP_TEXT"],
-    "chat/core_pack.py": ["HISTORY_USAGE"],
+    "chat/core_pack.py": ["HISTORY_USAGE", "AGAIN_USAGE", "AGAIN_UNDO"],
     "chat/site_pack.py": ["LISTING_USAGE", "LISTING_NONE", "LISTING_MANY", "FIND_USAGE"],
     "chat/reports_pack.py": ["POST_USAGE", "HIKE_USAGE", "HIKE_REFUSALS", "POST_REFUSALS", "POST_CANT", "MARGIN_USAGE"],
     "media.py": ["REPLIES"],
@@ -173,7 +173,7 @@ class EveryTemplate(unittest.TestCase):
     def test_reply_constants_pass_whole(self):
         texts = [conversation.HELP_TEXT, conversation.NOTHING, conversation.SOCIAL_REPLY, conversation.ATTACHMENT_REPLY,
                  conversation.NOT_READ_REPLY, conversation.PHOTO_QUESTION, conversation.FETCH_FAILED, conversation.DAILY_LIMIT,
-                 conversation.TOO_LONG, conversation.CANT_READ, conversation.HOSTILE_REPLY, conversation.PAUSED_LINE,
+                 conversation.TOO_LONG, conversation.CANT_READ, conversation.HOSTILE_REPLY, conversation.PAUSED_LINE, conversation.NEAR_STOP_REPLY, conversation.NEAR_RESUME_REPLY,
                  conversation.LISTING_USAGE, conversation.LISTING_NONE, conversation.LISTING_MANY, conversation.HISTORY_USAGE,
                  conversation.FIND_USAGE, conversation.POST_USAGE, conversation.HIKE_USAGE, conversation.COST_USAGE, conversation.MARGIN_USAGE,
                  conversation.HELD_REPLY, conversation.UNREADABLE["unsupported"], *media.REPLIES.values(),
@@ -267,7 +267,8 @@ class Findings(ConversationTestCase):
     def test_help_uses_names_not_ids(self):
         help_text = self.one("help")
         for bad in ("photo-product-001", "hike-2026", "<id>", "<$>", "<code>"): self.assertNotIn(bad, help_text)
-        self.assertIn("cost Hass avocado: 24 for 12", help_text)
+        self.assertIn("cost", help_text)  # AV1052-12: the index names it; its example is in `help cost`
+        self.assertIn("cost Hass avocado: 24 for 12", self.one("help cost"))
 
     def test_photos_to_take_is_a_short_friendly_list(self):
         reply = self.one("photos to take")

@@ -1,0 +1,25 @@
+{
+  "source_url": "https://theavocadoman.com/",
+  "source_scope": "live packaged goods",
+  "product_id": "photo-product-024",
+  "photo_path": "assets/products/photo-product-024.webp",
+  "category": "eggs",
+  "card": {
+    "photo_alt": "Cal Poly eggs (illustration)",
+    "brand": "Cal Poly",
+    "name": "Cal Poly eggs",
+    "price": null,
+    "origin": "Based in San Luis Obispo, California",
+    "badges": [],
+    "availability": null,
+    "description": "Cook gently, season well. Eggs can turn a piece of toast into breakfast and a pot of leftovers into dinner.",
+    "meet_the_maker": {
+      "name": "Cal Poly",
+      "place": "San Luis Obispo, California",
+      "story": "At Cal Poly, food is something you learn by making. Students work on products from cheese and chocolate to jam and barbecue sauce. This is San Luis Obispo’s hands-on food tradition: practical skills, real ingredients, and something you can actually bring home for dinner.",
+      "visit_url": "https://fsn.calpoly.edu/our-products",
+      "see_all_count": 21
+    },
+    "link_to_this": "https://theavocadoman.com/?item=photo-product-024#market"
+  }
+}

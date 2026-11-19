@@ -195,13 +195,13 @@ class ConversationAnswerTests(ConversationTestCase):
     def test_did_it_work_follows_the_install(self):
         draft = self.applied()
         self.assertEqual(self.last_line(), "Last change: the opening hours for Avocado Shack. It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. If copying it started and stopped partway, some pages may already show it. Copying it to the website again, by hand, puts every page in place.")
-        self.assertEqual(self.history(), ["- the opening hours for Avocado Shack: saved, but I'm not sure it's on the website"])
+        self.assertEqual(self.history(), ["- the opening hours for Avocado Shack, approved Mon Nov 2 9:00 am: saved, but I'm not sure it's on the website"])
         self.now = T0 + timedelta(minutes=5)
         out = install.install(draft["change_id"], state=str(self.repo.state), now=self.now)
         self.assertEqual(out["result"], "installed")
         line = self.last_line("Did my change work?")
         self.assertEqual(line, "Last change: the opening hours for Avocado Shack. Done. the opening hours for Avocado Shack is on the website now (I checked today at 9:05 am).")
-        self.assertEqual(self.history(), ["- the opening hours for Avocado Shack: on the website"])
+        self.assertEqual(self.history(), ["- the opening hours for Avocado Shack, approved Mon Nov 2 9:00 am: on the website"])
 
     def test_failed_install_says_the_website_is_unchanged(self):
         draft, before = self.applied(), self.snapshot()
