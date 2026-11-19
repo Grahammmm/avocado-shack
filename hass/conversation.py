@@ -92,6 +92,30 @@ def near_control(text):
     return None if m is None else "stop" if m.group(1) else "resume"
 
 
+# AV1052-09 (H17): a whole one-word message one edit from a command word gets a guess, never a run. The words are frozen here
+# (never scraped from the parsers); `photos to take` has several words and is not a candidate.
+TYPO_WORDS = tuple(sorted("history undo status pause stop resume help commands find show report post remember forget memory alias approve"
+                          " approved cancel reject listing shelf margin cost hidden again".split()))
+TYPO_SKIP = frozenset("yes no fine shop past most hold thanks thankyou cheers thx ok okay yep yeah sure".split())  # real words, thanks and casual yeses
+
+
+def _one_edit(a, b):
+    """True when a and b differ by exactly one inserted, deleted or substituted letter, or one adjacent swap."""
+    if a == b or abs(len(a) - len(b)) > 1: return False
+    i = next((i for i in range(min(len(a), len(b))) if a[i] != b[i]), min(len(a), len(b)))
+    if len(a) == len(b): return a[i + 1:] == b[i + 1:] or (a[i] == b[i + 1] and a[i + 1] == b[i] and a[i + 2:] == b[i + 2:])
+    short, long = sorted((a, b), key=len)
+    return short[i:] == long[i + 1:]
+
+
+def command_typo(text, words=TYPO_WORDS):
+    """AV1052-09: the sorted command words one edit from a whole one-word message of 4+ ASCII letters, else []."""
+    if not isinstance(text, str) or not text.isascii(): return []
+    norm = re.sub(r"[.!]+$", "", text.strip().lower())
+    if len(norm) < 4 or not norm.isalpha() or norm in TYPO_SKIP or norm in words: return []
+    return sorted({w for w in words if _one_edit(norm, w)})
+
+
 HOSTILE_REPLY = "I can only publish changes you approve one at a time. Nothing was changed."  # HASS-VOICE-1: no model call, no draft
 CORRECTION_RE = re.compile(r"(?:no[,.!]|nope|that'?s (?:wrong|not right|not what)|not what i (?:meant|said|asked)|wrong\b|i didn'?t (?:mean|ask|say)|you got (?:it|that) wrong)", re.I)
 RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question stays open for a short answer; longest kept
@@ -1303,6 +1327,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                             "I haven't changed anything yet. Which one do you mean?\n" + self._choices(live) if live else NOTHING, long_ok=True)
                 self._record(msg, "near-approval")
                 return "near-approval", None
+        if keyword is None and (guess := command_typo(msg.text)):  # AV1052-09 (H17): a guess only: nothing run, no interpreter call or count; works paused and at the cap
+            names = " or ".join(guess)
+            self._reply(f"Did you mean {names}? Send {names}.")
+            self._record(msg, "command-typo")
+            return "command-typo", None
         if keyword is None:
             disposition = self._request(msg, now)
             self._record(msg, disposition)
