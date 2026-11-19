@@ -97,6 +97,17 @@ def _rename_noreplace(src: Path, dst: Path) -> None:
 def _connect_ro(path: Path):
     return contextlib.closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True))
 
+def _private_dirs(path: Path) -> None:
+    """mkdir -p with every directory it makes 0700 whatever the umask: mkdir(parents=True) gives the parents
+    0777 & ~umask, so a media/npp made that way fails verify's mode check under the usual umask 022."""
+    missing = []
+    while not path.exists():
+        missing.append(path)
+        path = path.parent
+    for directory in reversed(missing):
+        directory.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(directory, 0o700)
+
 def _snapshot(src: Path, dst: Path) -> None:  # a consistent copy via the sqlite online backup API
     _write_new(dst, b"")
     with _connect_ro(src) as source, contextlib.closing(sqlite3.connect(dst)) as target:
@@ -218,7 +229,7 @@ def create(state, out, now=None, media=None) -> dict:
         # The inbox goes first: a row it shows `done` was handled before, so the later DB snapshot holds its effect;
         # one handled in between stays `pending` here and a later drain answers it `duplicate` (no second write).
         for rel in sorted(files + mfiles, key=lambda rel: rel != INBOX):
-            (dest / rel).parent.mkdir(mode=0o700, exist_ok=True, parents=True)
+            _private_dirs((dest / rel).parent)
             if rel.startswith(NPP):
                 try: data = read_artifact((nroot or mroot) / rel[len("media/"):])
                 except (OSError, ValueError, RecursionError):
@@ -452,7 +463,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
         for rel in sorted(doc["files"]):
             if rel == BUNDLE or rel.startswith(MEDIA) and not mtmp: continue  # bundle: FAV-08; media: mediaRestored
             dst = mtmp / rel[len("media/"):] if rel.startswith(MEDIA) else tmp / rel
-            dst.parent.mkdir(mode=0o700, exist_ok=True, parents=True)
+            _private_dirs(dst.parent)
             if fallback := re.fullmatch(FALLBACK_JPEG, rel):
                 _write_new(dst, _read_fallback(bdir / rel, fallback[1]))
                 continue

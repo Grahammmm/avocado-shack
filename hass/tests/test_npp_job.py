@@ -3,6 +3,7 @@ from concurrent.futures import Future
 from datetime import timedelta
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -459,6 +460,17 @@ class JobTests(unittest.TestCase):
                 self.assertFalse(settings["npp"])
                 self.assertEqual([p["job"] for p in got["nppOff"]], [job])
                 self.assertRegex(got["nppOff"][0]["why"], "request (missing|unreadable)")
+
+    def test_backup_and_restore_of_npp_artifacts_do_not_depend_on_the_umask(self):
+        # Contract: every backup/restore directory is 0700 whatever the umask. Bug: media/npp was made by
+        # mkdir(parents=True) at 0755 under CI's umask 022, so verify said "corrupt" (a developer's umask 077 hid it).
+        self.addCleanup(os.umask, os.umask(0o022))
+        self.say("sell $2", photos=1)
+        self.work()
+        got, settings = self.restore_open_jobs()
+        self.assertTrue(settings["npp"])
+        restored = self.root.parent / "restore-media"
+        self.assertEqual([oct(p.stat().st_mode & 0o777) for p in (restored, restored / "npp", restored / "originals")], ["0o700"] * 3)
 
     def test_restore_ignores_the_photos_of_a_closed_job(self):
         # A closed job needs none of its photos: with its second original gone, npp still stays on (no open jobs = unchanged).
