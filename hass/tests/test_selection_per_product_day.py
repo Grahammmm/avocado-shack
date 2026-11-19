@@ -95,6 +95,22 @@ class PerProductDayTests(CatalogTestCase):
         facts = self.facts(content)
         self.assertEqual((facts["available"], facts["limited"], facts["sold_out"]), (0, 0, 0))
 
+    def test_unhashable_word_with_a_valid_day_is_not_confirmed_and_never_crashes(self):
+        # Contract: a hand-edited non-string word (list/dict) counts as not confirmed everywhere, as before AV1922-02.
+        # Bug it catches: `word in AVAILABILITY_WORDS` on an unhashable value raises TypeError and kills the morning report.
+        self.r.run((CHECK, {"yes": [self.a]}))
+        for bad in ([], ["yes"], {"yes": 1}):
+            with self.subTest(bad=bad):
+                content = copy.deepcopy(self.r.content())
+                product = next(p for p in content.products if p["id"] == self.a)
+                product["available"] = bad  # available_on stays a valid, current day
+                facts = self.facts(content)
+                self.assertEqual((facts["available"], facts["limited"], facts["sold_out"]), (0, 0, 0))
+                self.assertEqual(facts["not_confirmed"], sum(p["status"] == "active" for p in content.products))
+                self.assertIsNone(sitegen.availability_state(product, content.store, self.today))
+                self.assertIsNone(sitegen.availability_label(product, content.store, self.today))
+                self.assertIsNone(self.words(content)[self.a])  # the catalog render skips the bad word too
+
     def test_bad_available_on_is_a_content_problem_named_by_field(self):
         self.r.run((CHECK, {"yes": [self.a]}))
         base, where = self.r.content(), f"product {self.a}.available_on"
