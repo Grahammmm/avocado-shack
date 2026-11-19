@@ -219,3 +219,26 @@ class ResearchTests(unittest.TestCase):
         result = world.maker(owner_url=HOME)
         self.assertEqual([f["url"] for f in result.story_facts], [canonical])
         self.assertFalse(any("unrelated.example" in url for url in world.urls))
+
+    def test_retailer_that_contains_the_makers_name_is_not_the_official_site(self):
+        # Contract: official-site evidence needs the page's owner to BE the maker (name plus no seller word) and the
+        # page's own text must not call itself a shop/reseller/unofficial. Bug: a substring test on "Miners Shop"
+        # with a matching title and copyright accepted a third-party shop and returned its quote as an official fact.
+        shop = (b"<title>%s</title><h1>%s</h1><p>%s</p><p>Miners makes jam.</p><footer>&copy; %s. All rights reserved.</footer>")
+        for title, owner, line in (
+            (b"Miners Shop", b"Miners Shop", b"Miners Shop is an independent shop selling Miners products."),
+            (b"Miners", b"Miners", b"We are an independent shop selling Miners products."),
+            (b"Miners", b"Miners", b"This site is not affiliated with the makers of Miners."),
+            (b"Miners", b"Miners", b"Miners products are available from our store."),
+            (b"Miners Shop", b"Miners Shop", b"Welcome."),
+        ):
+            with self.subTest(line=line):
+                world = World()
+                world.searches = {"Miners official site": [{"url": HOME, "title": "x"}]}
+                world.pages[HOME] = 200, "text/html", shop % (title, title, line, owner)
+                world.stubs["extract"] = [dict(slot="makes", value="jam", url=HOME, quote="Miners makes jam.")]
+                result = world.run(owner_maker="Miners")
+                self.assertFalse(result.facts)
+                self.assertEqual(result.receipt["outcome"], "no-confirmed-site")
+                self.assertEqual(result.receipt["identity"][0]["reason"], "not-the-makers-own-site")
+                self.assertEqual(world.requests, [])

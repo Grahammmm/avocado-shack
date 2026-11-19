@@ -20,6 +20,27 @@ ASSETS = "hass-maker-research/"
 STORY = frozenset({"makes", "founded", "nature"})
 BASE = re.compile(r"\b(?:based|located|headquartered) in ([^.!?;]+)", re.I)
 THIRD_PARTY = re.compile(r"\b(?:vendors?|directory|marketplace|stockists?|resellers?|retailers?|reviews?)\b", re.I)
+# Words that make the owner of a page a seller or a directory rather than the maker. The owner entity may
+# be the maker's name plus descriptors ("Miners Orchards"), never plus one of these ("Miners Shop").
+SELLER = re.compile(
+    r"\b(?:shops?|stores?|markets?|marts?|outlets?|emporiums?|depots?|boutiques?|malls?|retail\w*|resell\w*|dealers?|"
+    r"distribut\w+|wholesal\w+|trading|suppl(?:y|ies|iers?)|sellers?|merchants?|traders?|importers?|brokers?|agency|"
+    r"agents?|affiliates?|fans?|unofficial|vendors?|directory|marketplace|stockists?)\b")
+# Page text that says the page is not the maker's own. Checked on folded text; {name} is the folded maker name.
+CONTRARY = (
+    r"\b(?:un)?affiliated\b",
+    r"\bnot (?:\w+ )?(?:affiliated|associated|endorsed|sponsored|owned|operated|run|connected|official)\b",
+    r"\b(?:no|without) (?:\w+ )?(?:affiliation|association|connection|endorsement)\b",
+    r"\bunofficial\b|\bfan[- ]?(?:site|page|made|run)\b",
+    r"\b(?:independent(?:ly)?|third[- ]party|authori[sz]ed|licensed) (?:\w+ ){0,2}"
+    r"(?:shops?|stores?|retail\w*|resell\w*|dealers?|sellers?|stockists?|distribut\w+|merchants?|marketplace|"
+    r"directory|reviews?|blog|website|site)\b",
+    r"\b(?:shop|store|retailer|reseller|dealer|stockist|distributor|merchant|marketplace|directory) "
+    r"(?:for|of|selling|that sells|which sells|specializ\w+)\b",
+    r"\b(?:sells?|selling|sold|stocks?|stocking|carr(?:y|ies|ying)|resell\w*|retail\w*|offers?|offering|"
+    r"distribut\w+|supplies|supplying) [^.!?]{0,60}(?<![\w-]){name}(?![\w-])",
+    r"(?<![\w-]){name}(?![\w-])(?: \w+){0,3} (?:products?|goods|brands?) (?:are |is )?(?:available|sold|stocked)\b",
+)
 ABOUT = re.compile(r"(?:^|/)(?:about(?:-us)?|(?:our|the)-story|who-we-are)/?$", re.I)
 VOID = frozenset("area base br col embed hr img input link meta param source track wbr".split())
 
@@ -151,24 +172,38 @@ def _identity_field(value):
             and not cloud_codex.till_like(value))
 
 
+def _owner(entity, name):
+    """True when the claimed owner entity is the maker: its name plus, at most, non-seller descriptors."""
+    return _has(entity, name) and not SELLER.search(re.sub(re.escape(claims.fold(name)), " ", claims.fold(entity)))
+
+
+def _contrary(page, name):
+    # The page's own words can contradict its identity: a shop, directory or fan page says so in visible text.
+    patterns = [re.compile(p.replace("{name}", re.escape(claims.fold(name)))) for p in CONTRARY]
+    return any(p.search(claims.fold(text)) for text in (*page.blocks, *page.ownership) for p in patterns)
+
+
 def _own_site(page, name, town, markers):
     if not any(_has(title, name) for title in page.titles):
         return "name-mismatch"
     if THIRD_PARTY.search(urlsplit(page.url).path.replace("-", " ")) or any(THIRD_PARTY.search(t) for t in page.titles):
         return "not-the-makers-own-site"
-    # A name mentioned in a copyright line is insufficient: the owner of the
-    # copyright must be the maker, corroborated by the site's own identity.
+    # A name mentioned in a copyright line is insufficient: the owner of the copyright must be the maker
+    # itself (not a shop that merely contains its name), corroborated by the site's own identity and
+    # uncontradicted by anything the page says about itself.
     for footer in page.ownership:
         match = re.search(r"(?:©|\bcopyright\b)\s*(?:\d{4}(?:\s*[-–]\s*\d{4})?\s*)?([^.!?©|]+)", footer, re.I)
-        if match and _has(match[1], name) and any(claims.fold(match[1]) == claims.fold(t) for t in page.titles):
+        if match and _owner(match[1], name) and any(claims.fold(match[1]) == claims.fold(t) for t in page.titles):
             break
     else:
         if page.ownership or not ABOUT.search(urlsplit(page.url).path) or not any(
             (match := re.fullmatch(r"(?:We are|This is) ([^.?!]+)[.]", block, re.I))
-            and _has(match[1], name) and any(claims.fold(match[1]) == claims.fold(t) for t in page.titles)
+            and _owner(match[1], name) and any(claims.fold(match[1]) == claims.fold(t) for t in page.titles)
             for block in page.blocks
         ):
             return "not-the-makers-own-site"
+    if _contrary(page, name):
+        return "not-the-makers-own-site"
     if not any(_has(block, name) for block in page.blocks):
         return "name-mismatch"
     if town:
