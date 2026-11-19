@@ -54,7 +54,9 @@ class SaveAndMarginTests(CostTestCase):
                          f"For Hass avocado ({AVO}), using the cost you gave me today at 9 am.\n" + margins.say(margins.compute("24", "12", "5", "35")))
         self.assertEqual((self.drafts(), self.commits(), self.calls, self.editor.applies), ([], 0, [], 0))
         self.assertEqual(len(self.rows()), 1)  # margin stored nothing
-        self.assertIn(f"cost.{AVO}: 24.00 for 12 (since today at 9 am)", self.chat("memory", "memory-list"))
+        listing = self.chat("memory", "memory-list")  # AV2137-06: a saved cost is counted, never listed among the notes
+        self.assertNotIn(f"cost.{AVO}", listing)
+        self.assertTrue(listing.endswith("Costs saved: 1 (send costs)"), listing)
 
     def test_no_cost_saved_and_margin_does_not_create_the_memory_table(self):
         self.assertEqual(self.chat(f"margin {AVO} at 35%", "margin"), NONE)

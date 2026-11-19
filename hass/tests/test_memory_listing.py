@@ -169,6 +169,22 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
         self.assertNotEqual(self.say("memory of the hike"), "memory-list")
         self.replies()
 
+    def test_costs_are_counted_not_listed_and_never_starve_notes(self):  # AV2137-06
+        # Bug caught: cost.<id> rows taking the notes' 20 lines (Michael's own notes pushed out), or a footer at zero / miscounted.
+        for i in range(23): self.save(f"cost.p{i:02d}", "bad value")  # every active cost counts, readable or not
+        self.save("costume", "a note")  # looks like cost, is not the cost. namespace
+        self.save("my-cost", "a note")
+        self.save("alias.jam", f"product:{AVO}")
+        self.save("zz-owner-note", "kept")
+        self.conv.memory.forget("cost.p00")  # a forgotten cost is not counted
+        out = self.listing().splitlines()
+        self.assertEqual(out[:4], ["Notes I'm keeping:", "- costume: a note (since today at 9 am)", "- my-cost: a note (since today at 9 am)",
+                                   "- zz-owner-note: kept (since today at 9 am)"])
+        self.assertEqual(out[4:], ["Nicknames:", "- jam means Hass avocado", "Costs saved: 22 (send costs)"])
+        self.assertNotIn("cost.p", "\n".join(out))
+        for i in range(1, 23): self.conv.memory.forget(f"cost.p{i:02d}")
+        self.assertNotIn("Costs saved", self.listing())
+
     def test_alias_cap_doc_and_help_are_tied(self):
         self.assertEqual(conversation.ALIAS_LIST_MAX, 20)
         self.assertEqual(voice.plain(conversation.help_detail("notes")), "notes - lists your notes")  # AV1052-12: via `help notes`

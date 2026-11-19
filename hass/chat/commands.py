@@ -29,7 +29,8 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(photos to take)"  # AV0222-04 (H10/H17): group 20
                         r"|(backlog)"  # SKILLS-FW-3: group 21 (what I could not do yet; read-only)
                         r"|(again)(?:\s+((?s:.*)))?"  # AV2152-03 (H05/H16): groups 22/23; the code is checked by _again, never guessed
-                        r"|(shelf)(?:\s+(.*))?")  # AV1052-05 (H17): groups 24/25; one line, the shelf is checked by _shelf
+                        r"|(shelf)(?:\s+(.*))?"  # AV1052-05 (H17): groups 24/25; one line, the shelf is checked by _shelf
+                        r"|(costs)")  # AV2137-06 (F03/H15): group 26; the whole message only, so `costs are up` stays an ordinary message
 
 SHELF_NOT_A_NAME = frozenset("report specials special check chek checked done finished in out then stock sold".split())  # AV1052-05: words that make "shelf ..." a stock update or report
 
@@ -62,6 +63,7 @@ HELP_ENTRIES = (
     ("alias", "Notes", (), (q("alias jam: Linn's preserves") + " - a nickname for a product or maker",)),
     ("cost", "Notes", (), (q("cost Hass avocado: 24 for 12") + " - the price you pay, kept private",)),
     ("backlog", "Notes", (), (q("backlog") + " - what I couldn't do yet",)),  # SKILLS-FW-3
+    ("costs", "Notes", (), (q("costs") + " - the purchase costs you've saved",)),  # AV2137-06
     ("history", "Control", (), (q("history") + " - what we changed lately", q("history hours") + " - look for one change")),
     ("status", "Control", ("did it work", "did that work", "did my change work"),
      (q("status") + " - what I did last and what is waiting for you",)),
@@ -211,6 +213,7 @@ def parse_command(text: str, *, listing_names=False):
     if norm in UNDO_PHRASES: return "undo", None  # AV0222-07: the same as a bare undo
     match = COMMAND_RE.fullmatch(norm)
     if not match: return None
+    if match[26]: return "costs", None  # AV2137-06
     if match[24]:  # AV1052-05: a shelf name or an unknown shelf gets the read-only chooser; a stock update or report ("shelf chek done. milk in, cheese out", "shelf report then specials") stays with the interpreter
         rest = (match[25] or "").strip()
         if re.search(r"[,.;:?!]", rest) or set(rest.split()) & SHELF_NOT_A_NAME: return None
@@ -272,7 +275,7 @@ def parse_memory(text: str):
     return ("memory", None, None) if match and match[5] else None
 
 
-READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "backlog", "look", "shelf"}
+READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "backlog", "look", "shelf", "costs"}
 
 
 def _asked(text: str):
