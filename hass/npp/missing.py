@@ -124,14 +124,15 @@ class MissingInfo:
         self.essentials = {rule["id"]: rule for rule in self.rules["essentials"]}
 
     def decide(self, reading=None, *, price=OwnerPrice(), owner_item=None, owner_texts=(), products=(), makers=None,
-               clover=None, ask_counts=None, answered=(), duplicate_confirmed=False, near_confirmed=False):
+               clover=None, ask_counts=None, answered=(), duplicate_confirmed=False, near_maker_confirmed=None):
         """Return a pure decision over S2 evidence and projected inputs.
 
         `clover` is an optional already-loaded local Snapshot, not a client; only
         names are inspected. Receipts can use rule IDs, not finance or till rows.
         `owner_item` is a field explicitly set by the owner, not a caption dump.
         History inputs are durable question IDs supplied by the composer.
-        `near_confirmed` is the owner's "yes" to the near_maker question: the matched record is reused.
+        `near_maker_confirmed` is the owner's answer to the near_maker question: True reuses the matched record,
+        False keeps the owner-named maker as new, None (unanswered) asks once.
         """
         evidence, makers, ask_counts = reading or {}, makers or {}, ask_counts or {}
         templates = self.replies["questions"]
@@ -178,8 +179,10 @@ class MissingInfo:
         note = ""
         if maker.state == "near":
             assert maker.record is not None
-            if near_confirmed:
+            if near_maker_confirmed is True:
                 maker = Maker("known", maker.phrase, maker.key, maker.record)  # owner confirmed the existing maker
+            elif near_maker_confirmed is False:
+                maker = Maker("new", maker.phrase)  # owner said it is a different maker; S4 may research it
             elif not add("near_maker", templates["ask_near_maker"].format(maker=maker.record["name"]), 1):
                 # Do not treat an unconfirmed near-match as grounds for a research call.
                 maker = Maker("near", maker.phrase)

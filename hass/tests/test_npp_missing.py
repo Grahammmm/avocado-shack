@@ -73,11 +73,23 @@ class MissingTests(unittest.TestCase):
         near = self.rules.decide(jam, price=price, makers=makers, owner_texts=("made by Miner",))
         self.assertEqual(near.questions, (("near_maker", "Is that the Miners already on the website?"),))
         # A "yes" to near_maker keeps the matched record (bug: it was dropped and read as no maker).
-        confirmed = self.rules.decide(jam, price=price, makers=makers, owner_texts=("made by Miner",), near_confirmed=True)
+        confirmed = self.rules.decide(jam, price=price, makers=makers, owner_texts=("made by Miner",), near_maker_confirmed=True)
         self.assertEqual((confirmed.maker.state, confirmed.maker.key, confirmed.maker.record), ("known", "miners", makers["miners"]))
         self.assertEqual(confirmed.questions, ())
         self.assertFalse(confirmed.maker.research_allowed)
         self.assertTrue(confirmed.ready)
+        # An explicit "no" is not an unanswered question (bug: False read as unanswered and left state near, research off);
+        # the owner-named maker stays new and may be researched; an unanswered, already-asked one stays near.
+        rejected = self.rules.decide(jam, price=price, makers=makers, owner_texts=("made by Miner",),
+                                     ask_counts={"near_maker": 1}, near_maker_confirmed=False)
+        self.assertEqual((rejected.maker.state, rejected.maker.phrase, rejected.maker.record), ("new", "Miner", None))
+        self.assertEqual(rejected.questions, ())
+        self.assertTrue(rejected.maker.research_allowed)
+        self.assertTrue(rejected.ready)
+        unanswered = self.rules.decide(jam, price=price, makers=makers, owner_texts=("made by Miner",),
+                                       ask_counts={"near_maker": 1}, near_maker_confirmed=None)
+        self.assertEqual((unanswered.maker.state, unanswered.maker.record), ("near", None))
+        self.assertFalse(unanswered.maker.research_allowed)
         # No owner-named maker (bug: absent allowed research) and an unconfirmed near match never license research.
         self.assertEqual(self.rules.decide(jam, price=price, makers=makers).maker.state, "absent")
         self.assertFalse(self.rules.decide(jam, price=price, makers=makers).maker.research_allowed)

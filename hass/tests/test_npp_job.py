@@ -403,3 +403,22 @@ class JobTests(unittest.TestCase):
         self.assertTrue((images / stray.relative_to(self.root)).is_file())
         self.assertFalse((images / orig.relative_to(self.root)).exists())
         self.assertFalse(json.loads((target / "config.json").read_text())["settings"]["npp"])
+
+    def test_restore_missing_second_attachment_turns_npp_off(self):
+        # Contract: npp stays on only if every original in the open job's request is in the backup, not just photo_sha
+        # (bug: first photo present, second attachment absent, npp left on and the job resumed incomplete).
+        self.say("sell $2", photos=2)
+        self.work()
+        attached = json.loads(self.conv.db.execute("SELECT attachments_json FROM open_requests WHERE request_id=?",
+                                                   (self.job()["open_request_id"],)).fetchone()[0])
+        self.assertEqual((len(attached), attached[0]), (2, self.job()["photo_sha"]))
+        for path in (self.root / "originals" / attached[1][:2]).glob(f"{attached[1]}.*"):
+            path.unlink()
+        out = self.root.parent / "backups"
+        out.mkdir(mode=0o700)
+        saved = Path(statebackup.create(self.repo.state, out, now=self.now)["backup"])
+        restored_wt = self.root.parent / "restored-wt"
+        git(self.repo.main, "worktree", "add", "-qb", "hass/npp-drill", str(restored_wt))
+        target, images = self.root.parent / "restore", self.root.parent / "restore-media"
+        self.assertEqual(statebackup.restore(saved, target, restored_wt, media_into=images)["result"], "ok")
+        self.assertFalse(json.loads((target / "config.json").read_text())["settings"]["npp"])

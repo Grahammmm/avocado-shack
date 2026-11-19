@@ -294,12 +294,21 @@ def _intact(path: Path) -> bool:
         return False
 
 def _jobs_resumable(db_path: Path, mrels) -> bool:
-    """True only if every open NPP job's source photo (its photo_sha) is in the backup's media; any doubt is False."""
+    """True only if every original an open NPP job resumes from (its photo_sha and every attachment of its open request)
+    is in the backup's media; any doubt is False. A job whose request row is gone expires on its next turn and needs only photo_sha."""
+    shas = []
     try:
         with _connect_ro(db_path) as db:
             if not db.execute("SELECT 1 FROM sqlite_master WHERE name = 'npp_jobs'").fetchone(): return True
-            shas = [row[0] for row in db.execute("SELECT photo_sha FROM npp_jobs WHERE closed_at IS NULL")]
-    except sqlite3.DatabaseError: return False  # completeness cannot be established
+            has_requests = db.execute("SELECT 1 FROM sqlite_master WHERE name = 'open_requests'").fetchone() is not None
+            for sha, request_id in db.execute("SELECT photo_sha, open_request_id FROM npp_jobs WHERE closed_at IS NULL").fetchall():
+                shas.append(sha)
+                row = db.execute("SELECT attachments_json FROM open_requests WHERE request_id = ?", (request_id,)).fetchone() if has_requests else None
+                if row is not None:
+                    attached = json.loads(row[0])
+                    if not isinstance(attached, list): return False
+                    shas.extend(attached)
+    except (sqlite3.DatabaseError, ValueError, TypeError, RecursionError): return False  # completeness cannot be established
     have = {m[1] for r in mrels if (m := re.fullmatch(rf"{ORIG}[0-9a-f]{{2}}/([0-9a-f]{{64}})\.(?!json$)\w+", r))}
     return all(isinstance(sha, str) and sha in have for sha in shas)
 
