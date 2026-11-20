@@ -52,6 +52,7 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 - `memory` shows the first **20** <!-- conversation.MEMORY_LIST_MAX --> saved notes and says how many more there are.
 - `memory` shows the first **20** <!-- conversation.ALIAS_LIST_MAX --> aliases apart from the notes and says how many more there are.
 - `shelf <name>` shows up to **60** <!-- chat.site_pack.SHELF_MAX --> active products on that shelf, then says how many more there are; hidden and held products are left out.
+- `costs` shows the newest **20** <!-- conversation.COSTS_LIST_MAX --> saved purchase costs and says how many more there are; `memory` leaves saved costs out of the notes, so they never use up its note lines, and only counts them.
 - A search by name offers at most **10** <!-- ops.catalog.MAX_CANDIDATES --> matching listings; use more words to narrow it.
 - `find` takes at most **60 characters** <!-- conversation.FIND_TEXT_MAX --> of words to look for.
 - An alias name is at most **60 characters** <!-- conversation.ALIAS_NAME_MAX -->.
