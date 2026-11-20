@@ -173,7 +173,7 @@ class HandlerTests(unittest.TestCase):
             products=[{"id": "p1", "name": "Plum jam", "description": "x" * 2120, "image": "a.jpg", "status": "active",
                        "category": "pantry", "producerKey": "m"},
                       {"id": "p2", "name": "Fig jam", "description": "Figs.", "image": "a.jpg", "status": "active", "category": "pantry"}],
-            makers={"m": {"name": "Jam Lady", "place": "Cambria, California", "story": "   "}}, community={"events": []})
+            makers={"m": {"name": "Jam Lady", "place": "Cambria, California", "story": "   "}}, community={"events": []}, store={})
 
     def ctx(self, **kw):
         return types.SimpleNamespace(**{"content": self.content, "site_dir": Path(self.site.name), "now": self.NOW, **kw})
