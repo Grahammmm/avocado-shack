@@ -41,8 +41,8 @@ PLACEHOLDERS = frozenset({"null", "none", "nil", "n/a", "na", "unknown", "not pr
 _UNIT = r"(?:fl\.?\s*oz|oz|lbs?|g|kg|mg|ml|l|ct|count|pack|pk)"
 AMOUNT_RE = re.compile(r"[$€£]?\s*\d+(?:[.,]\d+)?\s*" + _UNIT + r"?\.?",
                        re.IGNORECASE)  # a price or a size (amount + unit), not a name
-FRACTION_SIZE_RE = re.compile(r"(?:\d+\s+)?(?:\d+\s*[/\u2044]\s*\d+|[\u00bc-\u00be\u2150-\u215e])\s*" + _UNIT + r"\.?",
-                              re.IGNORECASE)  # RF1025-13: a whole-value fractional size ("1 1/2 oz", "½ lb")
+FRACTION_SIZE_RE = re.compile(r"(?:(?:\d+\s+)?\d+\s*[/\u2044]\s*\d+|(?:\d+\s*)?[\u00bc-\u00be\u2150-\u215e])\s*"
+                              + _UNIT + r"\.?", re.IGNORECASE)  # RF1025-13: a whole-value fractional size ("1 1/2 oz", "1½ lb")
 MULTIPLIED_SIZE_RE = re.compile(r"\d+\s*[xX\u00d7]\s*\d+(?:[.,]\d+)?\s*" + _UNIT + r"\.?",
                                 re.IGNORECASE)  # RF1530-18: a whole-value multiplied size ("2 x 500 ml", "6 × 12 oz")
 
