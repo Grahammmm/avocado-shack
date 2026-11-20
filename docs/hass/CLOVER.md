@@ -233,8 +233,18 @@ write card must also hold a separate write token.
 | `cost`, tax rates, modifiers, employee or customer fields | n/a | **dropped on read** (the mapper is a whitelist) |
 | (none) | `brand`, `producerKey`, `description`, `image`, `displayBrand` | site-only; never sent to Clover |
 
-**The link.** The private table `<state>/clover/links.json` (mode 0600, never in Git, rebuilt by `link` messages and by the SKU recorded at creation) holds
+**The link.** The private table `<state>/clover/links.json` (mode 0600, never in Git, written only by the `link` commands below and by the SKU recorded at creation) holds
 `{product id: {"cloverId": ..., "sku": ...}}`. A site product has no price, SKU or count and the content model is closed, so this table is the only place the two sides meet.
+HASS-LINK adds the commands (`hass/clover/links.py`; cache and local products only, no token, no network, no editor call, so linking or unlinking never sets a website word):
+
+* Operator: `python3 -B hass/clover/cli.py link suggest --host host.json` suggests **exact names only** (the step-3 rule below): exactly one unlinked active site product and exactly one
+  unlinked till item with that name. It saves one draft (`<state>/clover/link-draft.json`: code, the cache's as-of, the pairs) and a private list
+  `<state>/clover/reports/link-suggest.md` for Mike to read; stdout is counts and the code, never a name. Same-name clashes (a name on both sides with more than one item on either side: every site product and every till item of that name) and one-sided items are listed, never linked; items sharing a name carry a label unique across the whole name group, site and till together (site product id; till SKU only when no other item of that name shares it, else the till item id; a label equal to another's becomes `site <id>` / `till <item id>`).
+* Owner only (his private chat; another sender or a group changes nothing): `link all <code>` is the one yes that writes **every** pair in the draft at once. It is refused as stale,
+  writing nothing, when the cache changed since the draft or any pair is no longer an exact unlinked match; the list must then be made again. `link X to <SKU>` links one exact
+  website name (or product id, for two products with one name) to one exact till SKU (both unlinked); `unlink X` removes a link.
+* Website stock words (STOCK-SITE): a newly linked product is new to `stock_site`, so the next good read proposes the usual one-line preview. The owner answers `stock yes <code>` or
+  `stock no <code>` (the `stk-...` code); either calls `stock_site.approve` / `decline` once. An unknown, stale, finished or already approved code makes no call.
 
 **Matching order** (`hass.clover.mapper.match`): (1) the stored link, (2) the SKU in that link when the item's id changed (item recreated), (3) the **exact** name, ignoring only
 letter case, spacing and curly apostrophes (accents stay significant), and only when exactly one site product and exactly one till item hold that name. A name match is good for
