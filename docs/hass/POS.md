@@ -17,6 +17,7 @@ the read token and the write journal.
 
 "Stock words waiting" is not available yet (`stockWordsWaiting` is null in `pos-totals.json`): a stock word that disagrees with the till is not a
 pending change, and the real pending/deferred count arrives with the STOCK-SITE totals integration. "Linked" is the saved links less the broken ones.
+Links are made with `link suggest` and the owner's `link` commands (docs/hass/CLOVER.md section 2, "The link").
 
 ## What sold: count drops, and it includes stock edits
 

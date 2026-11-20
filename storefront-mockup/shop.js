@@ -38,9 +38,9 @@ function checkAge(checked,today){const a=dayNumber(checked),t=dayNumber(today);r
 function selectionLine(checked,today,phone){const age=checkAge(checked,today);if(age===null)return null;
  const call=/^\d{10}$/.test(phone||'')?` call (${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)} or`:' call or';
  return `Selection last checked by Michael on ${dayText(checked)}${age>STALE_AFTER_DAYS?` (more than a week ago -${call} visit to confirm)`:''}.`}
-function availabilityWord(state,on,checked,today){const age=checkAge(checked,today),o=dayNumber(on);
- if(age===null||o===null||o>dayNumber(checked)||typeof state!=='string'||!Object.hasOwn(AVAILABILITY_WORDS,state))return null;
- return o===dayNumber(checked)&&age<=STALE_AFTER_DAYS?AVAILABILITY_WORDS[state]:`Last confirmed ${dayText(on)}`}
+function availabilityWord(state,on,checked,today){const age=checkAge(checked,today),o=dayNumber(on),t=dayNumber(today);
+ if(age===null||o===null||o>t||typeof state!=='string'||!Object.hasOwn(AVAILABILITY_WORDS,state))return null;
+ return o>=dayNumber(checked)&&t-o<=STALE_AFTER_DAYS?AVAILABILITY_WORDS[state]:`Last confirmed ${dayText(on)}`}
 function refreshFreshness(now=new Date()){const today=pacificDay(now),checked=typeof catalogFreshness==='object'&&catalogFreshness?catalogFreshness.selectionCheckedOn:null;
  catalog.forEach(p=>{const w=availabilityWord(p.availabilityState,p.availabilityCheckedOn,checked,today);if(w===null)delete p.availability;else p.availability=w});
  const note=document.querySelector('.selection-checked'),line=note&&selectionLine(note.dataset.checkedOn,today,note.dataset.phone);if(line)note.textContent=line}

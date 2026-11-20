@@ -8,13 +8,14 @@ pass only eligible projections to remote readers. Stages do not write job state 
 """
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import re
 
 from hass import photo_polish
 from hass.npp.receipt import Artifacts, confirmation, instant, read_artifact
+from hass.skills import openreq
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS npp_jobs(
@@ -52,6 +53,31 @@ EXPIRED = "That question expired. Please send the photo again to start over."
 
 def dump(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def job_photos(db, job):
+    """Every original photo sha an open job reads: its photo_sha plus the attachments of its stored request.
+
+    The request is read through OpenRequests, the same accessor Jobs.request uses, so these are the shas Jobs.pump
+    hands the stages as Work.request["attachments"]. ``db`` rows must be sqlite3.Row. A request that is missing or
+    cannot be read raises ValueError (callers fail closed); expiry is ignored: a restore must keep what the row names.
+    """
+    sha = job["photo_sha"]
+    if not isinstance(sha, str):
+        raise ValueError("photo sha unreadable")
+    store = openreq.OpenRequests(db)
+    row = store._row("request_id = ?", job["open_request_id"])
+    if row is None:
+        raise ValueError("request missing")
+    try:
+        if not isinstance(json.loads(row["attachments_json"]), list):  # _view would quietly read a non-list as no photos
+            raise ValueError
+        shas = store._view(row, datetime(1970, 1, 1, tzinfo=timezone.utc))["attachments"]
+    except (TypeError, ValueError, KeyError, RecursionError):
+        raise ValueError("request unreadable") from None
+    if not all(isinstance(s, str) and openreq.SHA_RE.fullmatch(s) for s in shas):
+        raise ValueError("request unreadable")
+    return list(dict.fromkeys([sha, *shas]))
 
 
 @dataclass(frozen=True)
