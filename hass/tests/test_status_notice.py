@@ -64,7 +64,7 @@ class NoticeLineTests(NoticeTestCase):
         draft, _reply = self.propose("hours")
         status = self.status()
         self.assertEqual(self.only(status), [LINE])
-        self.assertEqual(status, ["Everything is ready.", status[1], "Your last shelf check was Monday, November 2.", LINE])
+        self.assertEqual(status, ["Everything is ready.", status[1], "Your last shelf check was Monday, November 2.", "On the shelves: 0 available, 0 running low, 0 sold out, 170 not confirmed.", LINE])
         self.assertTrue(status[1].startswith("Waiting for your yes:"))
         report = self.report()
         content = load_content(self.repo.wt / "hass" / "content")
