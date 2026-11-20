@@ -107,7 +107,7 @@ class PostAvailabilityTests(StoreMixin, ConversationTestCase):
                 text, files = self.post(f"post {self.ids[0]}")
                 notice = STOCK.format(name=name, word=shown, day="Monday, November 2")
                 self.assertEqual(text, f"{WARNING}\n{notice}\n{self.body(0)}")
-                self.assertEqual(files, [str(self.site / "post-test" / "real.jpg")])
+                self.assertEqual([Path(path).resolve() for path in files], [(self.site / "post-test" / "real.jpg").resolve()])
                 self.assertEqual((self.drafts(), self.commits(), self.approvals()), ([], 0, 0))
 
     def test_name_post_gets_the_same_reply_as_the_id(self):
