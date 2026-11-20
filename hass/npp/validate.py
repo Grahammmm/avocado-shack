@@ -4,7 +4,7 @@ from hashlib import sha256
 import re
 
 from hass import claims, live_policy, publish_live
-from hass.content_model import CATEGORIES, TEXT_LIMITS, valid_supplier
+from hass.content_model import CATEGORIES, TEXT_LIMITS, iso_day, shop_today, valid_supplier
 from hass.house_style import OWNER_IMAGE_RE
 from hass.npp import private_numbers as numbers
 from hass.npp.copy import words
@@ -169,12 +169,13 @@ class Verdict:
 
 def listing(writer, ctx, copy, draft, *, finance, origin, makers, live_site, photo_sha,
             frozen_sha, rendered_sha, picture_read, card_nodes=None, price_index=None, label_words=(),
-            card_evidence=None, card_png=None):
+            card_evidence=None, card_png=None, added_on_now=None):
     """Check a fully assembled S7/S8 listing; this function cannot publish or send.
 
     `makers` is the existing catalog, `photo_sha` is the source photo and `frozen_sha`
     and `rendered_sha` are independent evidence from S6 and S8. G calls with the actual
     prepared draft and DOM text; never use the expected text in place of a capture.
+    `added_on_now`, when supplied, is the clock reading used by the editor's product.add.
     """
     problems, warnings = [], []
     if not finance.private <= ctx.private or not writer.conform(copy.text, copy.selections, ctx):
@@ -219,12 +220,15 @@ def listing(writer, ctx, copy, draft, *, finance, origin, makers, live_site, pho
     if not price or not finance.price_span or product.get('sellingPrice') != price:
         problems.append('price-provenance')
     private = ctx.private | finance.private
-    # Check record text, including non-template fields. The only number exceptions are
-    # the conforming copy fields and sellingPrice, separately verified above.
+    # Only the editor-stamped shop day can extend the existing copy/price exceptions.
+    stamped_day = shop_today(added_on_now) if added_on_now is not None else None
     for key, value in {**product, 'origin': origin}.items():
         if key in {'id', 'image', 'sellingPrice', 'labelSource', 'ownerSource'}:
             continue
-        if isinstance(value, str) and (_contact(value) or numbers.problem(value, private) and key not in {'name', 'description', 'imageAlt'}):
+        if not isinstance(value, str):
+            continue
+        stamped = key == 'addedOn' and stamped_day is not None and iso_day(value) == stamped_day
+        if _contact(value) or (not stamped and numbers.problem(value, private) and key not in {'name', 'description', 'imageAlt'}):
             problems.append('public-text')
     for key, value in maker.items():
         if key == 'story' and new_makers:

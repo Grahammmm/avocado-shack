@@ -1,5 +1,5 @@
 """Exercise the actual stage port and owner runner; no model or live sender is reachable."""
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -130,6 +130,23 @@ class StageTests(unittest.TestCase):
         actual = self.conv.editor.show(draft['change_id'])['draft']
         self.assertEqual(actual['draft_hash'], draft['draft_hash'])
         self.assertEqual(self.case.version(1)['draft_hash'], draft['draft_hash'])
+        self.assertEqual(self.case.version(1)['state'], 'queued')
+
+    def test_added_on_uses_candidate_clock_even_if_capture_crosses_shop_midnight(self):
+        # A second read at S7 would refuse the real product.add stamp after midnight.
+        self.case.now = datetime(2026, 11, 21, 7, 59, 55, tzinfo=timezone.utc)
+
+        def capture(*args, **kwargs):
+            self.case.now += timedelta(seconds=10)
+            return self.capture(*args, **kwargs)
+
+        self.conv.previewer = SimpleNamespace(capture=capture)
+        self.start_render()
+        self.case.scheduler.run()
+        self.no_draft()
+        self.case.work()
+        [draft] = self.saved
+        self.assertEqual(draft['records'][-1]['after']['addedOn'], '2026-11-20')
         self.assertEqual(self.case.version(1)['state'], 'queued')
 
     def test_stale_base_and_late_checks_never_queue_or_leave_a_draft(self):

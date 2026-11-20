@@ -1,5 +1,5 @@
 """Production NPP composition. Workers build evidence; only Jobs may retain a draft."""
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 import hashlib
 import json
@@ -207,11 +207,14 @@ class ProductionStages(Stages):
         if len(png) > media.MAX_BYTES or not png.startswith(media.KINDS['png']):
             return None
         image = shot['picture']
+        # SiteEditor passes one clock reading to product.add and the candidate's
+        # created_at. Do not read the clock again after capture (it may be a new shop day).
+        added_on_now = datetime.fromisoformat(draft['created_at'])
         verdict = validate.listing(self.writer, context, written, draft, finance=finance, origin=origin,
                                    makers=content.makers, live_site=self.c.settings.get('liveSite'), photo_sha=sha,
                                    frozen_sha=frozen.image_sha256, rendered_sha=hashlib.sha256(image).hexdigest(),
                                    picture_read=picture.read_text(image), label_words=label_words,
-                                   card_evidence=shot['cardEvidence'], card_png=png)
+                                   card_evidence=shot['cardEvidence'], card_png=png, added_on_now=added_on_now)
         if not verdict.ok:
             return None
         parts = {}
