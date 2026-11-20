@@ -135,6 +135,16 @@ class ReleaseCase(unittest.TestCase):
             log = git(self.bare, 'log', '--format=%s')
             self.assertEqual(log.count('hass live: ' + j['change_id']), 1)
 
+    def test_a_listing_job_gets_its_posted_line_instead_of_the_ordinary_live_message(self):
+        # Contract NPP-G S13: when the live check sees a listing job's change, the owner gets the conversation's own one-line
+        # `Posted: <link>` (no picture); an ordinary change keeps "Your change is on the website now."
+        # Bug: notify() always sent the ordinary line, so the S13 confirmation was never sent.
+        self.live.conv.npp_posted = lambda cid: 'Posted: https://example.test/?item=x#market (say undo to take it down)'
+        self.assertEqual(self.apply()['result'], 'applied')
+        self.settle()
+        self.assertEqual(self.entry()['state'], 'live')
+        self.assertEqual(self.messages[-1], ('Posted: https://example.test/?item=x#market (say undo to take it down)', []))
+
     def test_gate_stop_lock_policy_site_and_exact_baseline(self):
         d = self.draft()
         stop = Path(self.cfg['stopFile'])

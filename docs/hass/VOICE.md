@@ -38,6 +38,8 @@ prompt (`VOICE_RULES` in `hass/interpreter_prompt.py`).
 
 ## How it is enforced
 
+* **Two stated exceptions for `held` (AV2137-07).** The product ids, names, hold reasons and source links it lists are the shop's recorded facts, quoted with `voice.quote()` like any other words of Mike's. Its last line, `voice.HELD_GUIDANCE`, names the operator by request: the check ignores the word `operator` only on a line that is exactly that sentence (`voice.check` removes such a line before it looks), so an extra sentence, an altered footer or any other word or pattern in the same message is still caught, and the word stays banned everywhere else.
+
 * `voice.check(text)` returns the rules a message breaks (a word list, plus patterns for ids, counts, codes, file names, state names,
   time zones, computer names, emoji, length). Words Mike typed himself, and commands he has to type, are marked with
   `voice.quote()` and are never judged.

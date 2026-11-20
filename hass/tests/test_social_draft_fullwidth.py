@@ -14,7 +14,7 @@ TAGGED = tags.TAGGED
 FROM = tags.FROM
 MARKS = ("\uff03", "\uff20", "\ufe5f", "\ufe6b")
 # Golden captured from main 0f374c0 (before RF1240-19) for a clean product with an imageAlt.
-MAIN_GOLDEN = {"draft": True, "illustration": True, "image": "assets/products/p1.webp", "alt": "A round loaf",
+MAIN_GOLDEN = {"draft": True, "illustration": True, "availability": None, "image": "assets/products/p1.webp", "alt": "A round loaf",
                "caption": "Sourdough\nA crust worth tearing.\nFrom Brian's in Atascadero, California.\n\n#AvocadoShack #Bread"}
 
 
@@ -46,7 +46,7 @@ class SocialDraftFullWidthTests(unittest.TestCase):
             for text in (f"Size {mark} 2", f"Box{mark}", f"A {mark}-shaped jar"):
                 with self.subTest(mark=hex(ord(mark)), text=text):
                     out = self.build("p1", product("p1", description=text, imageAlt=text))
-                    self.assertEqual(out, {"draft": True, "illustration": True, "image": "assets/products/p1.webp", "alt": text,
+                    self.assertEqual(out, {"draft": True, "illustration": True, "availability": None, "image": "assets/products/p1.webp", "alt": text,
                                            "caption": f"Sourdough\n{text}\n{FROM}\n\n#AvocadoShack #Bread"})
 
     def test_ascii_cases_keep_todays_results(self):

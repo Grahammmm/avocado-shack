@@ -35,7 +35,7 @@ OWNER_FACING = {
     # AVB-12: the pack commands and the proposal wording moved out of conversation.py into hass/chat/
     "chat/core_pack.py": ["_history_search", "_show", "_memory", "_memory_words", "_alias", "_alias_lines", "_costs", "_control", "_status", "_again",
                           "_reader_failed_lines", "_waiting_lines", "_photo_lines", "_hike_lines"],
-    "chat/site_pack.py": ["_find", "_listing", "_photos_to_take", "_hidden"],
+    "chat/site_pack.py": ["_find", "_listing", "_photos_to_take", "_hidden", "_held"],
     "chat/reports_pack.py": ["_report", "_margin", "_margin_saved", "_post", "_post_hike", "_pick", "_cost", "_purchase_product"],
     "chat/wording.py": ["_added", "_change_line", "_record_lines", "proposal_text", "_summary", "_shown", "_subject"],
     "owner_answers.py": "all", "media.py": ["Refused"], "claims.py": ["question"], "live_policy.py": ["_plain_reason", "refusal"],
@@ -180,7 +180,7 @@ class EveryTemplate(unittest.TestCase):
                  *[t.format(id=q("Hass avocado")) for t in conversation.POST_REFUSALS.values()],
                  *[t.format(id=q("Point Buchon")) for t in conversation.HIKE_REFUSALS.values()],
                  conversation.POST_CANT.format(id=q("Hass avocado")), interpret_check.UNDO_GUIDANCE, interpret_check.PRICE_REPLY,
-                 interpret_check.PLAIN_TEXT_REPLY, interpret_check.CANT_DO_YET, voice.SAFE_LINE, voice.GENERIC_REFUSAL,
+                 interpret_check.PLAIN_TEXT_REPLY, interpret_check.CANT_DO_YET, voice.SAFE_LINE, voice.HELD_GUIDANCE, voice.GENERIC_REFUSAL,
                  *[sentence for _rx, _code, sentence in voice.REASONS], owner_answers.UNDER_WAY, owner_answers.UNKNOWN_STATE,
                  owner_answers.NOT_LIVE, owner_answers.LIVE_SHOWN, owner_answers.LIVE_UNKNOWN, owner_answers.LIVE_UNCONFIRMED,
                  owner_answers.LIVE_NOT_PUBLISHED.format(reason=owner_answers.live_reason("the release was interrupted")),

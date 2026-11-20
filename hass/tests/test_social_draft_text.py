@@ -71,7 +71,7 @@ class SocialDraftTextTests(unittest.TestCase):
 
     def test_happy_path_byte_identical(self):
         self.load(product("p1"))
-        self.assertEqual(self.run_cli(), (0, {"draft": True, "illustration": True, "image": "assets/products/p1.webp", "alt": "Sourdough",
+        self.assertEqual(self.run_cli(), (0, {"draft": True, "illustration": True, "availability": None, "image": "assets/products/p1.webp", "alt": "Sourdough",
                                               "caption": HAPPY_CAPTION}))
 
 

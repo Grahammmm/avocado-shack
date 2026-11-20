@@ -22,10 +22,10 @@ from hass.social_message import classify_social  # noqa: E402
 from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, nl_prep, voice  # noqa: E402
 from hass import capabilities, photo_polish, stagelog, transcript  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
-from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
+from hass.skills import dispatch as dispatch_mod, intake_simple, item_intake, openreq  # noqa: E402
 from hass.clover import approvals as till_approvals  # noqa: E402
 from hass import npp as npp_package  # noqa: E402
-from hass.npp import job as listing_jobs  # noqa: E402
+from hass.npp import job as listing_jobs, reply as npp_reply  # noqa: E402
 from hass.npp.receipt import instant as npp_instant  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
 # imported back here, so hass.conversation.<name> still works for every caller and test.
@@ -1285,7 +1285,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(NEAR_STOP_REPLY if near == "stop" else NEAR_RESUME_REPLY)
             self._record(msg, "near-control")
             return "near-control", None
-        self._close_asks(now)  # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten (FW-3: and a closed one older than 24 h)
+        if not (command and command[0] == "held"): self._close_asks(now)  # AV2137-07: listing held products sweeps nothing
+        # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten (FW-3: and a closed one older than 24 h)
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
@@ -1295,7 +1296,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         late = cutoff != now and self._forwarded_late(msg)  # HASS-SEC-2 (L5): forwarded long after it was sent
         if late: cutoff = now  # ... judged when it arrived, never at its send time
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog", "shelf", "look", "costs")
+        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog", "shelf", "look", "costs", "held")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         if bulk is not None and command is None:  # AV1052-08: before the interpreter, till and memory; works paused and at the daily cap
             if bulk == "reject": self._expire(expired)
@@ -1520,12 +1521,41 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             disposition = "no-target"
         elif (jobs.stages is not None and len(text) <= MAX_OWNER_TEXT and not HOSTILE_RE.search(text)
               and (text == "?" and jobs.needs_retry(active) or not command and jobs.stages.takes_turn(text, active["state"]))):
-            public, fields = item_intake.caption_answers("" if text == "?" else text, {"photo_fields": self._intake_fields})
+            public, fields = self._npp_words(text)
             disposition = jobs.input(msg, self._asker, accepted or now, now, item_intake.without_unresolved_finance(public), fields)
         if disposition is not None:
             self._record(msg, disposition)
             return disposition, None
         return None
+
+    def _npp_words(self, text):
+        """(public words, private finance slots) of an owner turn while a listing job is open. A plain-words price edit
+        (\"make it $4\", \"wait $4.50\", \"actually make it 4 bucks\") is read by the F4 pattern the legacy edit uses, as an
+        edit and not as a photo caption; anything else is parsed as before."""
+        words = " ".join(text.split())
+        if (match := intake_simple.PRICE_EDIT.fullmatch(words)) and (value := item_intake._parse_money(match["amount"])) is not None:
+            fields = {"price": value}
+            if match["unit"]:
+                fields["sold_by"] = "pound" if re.search(r"lb|pound", match["unit"], re.I) else "item"
+            return "", fields
+        return item_intake.caption_answers("" if text == "?" else text, {"photo_fields": self._intake_fields})
+
+    def npp_posted(self, change_id):
+        """S13: the one-line `Posted: <item link>` confirmation for a published listing job's change, or None when the change
+        is not one (the live release engine then says its ordinary line). It is only asked once the live check has seen the
+        change, never at apply."""
+        if self.npp is None:
+            return None
+        job = self.db.execute("SELECT j.job_id FROM npp_jobs j JOIN drafts d ON d.row_id = j.approval_row "
+                              "WHERE d.change_id = ? AND j.state = 'published'", (change_id,)).fetchone()
+        if job is None:
+            return None
+        try:
+            records = (self.editor.show(change_id).get("change") or {}).get("records") or []
+            keys = [r["key"] for r in records if r.get("collection") == "products"]
+            return npp_reply.posted(self.npp.replies, keys[0]) if len(keys) == 1 else None
+        except (KeyError, TypeError, ValueError):
+            return None
 
     def _npp_approve(self, jobs, job, msg, n, accepted, now):
         failure, version = jobs.select(job, msg, n, accepted, now)
@@ -2617,6 +2647,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if verb == "shelf": return self._shelf(code, now)  # AV1052-05
         if verb == "backlog": return self._backlog_list()  # SKILLS-FW-3
         if verb == "costs": return self._costs()  # AV2137-06
+        if verb == "held": return self._held()  # AV2137-07
         if verb == "history" and code is not None: return self._history_search(code)
         if verb == "again": return self._again(msg, now, code)  # AV2152-03
         if verb == "history":

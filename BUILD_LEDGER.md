@@ -3283,3 +3283,271 @@ Branch rb/av2007-19 (AV2007-19, PR #883, merged as 1b0f5b877230e36c060a17777fa28
 Checks at PR head 543f4da3d562b8768a12e5a7b6b2cc6e2ee0f493: PR #883 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_demo_rehearsal` (not rerun per unit for this ledger).
 
 Limits: Issue #1 (conversation and ops). Offline with no token and no network; the till stays read-only, `--live` stays operator-only, and the known-gap removals and plural matching belong to other units. No AV2007 unit is Issue #3 (health and backup).
+
+## Site: product search tries names before descriptions (AV1052-01) — November 15, 2026
+
+Branch rb/av1052-01 (AV1052-01, PR #868, merged as 43d24e3382db2669c8407a50f1801e2f37980e4e). Shop search on the public shelf lists metadata matches (name, maker, tags) first and description-only matches after them, in a stable order, so a visitor sees the product they named before products that merely mention the word.
+
+Checks at PR head ca39915e00957671fe3eb6059d8ac91d3b066858: PR #868 is not in this repository's pull-request list, so no run or count is recorded here; the changed files are `storefront-mockup/shop.js` and the browser QA script `storefront-mockup/catalog-only-qa.cjs` (a .cjs script, not a Python MAP module); no run or result is claimed here.
+
+Limits: Search order only. No product content was rewritten and no description was edited.
+
+## Site: empty shelves are hidden and their links normalised (AV1052-02) — November 5, 2026
+
+Branch rb/av1052-02 (AV1052-02, PR #456, merged as d41f1d67a0c4b649d7f1846c54cd15b310716f1a). The public shelf no longer shows buttons for shelves with nothing on them, and a link to a known-empty shelf falls back to the whole shelf instead of an empty page.
+
+Checks at PR head af0d279a543520913e0a12d2aceced2e1f35cc5b: PR #456 is not in this repository's pull-request list, so no run or count is recorded here; the changed files are `storefront-mockup/shop.js` and `storefront-mockup/catalog-only-qa.cjs` (.cjs browser QA, not Python MAP coverage); no run or result is claimed here.
+
+Limits: The hiding follows the shelf contents and the known-empty URL fallback, not what the visitor searched for. Nothing was published.
+
+## Site: public pages carry a same-origin content security policy (AV1052-03) — November 15, 2026
+
+Branch rb/av1052-03 (AV1052-03, PR #858, merged as c788e269e0932053ac231c9477db351145b3ccae). The generated and published pages carry a same-origin content security policy, and the availability and notice scripts now run from files rather than inline, so a visitor's browser refuses pages that load anything from elsewhere.
+
+Checks at PR head bb991350ea0e6eac1f4b749aeab23fdbd6bf7722: PR #858 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_publish_csp hass.tests.test_club_intro hass.tests.test_front hass.tests.test_notice_start hass.tests.test_specials hass.tests.test_store_notice`, plus the browser drivers `hass/tests/fixtures/publish_csp_driver.cjs` and `storefront-mockup/static-site-qa.cjs`; the PR's own record of any enforcement or clock-dependent skips was not copied here, so none is claimed.
+
+Limits: Nothing was published or deployed by this unit. Enforcement in a real browser and the clock-dependent checks are those the PR driver covers; no live-site check was made.
+
+## H17 one shelf or maker availability change is one draft (AV1052-04) — November 17, 2026
+
+Branch rb/av1052-04 (AV1052-04, PR #993, merged as f7fbae1bd4334ac9d49c287e28004b9de04891ea). A request such as "all the vegetables are sold out" becomes one coded draft for the whole shelf or maker through `product.set_availability_all`, instead of many separate drafts.
+
+Checks at PR head 3ab89fa3c45ca6e2f344ffc7afa29c68fa6c664b: PR #993 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_set_availability_all hass.tests.test_auto_policy hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_design hass.tests.test_live_table`; the prompt, count and golden fixture `hass/tests/fixtures/interpreter-prompt.txt` were migrated (not rerun per unit for this ledger).
+
+Limits: One bounded shelf or maker operation per draft, still approved with one `yes <code>`. The 20-operation cap was not raised.
+
+## H17 shelf lists a shelf in the site's availability words (AV1052-05) — November 18, 2026
+
+Branch rb/av1052-05 (AV1052-05, PR #1011, merged as b69e4b8e6a83bb8fa0912355768750c14fa96572). The read-only `shelf <name>` command lists a shelf in the displayed order with the same availability words the site shows, up to 60 products and then the remainder as a count.
+
+Checks at PR head 5edb397744acf25ef19aecaa8ab0d9ccb8df7885: PR #1011 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_shelf_command hass.tests.test_help` (not rerun per unit for this ledger).
+
+Limits: Read-only: no draft and no change. It reports what is saved, not a live stock count.
+
+## H13 listing store reads the store details as saved (AV1052-06) — November 19, 2026
+
+Branch rb/av1052-06 (AV1052-06, PR #4, merged as 9ae61013956eb03843dcbbd8579d0ad12ab70b88). The read-only `listing store` command gives Michael the hours, address, intro and home-page notice as the site would show them from the saved content, so he can read them before changing them.
+
+Checks at PR head 851c76f864912269eb0dd4b146468f33985acecb (recorded in PR #4): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_listing_store`; PR #4 records its own run (not rerun per unit for this ledger).
+
+Limits: Shows saved fields and the notice wording by its scheduled, active or ended state; saved is not live. It is not a check of the deployed site.
+
+## H17 post and listing take a product name or alias (AV1052-07) — November 19, 2026
+
+Branch rb/av1052-07 (AV1052-07, PR #9, merged as 7b9ed9e1baf704ecf062535bdb3bcbb13ffecb06). `post` and `listing` accept an exact product name or a saved alias as well as an id; several matches get a short list to narrow down, and held or hidden products are never picked by name.
+
+Checks at PR head b601f579071f8908fa0e9046cc66d55b0dcb5c12 (recorded in PR #9): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_post_by_name hass.tests.test_listing_by_name hass.tests.test_post_command hass.tests.test_listing_command hass.tests.test_commands_doc` (not rerun per unit for this ledger).
+
+Limits: `post hike`, `post maker` and `listing store` keep their own meaning. `post` prepares the caption and card only; no social publication.
+
+## H05 cancelling all waiting drafts at once, yes all refused (AV1052-08) — November 19, 2026
+
+Branch rb/av1052-08 (AV1052-08, PR #11, merged as d14304b9c1571d6614c77ee89fea205bd4f28319). `no all`, `cancel all` or `cancel everything` cancels every waiting draft and question in one step and says which codes were cancelled; nothing changes otherwise.
+
+Checks at PR head 5f05ea169c74d00ff05ebcab001c474821e5f537 (recorded in PR #11): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_cancel_all hass.tests.test_commands_doc` (not rerun per unit for this ledger).
+
+Limits: `yes all` and `approve all` never approve anything: each draft still needs its own `yes <code>` (one approval per draft). Cancelling keeps the stored photo.
+
+## H17 a mistyped command gets a suggestion, nothing runs (AV1052-09) — November 19, 2026
+
+Branch rb/av1052-09 (AV1052-09, PR #15, merged as 11abbee4c6d3caba1c5f92f430360c9b3e13d43c). A one-word message one letter off a command word gets a "Did you mean ...?" reply instead of the interpreter, so a typo costs no model call and changes nothing.
+
+Checks at PR head 0b6d91b1e00594be6ee7dcdedcd98da167fdf3bb (recorded in PR #15): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_command_typo hass.tests.test_report_command` (not rerun per unit for this ledger).
+
+Limits: The suggested command is never executed, and the typo path does not use the interpreter or the daily count.
+
+## H17 status and support copy name an unreadable reader (AV1052-10) — November 6, 2026
+
+Branch rb/av1052-10 (AV1052-10, PR #466, merged as c86fdc670242b7ac2c6aa766af9a80272bddd4b4). When the message reader failed, status says so and `docs/hass/SUPPORT.md` tells Michael to send the message again, instead of leaving an unexplained silence.
+
+Checks at PR head 17e8b8eb8a8d0a4805f5758b077c44cd81645e8f: PR #466 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_status_reader_failed hass.tests.test_photo_caption_reader_failed hass.tests.test_preview_hike_results hass.tests.test_interpreter_local` (not rerun per unit for this ledger).
+
+Limits: The failure is recorded and shown; there is no automatic retry.
+
+## H15 design requests are kept as separate owner notes (AV1052-11) — November 17, 2026
+
+Branch rb/av1052-11 (AV1052-11, PR #999, merged as 6c96ec4bfe0e3a303193cfe67d8c7c790bb76300). A request such as "make the product cards round" is saved as a dated design note in its own memory partition, listed by `memory` and removed with `forget design.<n>`.
+
+Checks at PR head e631b897587e5271832a445dc8fc4326d9151e66: PR #999 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_design_notes hass.tests.test_interpreter_notes hass.tests.test_interpreter_prompt_design`, with the inherited listing and notes tests (not rerun per unit for this ledger).
+
+Limits: A design note is not an interpreter preference, and nothing implements it automatically.
+
+## H17 help is grouped and each command can be explained (AV1052-12) — November 17, 2026
+
+Branch rb/av1052-12 (AV1052-12, PR #1009, merged as b1ee38fff5478b279583f1597bc1994fde90f7e2). `help` is grouped into short topics and `help <command>` explains one command in plain words.
+
+Checks at PR head d69bdc4323e31d08fcd5f0db3494bad0cdbc06f8: PR #1009 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_again hass.tests.test_hidden_command hass.tests.test_listing_command`, with the inherited help pins updated (not rerun per unit for this ledger).
+
+Limits: Help text only: it adds no new editing power or command.
+
+## Audit: maker website and location link check (AV1052-13) — November 5, 2026
+
+Branch rb/av1052-13 (AV1052-13, PR #418, merged as a4435ca25849a5c07f3ac29fec49c80147804e6a). The dated report `reports/maker-links-2026-11.md` gives the owner a per-maker finding for all 26 makers on whether the stored link loads and names the maker and whether the place matches. Follow-up PRs: #427 (merged as f0e946c4205deeef9325b96929e3c64010dfa435) and #443 (merged as 19cafc5b40dfb47d6f10e18185f66c9653ad58dc).
+
+Checks at PR head eced2a635cc513da879bd1b14fa91b94646e1a8d (#427 head 408230b7098dfff5facb99500a8eaef60387ae28, #443 head c436213b7a0fb65789f80e5d864ea614db8e72f8): PR #418 is not in this repository's pull-request list, so no run or count is recorded here; inspection, not a test run: the report records checking every stored Visit link once with a public page reader on 2026-11-05; the follow-up re-checks #427 and #443 moved rows to `ok` and left 25 ok and 1 cannot tell (Ava's). Read back from the report: `grep -n Tally reports/maker-links-2026-11.md`.
+
+Limits: Advisory findings only, with honest uncertainty (the page reader shows no final URL). The owner decides any edit; no canonical maker data and no site content changed.
+
+## Audit: evidence behind the Organic product badges (AV1052-14) — November 5, 2026
+
+Branch rb/av1052-14 (AV1052-14, PR #422, merged as 8c41ff7afdf701ded9a24b57027d13676df77b9d). The dated report `reports/organic-badges-2026-11.md` lists, for each of the 18 active products that show an Organic badge, the maker's own page evidence or the words no evidence found.
+
+Checks at PR head de6d733b5a0199fd041b718791b31194ef868816: PR #422 is not in this repository's pull-request list, so no run or count is recorded here; inspection, not a test run: the report records the research date 2026-11-05 and counts 4 product-specific and 3 family-wide maker-stated rows and 11 `no evidence found`; it states that no USDA record was queried.
+
+Limits: Words only: not a certification or legal finding, and no badge, rule or data was changed. No evidence found does not mean not organic.
+
+## H25 phone guide and limits cover the new owner shortcuts (AV1052-15) — November 19, 2026
+
+Branch rb/av1052-15 (AV1052-15, PR #23, merged as 596211a1f6ab51414e8296499d11d1393a9294e4). Michael's phone guide and the known-limits page now explain whole-shelf and maker changes, `shelf`, `listing`, names, `no all`, typo replies, the reader-failure advice, design notes and `help`.
+
+Checks at PR head 0616c8630515ad7cae1649e52ecede31ebb5fa56 (recorded in PR #23): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_limits_doc`; they check the guide parses and its line cap, and tie each limit to code (not rerun per unit for this ledger).
+
+Limits: Guide and limits text only: not a phone trial. Pause, restore, device trial and launch stay open and H25 stays a release step.
+
+## H15 offline interpreter eval v11 covers shelf and maker cases (AV1052-16) — November 17, 2026
+
+Branch rb/av1052-16 (AV1052-16, PR #1007, merged as 3929101a09821a143a5e30fb9aaaad6dd46588c8). The offline interpreter eval set v11 adds whole-shelf and maker one-draft cases, mixed-scope cases and the fixed design-reply cases (`hass/interpreter_eval.py`, `hass/tests/fixtures/interpreter-eval.jsonl`).
+
+Checks at PR head ddf73ed625ee2513f4df1d4e711f39c6fd0b1b50: PR #1007 is not in this repository's pull-request list, so no run or count is recorded here; the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_compare hass.tests.test_interpreter_eval_modes hass.tests.test_interpreter_eval_out` (not rerun per unit for this ledger).
+
+Limits: Offline scoring against recorded replies, unchanged. It is not a measurement of a real model, and no model was called.
+
+## H25 acceptance map registers the AV1052 test modules (AV1052-17) — November 19, 2026
+
+Branch rb/av1052-17 (AV1052-17, PR #19, merged as bc469051d42f998daf6899d4e1af03b7cde7c521). The standing acceptance map in `hass/acceptance.py` now runs the AV1052-03 to AV1052-12 test modules under their H rows, so the regression modules are exercised together.
+
+Checks at PR head 73d2d9981df43097128ab7cf76a31d13bd9b6f80 (recorded in PR #19): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_acceptance_runner`, which pins the final tuples and dispatch; `python3 -B hass/acceptance.py --only H25` prints `not covered` with note `release step`.
+
+Limits: H25 stays exactly a release step, never a fixture pass. Registering modules is not completed release acceptance.
+
+## AV1052 milestone progress
+
+These are local Markdown sections, not GitHub issue updates or comments. No issue was edited and no box was checked. They link the sections above and add no unit heading. No real bridge, phone trial, device trial, restore, launch, send or mail evidence was added, H07, H08 and H18 live channel and device tasks stay open, and unresolved G decisions stay with G. The issues are kept in the private archive and are not linked here.
+
+### Issue #1 — working text demo
+
+Historical issue #1 (kept in the private archive, so not linked here). Progress: [AV1052-04](#h17-one-shelf-or-maker-availability-change-is-one-draft-av1052-04--november-17-2026), [AV1052-05](#h17-shelf-lists-a-shelf-in-the-sites-availability-words-av1052-05--november-18-2026), [AV1052-06](#h13-listing-store-reads-the-store-details-as-saved-av1052-06--november-19-2026), [AV1052-07](#h17-post-and-listing-take-a-product-name-or-alias-av1052-07--november-19-2026), [AV1052-08](#h05-cancelling-all-waiting-drafts-at-once-yes-all-refused-av1052-08--november-19-2026), [AV1052-16](#h15-offline-interpreter-eval-v11-covers-shelf-and-maker-cases-av1052-16--november-17-2026) give one-draft shelf and maker availability, a read-only shelf list and store listing, product names and aliases in `post` and `listing`, cancelling all waiting drafts, and the offline eval cases that cover them. One approval per draft stays: `yes all` never approves. Listings are saved, not live, and the offline eval is not model validation.
+
+### Issue #2 — small owner trial
+
+Historical issue #2 (kept in the private archive, so not linked here). Progress, as usability and trial support only: [AV1052-09](#h17-a-mistyped-command-gets-a-suggestion-nothing-runs-av1052-09--november-19-2026), [AV1052-10](#h17-status-and-support-copy-name-an-unreadable-reader-av1052-10--november-6-2026), [AV1052-11](#h15-design-requests-are-kept-as-separate-owner-notes-av1052-11--november-17-2026), [AV1052-12](#h17-help-is-grouped-and-each-command-can-be-explained-av1052-12--november-17-2026), [AV1052-15](#h25-phone-guide-and-limits-cover-the-new-owner-shortcuts-av1052-15--november-19-2026) add typo suggestions that run nothing, a recorded reader failure with no automatic retry, separate design notes that are not preferences and are not built automatically, grouped help, and the phone guide and limits. No phone trial was run.
+
+### Issue #3 — reliable everyday operation
+
+Historical issue #3 (kept in the private archive, so not linked here). Progress: [AV1052-01](#site-product-search-tries-names-before-descriptions-av1052-01--november-15-2026), [AV1052-02](#site-empty-shelves-are-hidden-and-their-links-normalised-av1052-02--november-5-2026), [AV1052-03](#site-public-pages-carry-a-same-origin-content-security-policy-av1052-03--november-15-2026), [AV1052-13](#audit-maker-website-and-location-link-check-av1052-13--november-5-2026), [AV1052-14](#audit-evidence-behind-the-organic-product-badges-av1052-14--november-5-2026), [AV1052-17](#h25-acceptance-map-registers-the-av1052-test-modules-av1052-17--november-19-2026) cover the website search, empty shelves and CSP, the two dated audits that change no claim or data, and the acceptance map. Still open: nothing was published, and H25 stays a release step, never a fixture pass.
+
+## Site: catalog illustrations are disclosed in the note and alt text (AV1352-01) — November 5, 2026
+
+Branch rb/av1352-01 (AV1352-01, PR #457, merged as a5ae1a023c9b1acf63ec82833bac26da40bce030). The shop note and each product image's alt text now say when a picture is a generated catalog illustration, so visitors do not take it for a photo of the shelf item (`storefront-mockup/shop.js`).
+
+Checks at PR head f9f1084f8f94118cc293e6cb4ce4ce9c3245cc73 (recorded in PR #457's merge commit; the pull-request list here is not consulted): the QA script `storefront-mockup/catalog-only-qa.cjs` and `python3 -B -m unittest hass.tests.test_product_alt` were changed in the merge diff, with the product-alt pins updated (not rerun per unit for this ledger).
+
+Limits: A generated illustration is not a product photo and not proof of the SKU; an owner photo keeps its exemption. A file name does not prove a package.
+
+## Site: unavailable shared catalog items are explained (AV1352-02) — November 6, 2026
+
+Branch rb/av1352-02 (AV1352-02, PR #479, merged as be73e197dfc169905d3d61f0fabd91a29dcab3b8). A shared catalog link to a hidden, held or gone product now shows a plain message and the address is cleaned and can be dismissed; a valid, empty or oversized ID is handled separately (`storefront-mockup/shop.js`).
+
+Checks at PR head 32856f265d5333192b37060440da5aab35830322 (recorded in PR #479's merge commit; the pull-request list here is not consulted): the QA script `storefront-mockup/catalog-only-qa.cjs` was changed in the merge diff; it is the real browser QA, not a Python acceptance-map entry (not rerun per unit for this ledger).
+
+Limits: Messages only: no product is released, unhidden or published by following a link.
+
+## H17 post names a catalog illustration before the caption (AV1352-03) — November 18, 2026
+
+Branch rb/av1352-03 (AV1352-03, PR #1018, merged as f57fca3f0e2dedbace3fd1cc4ce53a0be72e7f6c). `post` replies with a line saying the product still shows an illustration before the caption draft; the social draft JSON carries the flag and warning (`hass/social_draft.py`, `hass/chat/reports_pack.py`, `docs/hass/COMMANDS.md`).
+
+Checks at PR head 004f6fd2b33753f51b6efd6b0f4d66013d433728 (recorded in PR #1018's merge commit; the pull-request list here is not consulted): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_post_command hass.tests.test_social_draft hass.tests.test_social_draft_fullwidth hass.tests.test_social_draft_inputs hass.tests.test_social_draft_shapes hass.tests.test_social_draft_tags hass.tests.test_social_draft_text` (not rerun per unit for this ledger).
+
+Limits: A draft only, never a social post. Caption and attachment are unchanged and an owner photo is exempt from the line.
+
+## H05 coded yes and no replies are accepted and questions never approve (AV1352-04) — November 5, 2026
+
+Branch rb/av1352-04 (AV1352-04, PR #458, merged as d28945ca3f77ebb57ce8bea08d2f5712424a37b6). A coded reply such as `yes a1b2 thanks` or `no a1b2` now counts, a waiting code sent alone and a question get plain guidance, and ordinary revisions stay revisions (`hass/conversation.py`, `docs/hass/COMMANDS.md`).
+
+Checks at PR head 528fc374f4dc5d183abcdaaa76a066bc5fb9072b (recorded in PR #458's merge commit; the pull-request list here is not consulted): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_phone_answers`; recognised guidance makes no interpreter call (not rerun per unit for this ledger).
+
+Limits: A question mark never approves or cancels, and a code alone changes nothing. Non-ASCII words still disqualify a coded answer.
+
+## H17 a trailing question mark reads a read-only command (AV1352-05) — November 6, 2026
+
+Branch rb/av1352-05 (AV1352-05, PR #480, merged as 903314df99a68bc908c7a465e8e58a751d9a8fff). `status?`, `find ...?` and the other read-only commands answer with a trailing `?` (`hass/conversation.py`, `docs/hass/COMMANDS.md`).
+
+Checks at PR head 2cdd5bd94e043c679b8b7c2580d05fb4dac14c94 (recorded in PR #480's merge commit; the pull-request list here is not consulted): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_readonly_questions hass.tests.test_help hass.tests.test_product_default_brand` (not rerun per unit for this ledger).
+
+Limits: No stripped question mark reaches yes, no, undo, stop, resume, remember, forget or alias: a question never changes anything.
+
+## H15 relative dates use the message's sent time (AV1352-06) — November 5, 2026
+
+Branch rb/av1352-06 (AV1352-06, PR #460, merged as 2adc1944633b79f79a5eb92098ab4536dab0a4bd). Words such as `tomorrow` are read against the day in Pacific time of the time the message was sent, not the day it is processed (`hass/conversation.py`, `hass/interpreter_local.py`).
+
+Checks at PR head 383c4dac92a3fcb3b119986253923594757700e9 (recorded in PR #460's merge commit; the pull-request list here is not consulted): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_interpreter_today`, with the call-spy tests in 19 older test modules updated to pass the new keyword through (for example `hass.tests.test_interpreter_notes`, `hass.tests.test_late_reply`) (not rerun per unit for this ledger).
+
+Limits: An invalid, zone-less or future sent time falls back without relaxing any editor date check. No live model was run.
+
+## H15 note names may contain spaces and forget alias cannot hit a colliding note (AV1352-07) — November 6, 2026
+
+Branch rb/av1352-07 (AV1352-07, PR #481, merged as 3a2cc4c6bf8c4de3222d51e8057f86d3ac9fa339). Spaced note names are canonicalised, `forget alias <name>` never deletes the wrong record when an alias and a note share a name, and the note key rules stay (`hass/conversation.py`, `docs/hass/COMMANDS.md`, `docs/hass/LIMITS.md`).
+
+Checks at PR head d203512332541ab1e94138790e467d7fc51f3b89 (recorded in PR #481's merge commit; the pull-request list here is not consulted): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_memory_alias hass.tests.test_memory_chat hass.tests.test_memory_unchanged` (not rerun per unit for this ledger).
+
+Limits: `forget it` still targets the key `it` and `forget it all` keeps its old route. There is no bulk forget and no approval shortcut.
+
+## H17 margin check of a shelf price in owner chat (AV1352-08) — November 17, 2026
+
+Branch rb/av1352-08 (AV1352-08, PR #997, merged as ce42d8854a42a492d03d0607e9fcf201fed9e36a). Michael can ask for the margin a shelf price gives, from an explicit or saved cost, and a below-cost price is flagged (`hass/chat/commands.py`, `hass/chat/reports_pack.py`, `docs/hass/COMMANDS.md`).
+
+Checks at PR head 789ef88a80b5027271a7890a62ed57e7d83928ed (recorded in PR #997's merge commit; the pull-request list here is not consulted): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_margin_chat` (not rerun per unit for this ledger).
+
+Limits: The calculation saves nothing, puts no price on the website, calls no model and works while paused.
+
+## H17 target price endings of .99 or .49 in owner chat (AV1352-09) — November 17, 2026
+
+Branch rb/av1352-09 (AV1352-09, PR #1012, merged as 5be20107cacc2641483f585421a6436544789e20). A target margin can be asked with a .99 or .49 ending, using the existing upward rounding and the actual margin, with saved-cost variants (`hass/chat/reports_pack.py`, `docs/hass/COMMANDS.md`).
+
+Checks at PR head 9531f518db683860c958697b26c31ee6dfaf336f (recorded in PR #1012's merge commit; the pull-request list here is not consulted): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_margin_chat` (not rerun per unit for this ledger).
+
+Limits: Invalid mixed modes are refused, price-check mode is never rounded and nothing is written.
+
+## Audit: unsourced products worksheet for Michael (AV1352-10) — November 5, 2026
+
+Branch rb/av1352-10 (AV1352-10, PR #437, merged as cb5a8f5e2e7879cfcf2ec1910708a82273c0be55). `reports/unsourced-products-2026-11.md` lists the 65 active products whose card says to ask in store about the source, with the recorded clue or `none recorded` for each and a blank answer column for Michael.
+
+Checks at PR head e19c8fb00c4a935b374d8f0593332fc9a2aeecf7 (recorded in PR #437's merge commit; the pull-request list here is not consulted): no test was added; the merge diff changes only the report. Inspection steps recorded in the report: it quotes the October photo-review records by product ID and counts the products by shelf; the row count in this checkout is 65, matching the 65 stated in its text (not rerun per unit for this ledger).
+
+Limits: Report only: no maker, product or claim record changed and no owner answer was entered. Unknown sources stay unknown and Michael decides.
+
+## H25 phone guide and limits cover the AV1352 shortcuts (AV1352-11) — November 20, 2026
+
+Branch rb/av1352-11 (AV1352-11, PR #32, merged as d6687886f97e4f146c9e2069d8b317ff1c7202a4). The phone guide and known-limits page explain approving with the code in an everyday reply, a code alone, `?` after `status` or `find`, note names with spaces, shelf-price margins and a .99 ending, and `post` on a product that shows an illustration (`docs/hass/PHONE_GUIDE.md`, `docs/hass/LIMITS.md`).
+
+Checks at PR head 5693c5c5c320d7f6b132ce48194a83ffb8f98b35 (recorded in PR #32's merge commit; the pull-request list here is not consulted): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_limits_doc`; they check that the guide parses within its line cap and tie the note-name limit to code (not rerun per unit for this ledger).
+
+Limits: Guide and limits text only: not a phone trial. A code alone is guidance, not approval.
+
+## H25 acceptance map registers the AV1352 phone modules (AV1352-12) — November 19, 2026
+
+Branch rb/av1352-12 (AV1352-12, PR #31, merged as b1c80c1268acd2ccff452428a37f7a982eaf98be). The standing acceptance map in `hass/acceptance.py` runs the AV1352-03 to AV1352-09 test modules under their H rows, so they are exercised together.
+
+Checks at PR head 8eafb21bc91169a9a7c9951dd4de49b85754c23a (recorded in PR #31's merge commit; the pull-request list here is not consulted): the tests it added or changed in the merge diff are `python3 -B -m unittest hass.tests.test_acceptance_runner`, which pins the final tuples and dispatch; `python3 -B hass/acceptance.py --only H25` prints `not covered` with note `release step` (not rerun per unit for this ledger).
+
+Limits: H25 stays exactly a release step, never a fixture pass. Registering modules is not completed release acceptance or a launch authorisation.
+
+## Fresh documentation validation for the AV1352 ledger append — November 20, 2026
+
+Docs-only change, checked locally on November 20, 2026 from the branch built on main. These are the results of this docs change only and add no feature result, and none of the skips or limits above is cleared by them. `python3 -B -m unittest hass.tests.test_ledger_rf1120 hass.tests.test_acceptance_runner` ran 48 tests, OK. `python3 -B hass/acceptance.py --only H25` printed `not covered` with note `release step`. A one-use verifier outside the repository checked the twelve headings, merge identity and ancestry, existing paths, the old prefix, the three issue sections and the privacy rules, with five in-memory mutation tests; its result is in the pull-request description. `git diff --check` was clean and only `BUILD_LEDGER.md` changed.
+
+## AV1352 milestone progress
+
+These are local Markdown sections, not GitHub issue updates or comments. No issue was edited and no box was checked. They link the sections above and add no unit heading. No real bridge, phone trial, device trial, restore, launch, send or mail evidence was added, H07, H08 and H18 live channel and device tasks stay open, H25 stays a release step, and unresolved G decisions stay with G. The issues are kept in the private archive and are not linked here.
+
+### Issue #1 — working text demo
+
+Historical issue #1 (kept in the private archive, so not linked here). Progress: [AV1352-04](#h05-coded-yes-and-no-replies-are-accepted-and-questions-never-approve-av1352-04--november-5-2026), [AV1352-06](#h15-relative-dates-use-the-messages-sent-time-av1352-06--november-5-2026) make approval and dates correct: coded yes and no replies count while a question mark or a code alone never approves or cancels, and relative dates follow the time the message was sent, with an invalid or future time falling back without relaxing the editor checks.
+
+### Issue #2 — small owner trial
+
+Historical issue #2 (kept in the private archive, so not linked here). Progress, as usability and trial support only: [AV1352-03](#h17-post-names-a-catalog-illustration-before-the-caption-av1352-03--november-18-2026), [AV1352-05](#h17-a-trailing-question-mark-reads-a-read-only-command-av1352-05--november-6-2026), [AV1352-07](#h15-note-names-may-contain-spaces-and-forget-alias-cannot-hit-a-colliding-note-av1352-07--november-6-2026), [AV1352-08](#h17-margin-check-of-a-shelf-price-in-owner-chat-av1352-08--november-17-2026), [AV1352-09](#h17-target-price-endings-of-99-or-49-in-owner-chat-av1352-09--november-17-2026), [AV1352-11](#h25-phone-guide-and-limits-cover-the-av1352-shortcuts-av1352-11--november-20-2026) add the illustration line before a `post` draft (still a draft, not a post), read-only questions with a trailing `?`, note names with spaces under the same key rules, shelf-price margin checks and .99 or .49 endings that save nothing and put no price on the website, and the phone guide and limits. The guide is not a phone trial.
+
+### Issue #3 — reliable everyday operation
+
+Historical issue #3 (kept in the private archive, so not linked here). Progress: [AV1352-01](#site-catalog-illustrations-are-disclosed-in-the-note-and-alt-text-av1352-01--november-5-2026), [AV1352-02](#site-unavailable-shared-catalog-items-are-explained-av1352-02--november-6-2026), [AV1352-10](#audit-unsourced-products-worksheet-for-michael-av1352-10--november-5-2026), [AV1352-12](#h25-acceptance-map-registers-the-av1352-phone-modules-av1352-12--november-19-2026) cover the illustration note and alt text, unavailable shared-item messages, the unsourced-products report that changes no record and leaves the answers to Michael, and the acceptance map. A generated illustration is not a product photo. Still open: nothing was published, and H25 stays a release step, never a fixture pass.

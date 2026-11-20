@@ -3,11 +3,30 @@ import re
 import unittest
 from pathlib import Path
 
+from hass import conversation as conv
 from hass.tests.test_commands_doc import verb
+from hass.tests.test_conversation import ConversationTestCase
+from hass.tests.test_margin_chat import USAGE, steps
+from hass.tests.test_near_approval import TextInterpreter
+from hass.tests.test_status_pause import StoreMixin
+from hass.tests.test_undo import H06TestCase
 
 DOCS = Path(__file__).resolve().parents[2] / "docs" / "hass"
 SECTIONS = ["Add a product", "Add a photo", "Post a hike", "Change opening hours", "Change the home page", "Route ideas", "Undo a change", "Pause and resume"]
-SEND_RE = re.compile(r"Send( \(plain words\))?: `([^`]+)`")
+SEND_RE = re.compile(r"Send(?: \((plain words|decorated yes|code only)\))?: `([^`]+)`")  # AV1352-11: two typed reply kinds beside plain words
+KINDS = {"decorated yes": ("approve", "a1b2"), "code only": (None, "a1b2")}  # label -> what conv.parse_phone must read from the example
+MARGIN_PRICE, MARGIN_ENDING = "margin 24 for 12 price 3.49", "margin 24 for 12 at 35% ending .99"
+AV1352_SENDS = (("decorated yes", "Yes, a1b2 thanks"), ("code only", "a1b2"), (False, "status?"), (False, "find eggs?"), (False, "remember parking spot: use the back lot"),
+                (False, "forget parking spot"), (False, MARGIN_PRICE), (False, MARGIN_ENDING))
+AV1352_EXPLAINS = {  # AV1352-11: each safety clause once; dropping or rewording any one is named
+    "decorated yes names its draft": "it approves only the draft that code names", "code alone changes nothing": "The code alone changes nothing",
+    "code alone is a hint": "it is a hint, never an approval", "? never approves or undoes": "`yes a1b2?` approves nothing and `undo a1b2?` undoes nothing",
+    "? is for read-only commands": "A closing `?` works on read-only commands", "spaces become hyphens": "Spaces in the name become `-`, so `parking spot` is kept as `parking-spot`",
+    "margins are private": "they save nothing and put no price on the website", "ending never rounds down": "never lower than the margin needs",
+    "illustration warning": "the `post` reply starts with a warning that the picture is not a photo of the product", "owner photo exception": "an owner photo gets no warning",
+    "post reply carries the photo": "a draft caption and, when the product has an eligible site photo, that photo as an attachment (the illustration or the owner photo alike)",
+    "post publishes nothing": "Hass posts or uploads nothing to any social account", "hike and maker are text only": "`post hike` and `post maker` come back as text only"}
+STALE_POST_CLAIMS = ("only a draft caption comes back", "nothing is uploaded, sent or published")  # AV1352-11 RETURN: the product reply attaches the photo (reports_pack._post)
 NEW_EXAMPLES = {"hide the sample hikes", "bring the sample hikes back", "put the old photo back", "stop showing the eggs as sold out"}  # AV1622-11
 LISTING = "listing photo-product-001"
 AV1937_PLAIN = (
@@ -62,15 +81,27 @@ AV1052_EXPLAINS = {  # one phrase per safety clause; dropping or weakening any o
 PRIVATE_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w+|\+\d|http://", re.I)
 
 
+def route(text):
+    """AV1352-11: the verb a whole message reads as: the plain parsers, then the read-only `?` and memory readers the conversation also tries."""
+    return verb(text) or next((r[0] for r in (conv.read_command(text), conv.read_memory(text)) if r), None)
+
+
 def sends(doc: str) -> list:
-    """(plain, text, line) for each quoted message; a line naming Send that breaks the convention gives text None."""
+    """(kind, text, line) for each quoted message; kind is True for plain words, False for a command, or the typed reply label.
+    A line naming Send that breaks the convention gives text None."""
     out = []
     for line in doc.splitlines():
         if not re.match(r"\s*Send\b", line):
             continue
         m = SEND_RE.fullmatch(line.strip())
-        out.append((bool(m and m[1]), m[2] if m else None, line.strip()))
+        out.append(((m[1] == "plain words" or m[1]) if m and m[1] else False, m[2] if m else None, line.strip()))
     return out
+
+
+def reads_as(kind: str, text: str) -> bool:
+    """AV1352-11: the typed reply parses the way its label says: a whole-message coded answer, never a command."""
+    got = conv.parse_phone(text)
+    return got is not None and got[0] == KINDS[kind][0] and re.fullmatch(r"[0-9a-f]{4}", got[1] or "") is not None and not got[2] and route(text) is None
 
 
 def problems(doc: str) -> list:
@@ -78,11 +109,16 @@ def problems(doc: str) -> list:
     for plain, text, line in sends(doc):
         if text is None:
             out.append(f"not a Send line the checker can read: {line}")
-        elif plain and verb(text) is not None:
-            out.append(f"plain-words line parses as a command ({verb(text)}): {line}")
-        elif not plain and verb(text) is None:
+        elif isinstance(plain, str) and plain != "plain words":
+            if not reads_as(plain, text):
+                out.append(f"Send ({plain}) line does not read as that kind of reply: {line}")
+        elif plain and route(text) is not None:
+            out.append(f"plain-words line parses as a command ({route(text)}): {line}")
+        elif not plain and route(text) is None:
             out.append(f"Send line is not a command: {line}")
     found = {(plain, text) for plain, text, _ in sends(doc)}
+    out += [f"required example missing or misclassified: {t}" for k, t in AV1352_SENDS if (k, t) not in found]
+    out += [f"required explanation missing ({name}): {text}" for name, text in AV1352_EXPLAINS.items() if text not in doc]
     out += [f"required example missing or misclassified: {t}" for t in AV1937_PLAIN if (True, t) not in found]
     out += [f"required example missing or misclassified: {AV1937_POST}"] if (False, AV1937_POST) not in found else []
     out += [f"required example missing or misclassified: {t}" for t in AV2152_PLAIN if (True, t) not in found]
@@ -284,6 +320,111 @@ class PhoneGuideTest(unittest.TestCase):
             self.assertEqual(problems(self.doc.replace(text, "gone")), [f"required explanation missing ({name}): {text}"], name)
         for promise in (r"(?i)\bautomatically (?:approve|apply|publish|retr)", r"(?i)\bposts? (?:it )?to the website\b"):
             self.assertNotRegex(self.doc, promise)
+
+
+class GuideCodeTests(H06TestCase):  # AV1352-11: the two taught coded replies, against a real waiting draft
+    def setUp(self):
+        super().setUp()
+        self.interp = TextInterpreter(self.interp.mapping)
+        self.conv = self.open()
+        self.doc = (DOCS / "PHONE_GUIDE.md").read_text("utf-8")
+
+    def taught(self, kind):
+        [text] = [t for k, t, _ in sends(self.doc) if k == kind]
+        return text
+
+    def test_decorated_yes_approves_only_its_draft_and_code_alone_changes_nothing(self):
+        a, b = self.propose("hours")[0], self.propose("desc")[0]
+        self.replies()
+        alone = self.taught("code only").replace("a1b2", a["code"])
+        self.assertEqual(self.say(alone), "near-approval")
+        self.assertEqual(self.replies(), [f"I haven't changed anything yet. To go ahead, reply yes {a['code']}, or no {a['code']} to cancel."])
+        self.assertEqual(self.say(f"yes {a['code']}?"), "near-approval")
+        self.replies()
+        approvals = lambda: self.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0]
+        self.assertEqual((approvals(), self.commits(), {d["code"]: d["state"] for d in self.drafts()}[a["code"]]), (0, 0, "proposed"))
+        self.assertEqual(self.say(self.taught("decorated yes").replace("a1b2", a["code"])), "approved")
+        states = {d["code"]: d["state"] for d in self.drafts()}
+        self.assertEqual((approvals(), states[b["code"]]), (1, "proposed"))
+        self.assertNotEqual(states[a["code"]], "proposed")
+
+    def test_unknown_code_is_not_approved(self):
+        self.propose("hours")
+        self.replies()
+        self.say(self.taught("decorated yes").replace("a1b2", "ffff"))  # not a waiting code: never approves anything
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0], 0)
+
+
+class GuideMarginTests(StoreMixin, ConversationTestCase):  # AV1352-11: each taught margin line reaches its own calculation
+    def setUp(self):
+        super().setUp()
+        self.conv = self.open()
+
+    def margin(self, text):
+        self.assertEqual(self.say(text), "margin")
+        [reply] = self.replies()
+        return reply
+
+    def test_price_check_and_rounded_ending_lines_reach_their_modes(self):
+        from hass import margins
+        before = (self.drafts(), self.commits(), self.approvals())
+        price = self.margin(MARGIN_PRICE)
+        self.assertIn(steps("24", "12", "0", "3.49"), price)
+        self.assertIn("Your margin", price)
+        ending = self.margin(MARGIN_ENDING)
+        self.assertEqual(ending, margins.say(margins.compute("24", "12", "0", "35", ".99")))
+        self.assertIn("Charge $3.99.", ending)  # 35% needs about $3.08; rounded up to .99, not down to $2.99
+        self.assertNotEqual((price, ending), (USAGE, USAGE))
+        self.assertEqual((self.drafts(), self.commits(), self.approvals()), before)  # a private estimate saves and approves nothing
+        for bad in (MARGIN_PRICE + " ending .99", MARGIN_ENDING.replace("ending", "price"), MARGIN_ENDING.replace(".99", "0.99")):
+            self.assertEqual(self.margin(bad), USAGE, bad)
+
+
+class AV1352Test(unittest.TestCase):
+    def setUp(self):
+        self.doc = (DOCS / "PHONE_GUIDE.md").read_text("utf-8")
+
+    def test_examples_are_present_and_route_as_taught(self):
+        found = {(k, t) for k, t, _ in sends(self.doc)}
+        self.assertLessEqual(set(AV1352_SENDS), found)
+        self.assertEqual((route("status?"), conv.read_command("find eggs?")), ("status", ("find", "eggs")))  # the ? is not part of the query
+        self.assertEqual(conv.parse_memory("remember parking spot: use the back lot"), ("remember", "parking-spot", "use the back lot"))
+        self.assertEqual(conv.parse_memory("forget parking spot"), ("forget", "parking-spot", None))
+        for text in ("yes a1b2?", "undo a1b2?"):  # the ? never turns a write into a read
+            self.assertIsNone(route(text), text)
+        self.assertEqual(problems(self.doc), [])
+        self.assertLessEqual(len(self.doc.splitlines()), LINE_CAP)
+
+    def test_post_wording_matches_what_the_reply_sends(self):
+        """Contract: the guide says the product `post` reply carries the eligible photo, yet publishes nothing. Bug caught: the guide denying the attachment."""
+        for stale in STALE_POST_CLAIMS:
+            self.assertNotIn(stale, self.doc)
+            self.assertIn(f"required explanation missing (post reply carries the photo): {AV1352_EXPLAINS['post reply carries the photo']}", problems(self.doc.replace(AV1352_EXPLAINS["post reply carries the photo"], stale)))
+        self.assertNotRegex(self.doc, r"(?i)\bnothing is [^.]*\bsent\b")
+
+    def test_illustration_wording_follows_the_post_warning(self):
+        from hass.chat import reports_pack
+        self.assertIn("illustration", reports_pack.POST_ILLUSTRATION)
+        self.assertIn("not a photo of the product", reports_pack.POST_ILLUSTRATION)
+
+    def test_missing_mislabelled_or_reworded_lines_fail_by_name(self):
+        for kind, text in AV1352_SENDS:
+            missing = f"required example missing or misclassified: {text}"
+            line = next(l for k, t, l in sends(self.doc) if (k, t) == (kind, text))
+            self.assertIn(missing, problems(self.doc.replace(line, line.replace(f"`{text}`", "`gone`"))), text)
+            flipped = "Send: " if isinstance(kind, str) else "Send (code only): "
+            self.assertIn(missing, problems(self.doc.replace(line, flipped + f"`{text}`")), text)
+        for name, text in AV1352_EXPLAINS.items():
+            self.assertEqual(self.doc.count(text), 1, text)
+            self.assertIn(f"required explanation missing ({name}): {text}", problems(self.doc.replace(text, "gone")))
+
+    def test_typed_replies_cannot_be_faked(self):
+        for line in ("Send (code only): `Yes, a1b2 thanks`", "Send (decorated yes): `a1b2`", "Send (code only): `a1b2?`", "Send (decorated yes): `yes a1b2 a1b3`",
+                     "Send (code only): `status`", "Send (decorated yes): `yes a1b2?`", "Send (code only): `hello`"):
+            self.assertNotEqual(problems(self.doc + line + "\n"), [], line)
+        self.assertEqual(problems(self.doc + "Send (decorated yes): `ok, approve a1b2 thank you!`\n"), [])
+        self.assertIn("not a Send line", problems(self.doc + "Send (hint): `a1b2`\n")[0])
+        self.assertIn("plain-words line parses as a command", problems(self.doc + "Send (plain words): `status?`\n")[0])
 
 
 if __name__ == "__main__":

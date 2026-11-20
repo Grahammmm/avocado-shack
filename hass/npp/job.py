@@ -412,11 +412,23 @@ class Jobs:
         if job["state"] in ("approved", "published", "publish_failed"):
             return "already-done", None
         sent = instant(msg.received_at)
-        if self.receipt_for is None or job["state"] != "card_out" or not self.request(job, now) or not before or getattr(msg, "reply_to", None):
+        if self.receipt_for is None or job["state"] != "card_out" or not self.request(job, now) or not before:
             return "not_ready", None
-        if n is None and len(delivered) != 1:
+        ref = getattr(msg, "reply_to", None)
+        if ref not in (None, ""):
+            # A reply to a message names its card exactly: the delivered receipt whose transport id it is, never a guess.
+            hit = next((v for v in before if isinstance(ref, str) and ref and v["transport_message_id"] == ref), None)
+            if hit is None:
+                return "not_ready", None
+            if hit["n"] != job["current_version"]:
+                return "replaced", None
+            if n not in (None, hit["n"]):
+                return "which_card", None
+            target = hit
+        elif n is None and len(delivered) != 1:
             return "which_card" if len(before) > 1 else "not_ready", None
-        target = before[-1]
+        else:
+            target = before[-1]
         at = instant(target["delivered_at"])
         if (target["n"] != job["current_version"] or target["state"] != "delivered" or n not in (None, target["n"])
                 or sent is None or at is None or sent <= at):

@@ -37,6 +37,9 @@ class PostParseTests(unittest.TestCase):
 class PostTests(StoreMixin, ConversationTestCase):
     def setUp(self):
         super().setUp()
+        self.fixture()
+
+    def fixture(self):  # AV2137-08: also used by test_post_availability
         self.site = self.repo.wt / "storefront-mockup"
         (self.site / "post-test").mkdir()
         self.outside = tempfile.TemporaryDirectory()

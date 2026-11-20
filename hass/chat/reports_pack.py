@@ -9,6 +9,7 @@ from datetime import datetime
 
 from hass import editor as editor_mod, margins, memory as memory_mod, morning_report, social_draft, voice
 from hass.chat.shared import CANT_READ, CONTROL, COST_USAGE, _iso, load_content, LOCAL_TZ, q, SHELF_ASK
+from hass import sitegen
 from hass.content_model import ContentError, load_and_validate, shop_today
 from hass.ops import catalog
 
@@ -171,9 +172,10 @@ class ReportsPack:
             if many:
                 self._reply(many, long_ok=True, ids_ok=True)
                 return "post"
-            out = social_draft.build(content, pid, wt / "storefront-mockup")
+            out = social_draft.build(content, pid, wt / "storefront-mockup", today=shop_today(self._now()))
             if out["draft"] and stat.S_ISREG(os.lstat(photo := wt / "storefront-mockup" / out["image"]).st_mode):
                 text = f"Here's a post you can copy. I haven't posted anything.\n{q(out['caption'])}\nWhat the photo shows: {q(out['alt'])}"
+                if out.get("availability") in ("Sold out", "Limited"): text = self._post_stock_line(content, pid, out["availability"]) + text  # AV2137-08
                 if out.get("illustration"): text = POST_ILLUSTRATION + "\n" + text  # AV1352-03: only after the photo is eligible
             else:  # a refusal, or a photo that is itself a link: never attached
                 reason = out.get("reason", "no photo on the site")
@@ -188,6 +190,13 @@ class ReportsPack:
             text, photo = CANT_READ, None
         self._reply(text, [str(photo)] if photo else [], long_ok=True)
         return "post"
+
+    @staticmethod
+    def _post_stock_line(content, pid, word) -> str:
+        """AV2137-08: the warning line (with its newline) for a product whose card shows Sold out or Limited; the product's own day."""
+        product = next(p for p in content.products if p.get("id") == pid)
+        day = sitegen._day_text(sitegen.iso_day(product.get("available_on")))
+        return f"The website shows {q(product['name'])} as {word} (checked {day}). A post now may send people in for something that is not on the shelf.\n"
 
     def _post_caption(self, out, failure) -> str:
         """AV1104-07: one text reply, no attachment: a builder's caption draft as is (never posted, scheduled or stored), else ``failure``."""
