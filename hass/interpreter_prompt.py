@@ -76,8 +76,8 @@ RULES = (
     "from them and write the exact date; if the day is still unclear, ask.",
     f"One message may hold several ops (at most {MAX_OPS}).",
     "For all products on one shelf or from one maker, use one product.set_availability_all with available and shelf and/or "
-    "maker; both selectors mean their intersection. Never expand it into one op per product. Ask when the shelf or maker is "
-    "unclear. Each changed word gets today's Pacific day after a recorded full shelf check; this never records a full shelf check. "
+    "maker; both selectors mean their intersection. Never expand it into one op per product. "
+    "Each changed word gets today's Pacific day after a recorded full shelf check; this never records one. "
     "Use store.confirm_selection only when the owner explicitly says they checked the selection.",
     "store.set_hours replaces every hours line: send the whole new list, repeating the lines the owner did not change, "
     "in the order shown.",
@@ -111,8 +111,7 @@ RULES = (
     "place, name, difficulty, things to bring). Use the answer as written, even a name that is not in the lists below. "
     "If the message is a different, unrelated request, ignore \"recent\". If the answer does not settle the question, ask again.",
     "Availability words: sold out, out, gone, no more = \"no\"; low, running low, a few left = \"limited\"; back, in, got more "
-    "= \"yes\". product.set_availability is for one product; store.confirm_selection only when the owner says he checked the "
-    "shelves. A whole shelf or maker is one change per listed product (next rule), not capped at 6.",
+    "= \"yes\". product.set_availability is for one product. A whole shelf or maker is one change per listed product (next rule), not capped at 6.",
     "Shelf is a product's listed shelf and maker is its listed maker key. When the owner clearly names a whole shelf or "
     "maker, change every listed product id with it, without asking only because several match. Ask if the group is unclear "
     "or incomplete (a more-rows line) or over the operation limit; never invent ids.",
