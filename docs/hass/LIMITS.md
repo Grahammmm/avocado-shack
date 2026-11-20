@@ -40,7 +40,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 - `again` and a code renews an expired text proposal only if it expired at most **7** <!-- conversation.AGAIN_WINDOW_DAYS --> days ago (exactly seven days still counts) and the website still matches what it showed. It gives a new code and expiry and you approve it with a separate `yes` and that new code. A photo draft, a question, a cancelled, replaced or applied change is never renewed, and resuming applies nothing by itself.
 - A reply sent more than 15 minutes after the message it answers (queued while the shop computer was offline, or a send that
   failed and was retried) starts with `Late reply to your message from <day> <time>:` so you know which message it is for.
-- One message can change at most **20** <!-- editor.MAX_OPS --> things. Split bigger jobs into several messages.
+- One message can change at most **20** <!-- editor.MAX_OPS --> operations. Setting a whole shelf or one maker's availability in one message is one operation
+  however many products it touches, still one approved draft, and it does not change the shelf-check date. Split other big jobs into several messages.
 - Stopping a maker is one thing however many products it hides, and has no cap of its own. A live change still touches at most
   **10** <!-- live_policy.MAX_RECORDS --> records, and the maker and each product hidden with it count as one record each.
 
@@ -50,6 +51,7 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 - `history` and some words shows up to **10** <!-- conversation.HISTORY_SEARCH_MAX --> approved changes whose summary has every word, newest first; the words are at most **60 characters** <!-- conversation.HISTORY_TEXT_MAX -->.
 - `memory` shows the first **20** <!-- conversation.MEMORY_LIST_MAX --> saved notes and says how many more there are.
 - `memory` shows the first **20** <!-- conversation.ALIAS_LIST_MAX --> aliases apart from the notes and says how many more there are.
+- `shelf <name>` shows up to **60** <!-- chat.site_pack.SHELF_MAX --> active products on that shelf, then says how many more there are; hidden and held products are left out.
 - `costs` shows the newest **20** <!-- conversation.COSTS_LIST_MAX --> saved purchase costs and says how many more there are; `memory` leaves saved costs out of the notes, so they never use up its note lines, and only counts them.
 - A search by name offers at most **10** <!-- ops.catalog.MAX_CANDIDATES --> matching listings; use more words to narrow it.
 - `find` takes at most **60 characters** <!-- conversation.FIND_TEXT_MAX --> of words to look for.
