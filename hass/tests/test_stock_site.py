@@ -322,6 +322,18 @@ class StockCase(unittest.TestCase):
         self.assertTrue(auto_policy.qualifies(ops, ['product.set_availability'], False)[0])
         self.assertFalse(auto_policy.qualifies(ops + ops, ['product.set_availability'], False)[0])
 
+    def test_stale_shelf_check_still_allows_word_updates(self):
+        self.baseline(); self.pull(**{pid: 0 for pid in self.ids[:10]})
+        yesterday = (self.now - timedelta(days=1)).astimezone(ZoneInfo('America/Los_Angeles')).date().isoformat()
+        for p in self.products: p['available_on'] = yesterday
+        editor._write_json(self.products_path, self.original)
+        store = json.loads(self.store_path.read_text()); store['selection_checked_on'] = yesterday
+        editor._write_json(self.store_path, store); git(self.repo.wt, 'add', '-A'); git(self.repo.wt, 'commit', '-qm', 'older check')
+        self.pull(); self.assertEqual(self.runq(), 'live'); self.assertEqual(len(self.live.calls[0]), 10)
+        self.assertEqual(json.loads(self.store_path.read_text())['selection_checked_on'], yesterday)
+        updated = json.loads(self.products_path.read_text())['products']
+        self.assertEqual(next(p for p in updated if p['id'] == self.ids[0])['available_on'], self.today())
+
     def test_shelf_check_and_prepare_race(self):
         self.baseline(); self.pull(**{pid: 0 for pid in self.ids[:10]})
         yesterday = (self.now - timedelta(days=1)).astimezone(ZoneInfo('America/Los_Angeles')).date().isoformat()
@@ -329,7 +341,7 @@ class StockCase(unittest.TestCase):
         editor._write_json(self.products_path, self.original)
         store = json.loads(self.store_path.read_text()); store['selection_checked_on'] = yesterday
         editor._write_json(self.store_path, store); git(self.repo.wt, 'add', '-A'); git(self.repo.wt, 'commit', '-qm', 'no check')
-        self.pull(); self.assertEqual(self.runq(), 'not-checked-today'); self.assertFalse(self.live.calls)
+        self.assertFalse(self.live.calls)  # the race below starts before any prepare
         self.check_today(); git(self.repo.wt, 'add', '-A'); git(self.repo.wt, 'commit', '-qm', 'check restored')
         pid = self.ids[0]; prepare = self.live.prepare
         def race(ops):

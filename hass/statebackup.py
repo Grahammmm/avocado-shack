@@ -32,6 +32,7 @@ from hass import corrlog, editor, media as photos  # noqa: E402
 from hass.conversation import CONTROL, _iso  # noqa: E402
 from hass.content_model import REPO_ROOT  # noqa: E402
 from hass.editor import UnsafeState  # noqa: E402
+from hass.npp.job import job_photos  # noqa: E402
 from hass.npp.receipt import CARD_RE, JOB_RE, read_artifact  # noqa: E402
 
 MANIFEST, CONFIG, DB, LOCK = "MANIFEST.json", "config.json", "conversation.sqlite3", "writer.lock"
@@ -95,6 +96,17 @@ def _rename_noreplace(src: Path, dst: Path) -> None:
 
 def _connect_ro(path: Path):
     return contextlib.closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True))
+
+def _private_dirs(path: Path) -> None:
+    """mkdir -p with every directory it makes 0700 whatever the umask: mkdir(parents=True) gives the parents
+    0777 & ~umask, so a media/npp made that way fails verify's mode check under the usual umask 022."""
+    missing = []
+    while not path.exists():
+        missing.append(path)
+        path = path.parent
+    for directory in reversed(missing):
+        directory.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(directory, 0o700)
 
 def _snapshot(src: Path, dst: Path) -> None:  # a consistent copy via the sqlite online backup API
     _write_new(dst, b"")
@@ -217,7 +229,7 @@ def create(state, out, now=None, media=None) -> dict:
         # The inbox goes first: a row it shows `done` was handled before, so the later DB snapshot holds its effect;
         # one handled in between stays `pending` here and a later drain answers it `duplicate` (no second write).
         for rel in sorted(files + mfiles, key=lambda rel: rel != INBOX):
-            (dest / rel).parent.mkdir(mode=0o700, exist_ok=True, parents=True)
+            _private_dirs((dest / rel).parent)
             if rel.startswith(NPP):
                 try: data = read_artifact((nroot or mroot) / rel[len("media/"):])
                 except (OSError, ValueError, RecursionError):
@@ -293,15 +305,25 @@ def _intact(path: Path) -> bool:
     except sqlite3.DatabaseError:
         return False
 
-def _jobs_resumable(db_path: Path, mrels) -> bool:
-    """True only if every open NPP job's source photo (its photo_sha) is in the backup's media; any doubt is False."""
+def _open_job_problems(db_path: Path, mrels) -> list:
+    """One {job, why} per open NPP job that cannot resume: an original it reads (its photo_sha or an attachment of its
+    stored request, via npp.job.job_photos) is not in the backup's media, or its request cannot be read. Empty means all
+    resumable; no open jobs means empty. Any doubt (database unreadable) is a problem: fail closed."""
+    have = {m[1] for r in mrels if (m := re.fullmatch(rf"{ORIG}[0-9a-f]{{2}}/([0-9a-f]{{64}})\.(?!json$)\w+", r))}
+    problems = []
     try:
         with _connect_ro(db_path) as db:
-            if not db.execute("SELECT 1 FROM sqlite_master WHERE name = 'npp_jobs'").fetchone(): return True
-            shas = [row[0] for row in db.execute("SELECT photo_sha FROM npp_jobs WHERE closed_at IS NULL")]
-    except sqlite3.DatabaseError: return False  # completeness cannot be established
-    have = {m[1] for r in mrels if (m := re.fullmatch(rf"{ORIG}[0-9a-f]{{2}}/([0-9a-f]{{64}})\.(?!json$)\w+", r))}
-    return all(isinstance(sha, str) and sha in have for sha in shas)
+            db.row_factory = sqlite3.Row
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE name = 'npp_jobs'").fetchone(): return []
+            for job in db.execute("SELECT job_id, photo_sha, open_request_id FROM npp_jobs WHERE closed_at IS NULL ORDER BY rowid").fetchall():
+                try:
+                    missing = [sha for sha in job_photos(db, job) if sha not in have]
+                    why = f"original missing: {', '.join(sha[:12] for sha in missing[:3])}" if missing else None
+                except (ValueError, TypeError, KeyError, RecursionError) as exc:
+                    why = str(exc) or "request unreadable"
+                if why: problems.append({"job": str(job["job_id"]), "why": why})
+    except sqlite3.DatabaseError: return [{"job": None, "why": "database unreadable"}]  # completeness cannot be established
+    return problems
 
 def _config_worktree(path: Path):  # the worktree a hashed config.json names, else None; never raises
     try: cfg = json.loads(_read_small(path, editor.MAX_CONFIG).decode("utf-8"))  # restore merges it as a dict, rewrites worktree
@@ -431,7 +453,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
     mtmp = mtarget and mtarget.parent / f".{mtarget.name}.restore-{os.getpid()}"
     ctmp = ctarget and ctarget.parent / f".{ctarget.name}.restore-{os.getpid()}"
     tmp.mkdir(mode=0o700)
-    made, renamed, mrenamed = [tmp], False, False
+    made, renamed, mrenamed, npp_off = [tmp], False, False, []
     try:
         os.chmod(tmp, 0o700)
         if mtmp:
@@ -441,7 +463,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
         for rel in sorted(doc["files"]):
             if rel == BUNDLE or rel.startswith(MEDIA) and not mtmp: continue  # bundle: FAV-08; media: mediaRestored
             dst = mtmp / rel[len("media/"):] if rel.startswith(MEDIA) else tmp / rel
-            dst.parent.mkdir(mode=0o700, exist_ok=True, parents=True)
+            _private_dirs(dst.parent)
             if fallback := re.fullmatch(FALLBACK_JPEG, rel):
                 _write_new(dst, _read_fallback(bdir / rel, fallback[1]))
                 continue
@@ -450,8 +472,9 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
                 continue
             cfg = {**json.loads(_read(bdir / CONFIG).decode("utf-8")), "worktree": str(wt)}
             if isinstance(cfg.get("settings"), dict) and cfg["settings"].get("npp"):
-                # A drill with no media, or media without the photo originals a job resumes from, must not run NPP.
-                keep = mtarget and _jobs_resumable(bdir / DB, mrels)
+                # A drill with no media, or media missing any original an open job reads, must not run NPP.
+                npp_off = _open_job_problems(bdir / DB, mrels if mtarget else [])
+                keep = mtarget and not npp_off
                 cfg["settings"] = {**cfg["settings"], **({"mediaRoot": str(mtarget)} if keep else {"npp": False})}
             _write_new(tmp / CONFIG, json.dumps(cfg, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"))
         if ctmp:
@@ -474,6 +497,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
         raise
     if mrels: extra.update({"mediaRestored": bool(mtarget), "media": sum(rel.startswith(ORIG) for rel in mrels) // 2})
     if ctarget: extra.update({"contentRestored": True, "contentCheck": _site_check(ctarget)})  # failed: dir kept
+    if npp_off: extra["nppOff"] = npp_off  # NPP was on but is now off: which open job cannot resume, and why
     return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]),
             "contentCommit": doc.get("contentCommit"), **extra}
 
@@ -496,7 +520,7 @@ def drill(backup, into, worktree, media_into=None, now=None, content_into=None) 
         "state": out["state"], "worktree": out["worktree"], "files": out["files"], "paused": out["paused"],
         "contentCommit": out["contentCommit"], "health_problems": ids, "health_info": sorted({p["check"] for p in info}),
         "history": len(hist.get("history") or []),
-        **{k: out[k] for k in ("media", "mediaRestored", "contentRestored", "contentCheck") if k in out}}
+        **{k: out[k] for k in ("media", "mediaRestored", "contentRestored", "contentCheck", "nppOff") if k in out}}
 
 NAME_RE = re.compile(r"hass-state-[0-9]{8}T[0-9]{6}Z")  # create()'s folder name; the name is the UTC time
 def _listed(entry):  # (manifest doc or None, problem or None); a symlink is never followed

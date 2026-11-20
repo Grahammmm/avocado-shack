@@ -10,6 +10,8 @@
   status  the cache facts (as of, item count, last result, failures) and the till they belong to (environment, merchantId); no
           network, no token. A cache of another till, or with no identity, prints result "identity" (HASS-CLOVER-1-FIX-2).
 
+  link suggest  (HASS-LINK, docs/hass/CLOVER.md section 2) saves exact-name link matches as one draft for the owner's `link all <code>`;
+          cache and local products only. Prints counts and the code, never a name.
   report stock|mismatch|pos [--out DIR] (or report --all) writes private local Markdown files from the cache only. `pos` (HASS-POS-1,
           docs/hass/POS.md) also writes pos-totals.json: totals only, no name, price or SKU.
           No token or network. Stdout remains one redacted JSON status line; details stay in local files.
@@ -216,6 +218,20 @@ def report(args, clock=_now):
     return {"result": "ok", "reports": len(prepared) + bool(pos_built), "asOf": cache._iso(snapshot.fetched_at)}, 0
 
 
+def link_suggest(args):
+    """HASS-LINK: exact-name matches from the cache and the local products only (no token, no network, no website word). Saves one draft
+    for Mike's `link all <code>` and a private list in <state>/clover/reports/link-suggest.md; prints counts and the code, never a name."""
+    from hass import editor
+    from hass.clover import links, reports
+    clover, state = _setup(args.host)
+    snapshot, _ = cache.read(state, cache.identity_of(clover))
+    if snapshot is None:
+        raise Stop({"result": "no-cache"})
+    code, pairs, clashes, site_only, till_only = links.draft(state, snapshot, *reports.read_inputs(state, editor._load(str(state))[2]))
+    return {"result": "ok", "code": code, "matches": len(pairs), "sameName": len(clashes), "siteOnly": len(site_only), "tillOnly": len(till_only),
+            "asOf": cache._iso(snapshot.fetched_at)}, 0
+
+
 def main(argv=None, *, transport=None, sleep=time.sleep, monotonic=time.monotonic, clock=_now):
     ap = argparse.ArgumentParser(prog="hass/clover/cli.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -229,6 +245,9 @@ def main(argv=None, *, transport=None, sleep=time.sleep, monotonic=time.monotoni
     p.add_argument("--all", action="store_true")
     p.add_argument("--host", required=True)
     p.add_argument("--out")
+    p = sub.add_parser("link")
+    p.add_argument("action", choices=("suggest",))
+    p.add_argument("--host", required=True)
     args = ap.parse_args(argv)
     os.umask(0o077)
     try:
@@ -238,6 +257,8 @@ def main(argv=None, *, transport=None, sleep=time.sleep, monotonic=time.monotoni
             out, code = sync(args, transport, sleep, monotonic, clock)
         elif args.cmd == "report":
             out, code = report(args, clock)
+        elif args.cmd == "link":
+            out, code = link_suggest(args)
         else:
             out, code = status(args)
     except Stop as stop:
