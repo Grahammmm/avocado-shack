@@ -8,6 +8,7 @@ import contextlib, copy, hashlib, json, os, re, sqlite3, stat, sys, time  # noqa
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Callable
 from zoneinfo import ZoneInfo
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -23,6 +24,9 @@ from hass import capabilities, photo_polish, stagelog, transcript  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
 from hass.clover import approvals as till_approvals  # noqa: E402
+from hass import npp as npp_package  # noqa: E402
+from hass.npp import job as listing_jobs  # noqa: E402
+from hass.npp.receipt import instant as npp_instant  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
 # imported back here, so hass.conversation.<name> still works for every caller and test.
 from hass.chat.shared import (  # noqa: E402,F401
@@ -243,6 +247,7 @@ class Outbox:
     msg_id = None  # provider id of the owner message being answered (for the correspondence log)
     emoji_ok = False  # the owner used an emoji first
     private_chat = None  # HASS-VOICE-1: G's own chat (set by Conversation); a reply there that cannot be sent never blocks the owner's
+    job_dispatch: Callable | None = None  # NPP cards never go through the legacy text-first send path
 
     def __init__(self, db, now):
         self.db, self._now = db, now
@@ -259,12 +264,17 @@ class Outbox:
     def add(self, chat, text, attachments=(), reply_to=None, *, long_ok=False, ids_ok=False):
         text = self.clean(text, long_ok, ids_ok)
         attachments = list(attachments)
-        self.db.execute("INSERT INTO outbox(chat, text, attachments, created_at, reply_to) VALUES (?, ?, ?, ?, ?)",
-                        (chat, text, json.dumps(attachments), _iso(self._now()), reply_to))
+        row = self.db.execute("INSERT INTO outbox(chat, text, attachments, created_at, reply_to) VALUES (?, ?, ?, ?, ?)",
+                              (chat, text, json.dumps(attachments), _iso(self._now()), reply_to)).lastrowid
         transcript.outgoing(self, chat, text, attachments, reply_to)
+        return row
 
     def unsent(self):
-        return self.db.execute("SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY id").fetchall()
+        # A switch-off or pin refusal must not release a previously queued NPP card through ordinary send().
+        hidden = ""
+        if self.job_dispatch is None and self.db.execute("SELECT 1 FROM sqlite_master WHERE name='npp_versions'").fetchone():
+            hidden = " AND NOT EXISTS (SELECT 1 FROM npp_versions v WHERE v.outbox_id=outbox.id)"
+        return self.db.execute("SELECT * FROM outbox WHERE sent_at IS NULL" + hidden + " ORDER BY id").fetchall()
 
     def flush(self, adapter) -> int:
         """A raised send error propagates and leaves that row and every later row unsent, except a private row (G's chat):
@@ -272,7 +282,11 @@ class Outbox:
         sent = 0
         for row in self.unsent():
             head = self._late(row["reply_to"]) or self._delayed(row["created_at"])  # the longer wait is the one named
-            try: adapter.send(row["chat"], head + row["text"], json.loads(row["attachments"]))
+            try:
+                if self.job_dispatch is None:
+                    adapter.send(row["chat"], head + row["text"], json.loads(row["attachments"]))
+                elif not self.job_dispatch(adapter, row, head + row["text"]):
+                    continue
             except Exception:
                 if row["chat"] != self.private_chat or self.private_chat is None: raise
                 self.db.execute("DELETE FROM outbox WHERE id = ?", (row["id"],))
@@ -447,6 +461,9 @@ def load_settings(sdir, photos=False) -> dict:
     if type(polish) is not bool or polish and house is not True: problems.append("photo_polish must be true or false, and true needs houseRender")
     intake = settings.get("itemIntake", False)  # HASS-INTAKE-2: the full intake interview for a new item; default off, like houseRender
     if type(intake) is not bool: problems.append("itemIntake must be true or false")
+    npp = settings.get("npp", False)
+    if type(npp) is not bool or npp and not (isinstance(root, str) and root.strip()):
+        problems.append("npp must be true or false, and true needs mediaRoot")
     lookup = settings.get("hikeLookup")  # HIKE-LOOKUP-2: {"contact": address} (or the flat key "hikeLookup.contact"); absent = no map lookup, the plain hike flow
     contact = settings.get("hikeLookup.contact") if lookup is None else lookup.get("contact") if isinstance(lookup, dict) else False
     if contact is not None and hike_lookup.valid_contact(contact) is None: problems.append("hikeLookup.contact must be an e-mail address or an https link")
@@ -457,6 +474,7 @@ def load_settings(sdir, photos=False) -> dict:
             **({"photo_polish": True} if polish is True else {}),  # HASS-IMAGE-1: only when on
             **({"hikeLookupContact": contact} if contact is not None else {}),  # HIKE-LOOKUP-2: only when set
             **({"itemIntake": True} if intake is True else {}),  # HASS-INTAKE-2: only when on
+            **({"npp": True} if npp is True else {}),
             **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),
             **({"gKeys": frozenset(g_keys), "gChat": g_chat, "gSenders": tuple(g_senders)} if g_keys and isinstance(g_chat, str) else {}),
             **({"gOwner": True} if g_owner is True else {}),
@@ -490,7 +508,8 @@ def _photo_sentence(technical):
 class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack commands are in hass/chat/
     stage = staticmethod(stagelog.off)
 
-    def __init__(self, state_dir, editor, interpreter, clock, previewer=None, photos=None, labels=None, skills=None):
+    def __init__(self, state_dir, editor, interpreter, clock, previewer=None, photos=None, labels=None, skills=None,
+                 *, npp_stages=None, npp_executor=None, npp_receipt_for=None):
         """previewer (H06, e.g. preview.Previewer(worktree)): proposal screenshots and checked results; None keeps
         the H05 behaviour (no screenshot, an applied draft stays `applied`). skills (SKILLS-FW-3): a skills Registry; only read
         when the setting skills.mode is not ops-only, and then loaded with load_skills() when None."""
@@ -527,6 +546,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self.dispatch = dispatch_mod.Dispatcher(self, skills if skills is not None else load_skills())
         if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'open_asks'").fetchone():
             self.requests.adopt_legacy(self.settings["ownerChat"])  # a store made before FW-3 keeps its open request
+        self.npp = None
+        if self.settings.get("npp"):
+            try:
+                pinned = npp_package.assets()
+            except (OSError, ValueError, KeyError, TypeError):
+                self._problem("error", "npp-pins-refused")  # the reviewed fallback is today's item.add
+            else:
+                stages = npp_stages if npp_stages is not None else npp_package.stages_for(self, pinned)
+                self.npp = listing_jobs.Jobs(self, stages, pinned, npp_executor, npp_receipt_for)
+                self.outbox.job_dispatch = self.npp.dispatch
         self.recover()
 
     def _now(self) -> datetime:
@@ -613,7 +642,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         else: self.audit.record(step, **line)
 
     def flush(self, adapter) -> int:
-        return self.outbox.flush(adapter)
+        if self.npp is not None:
+            self.npp.pump()
+        sent = self.outbox.flush(adapter)
+        if self.npp is not None:
+            self.npp.refresh_receipts()
+            self.npp.write_receipts()
+        return sent
 
     # -- store helpers -------------------------------------------------------------------------------------------
     def _row(self, row_id):
@@ -652,7 +687,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         taken = {r["code"] for r in self._drafts("1")}
         while True:
             for size in range(4, 13, 2):
-                if hexdigest[:size] not in taken: return hexdigest[:size]
+                if hexdigest[:size] not in taken and (self.npp is None or not self.npp.taken(hexdigest[:size])):
+                    return hexdigest[:size]
             hexdigest = hashlib.sha256(f"{hexdigest}:repeat".encode()).hexdigest()
 
     def _repeat(self, row) -> bool:
@@ -1082,6 +1118,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         this result (Dispatcher._ctx), so a slow site never holds the write lock and never hangs the reply. Only for the
         owner's own new text with skills on; anything that goes wrong is the plain "could not read their site" reply later."""
         if self.dispatch is None or msg.from_me or msg.kind != "new" or not self._is_owner(msg): return {}
+        if self.npp is not None and (msg.attachments or self.npp.active(msg.chat, sender_key(msg.sender))): return {}
         text = (msg.text or "").replace("\ufffc", "")
         if not text.strip() or len(text) > MAX_OWNER_TEXT: return {}
         from hass import maker_site  # lazy: only a text that names a website needs it
@@ -1137,6 +1174,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if hasattr(self.editor, "sync_settings"): self.editor.sync_settings(self.settings)
         self._label_jobs = []  # AV2152-04: one job per new photo draft, in the order sent; reset on every message
         self._polish_jobs = []  # HASS-IMAGE-1: stored photos to clean up in the background, after the commit
+        if self.npp is not None:
+            self.npp.refresh_receipts()  # receipt ordering is filtered at inbox acceptance, not at this pickup
         self._intake_fields = self._read_intake(msg)
         self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
         # Intake waits for the label read, then sends one complete preview, not an early interview question.
@@ -1233,6 +1272,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text, listing_names=True)
+        if self.npp is not None and msg.attachments <= 0 and (result := self._npp_turn(self.npp, msg, now, command)) is not None:
+            return result
         if msg.text.strip() == "?" and self.dispatch is not None:
             req = self.requests.get(msg.chat, now)
             if req and self.dispatch.simple_intake(req): command = None
@@ -1451,6 +1492,74 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self._close_asks()  # as a single no: the open request goes too
         self._reply(f"Cancelled {codes}; nothing changed.", long_ok=True)
         return "rejected"
+
+    def _npp_turn(self, jobs, msg, now, command):
+        text = msg.text.strip()
+        accepted = npp_instant(self._forwarded) if self._forwarded is not None else now
+        accepted = min(accepted, now) if accepted is not None else None
+        active = jobs.active(msg.chat, self._asker)
+        if (match := listing_jobs.YES.fullmatch(text)) is not None:
+            code, n = match[1].lower(), int(match[2]) if match[2] else None
+            job = jobs.one("SELECT * FROM npp_jobs WHERE job_id=? AND sender=? AND chat=?", code, self._asker, msg.chat)
+            if job is not None:
+                return self._npp_approve(jobs, job, msg, n, accepted, now)
+        if active is None:
+            return None
+        disposition = None
+        if command and command[0] == "status":
+            self._reply(f"The listing {active['job_id']} is still open.\n" + self._status(now, self._paused()),
+                        long_ok=True, ids_ok=True)
+            disposition = "status"
+        elif (match := listing_jobs.NO.fullmatch(text)) and (match[1] is None or match[1].lower() == active["job_id"]):
+            jobs.turn(active["job_id"], msg, "other", accepted or now)
+            jobs.close(active, "cancelled", now)
+            jobs.reply(active, "Okay, I've cancelled that. Nothing changed.", msg.provider_id)
+            disposition = "cancelled"
+        elif text.casefold() == "yes":
+            self._reply(jobs.replies["guards"]["not_ready"])
+            disposition = "no-target"
+        elif (jobs.stages is not None and len(text) <= MAX_OWNER_TEXT and not HOSTILE_RE.search(text)
+              and (text == "?" and jobs.needs_retry(active) or not command and jobs.stages.takes_turn(text, active["state"]))):
+            public, fields = item_intake.caption_answers("" if text == "?" else text, {"photo_fields": self._intake_fields})
+            disposition = jobs.input(msg, self._asker, accepted or now, now, item_intake.without_unresolved_finance(public), fields)
+        if disposition is not None:
+            self._record(msg, disposition)
+            return disposition, None
+        return None
+
+    def _npp_approve(self, jobs, job, msg, n, accepted, now):
+        failure, version = jobs.select(job, msg, n, accepted, now)
+        queued = npp_instant(version["queued_at"]) if version is not None else None
+        expires = queued + timedelta(seconds=self.settings["approvalTtlSeconds"]) if queued else now
+        if (job["state"] in ("asking", "working", "editing", "card_out", "retake") and not jobs.request(job, now)
+                or version is not None and (self._forwarded_late(msg) or now >= expires)):
+            jobs.close(job, "expired", now)
+            failure = "expired"
+        if version is not None and not failure and not self._paused() and self._writer_busy(now) is None:
+            draft = self.editor.show(version["change_id"]).get("draft") or {}
+            bound = (draft.get("change_id"), draft.get("draft_hash"), draft.get("base"))
+            check = getattr(self.editor, "check_environment", None)
+            if (bound != tuple(version[k] for k in ("change_id", "draft_hash", "base"))
+                    or callable(check) and check(version["change_id"])
+                    or self.settings.get("liveSite") and self._live_reasons(draft)):
+                failure = "not_ready"
+            else:
+                row = self._propose(draft, msg.sender, now)
+                cur = self.db.execute(
+                    "INSERT INTO approvals(sender,chat,provider_id,change_id,draft_hash,base,expires_at,approved_at) VALUES (?,?,?,?,?,?,?,?)",
+                    (msg.sender, msg.chat, msg.provider_id, version["change_id"], version["draft_hash"], version["base"],
+                     _iso(expires), _iso(now)))
+                jobs.approve(job, version, cur.lastrowid, row["row_id"], now)
+                self._move(row, "approved")
+                self._audit("approved", row, approval="A1", approved_by=self._audit_role(msg.chat))
+                self._record(msg, "approved")
+                return "approved", self._row(row["row_id"])
+        line = (PAUSED_LINE if version is not None and not failure and self._paused() else
+                listing_jobs.EXPIRED if failure == "expired" else "That one is already saved." if failure == "already-done" else
+                jobs.replies["guards"][failure or "not_ready"])
+        jobs.reply(job, line, msg.provider_id)
+        self._record(msg, "no-target")
+        return "no-target", None
 
     def _waiting_note(self, now, exclude=None) -> str:
         """AV2007-02: what still waits on this chat (proposed or needing an answer, unexpired), with each one's own `no <code>`;
@@ -2180,6 +2289,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return self._photos_refused([(exc.position, exc)], count)
         except media.Refused as exc:
             return self._photos_refused([(1, exc)], count)
+        if self.npp is not None and msg.chat in self._owner_chats:
+            shas = [s["sha256"] for s in stored]
+            if (result := self._npp_photo(self.npp, msg, now, shas)) is not None: return result
         if photo_polish.enabled(self.settings): self._polish_jobs += [s["sha256"] for s in stored]  # HASS-IMAGE-1: started after the commit
         if count > 1: return self._photo_batch(msg, now, [s["sha256"] for s in stored])
         sha = stored[0]["sha256"]
@@ -2215,6 +2327,14 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         finally: self._photo_draft = None
         if done not in ("proposed", "needs-details", "question"): self._photo_question(code, sha)  # AV2007-01: asked once, and only if the caption did not already answer
         return done
+
+    def _npp_photo(self, jobs, msg, now, shas):
+        # One batch is one intake; the first photo supplies the picture, the others are identification input.
+        if jobs.stages is None:
+            return self._reply(jobs.replies["guards"]["render_failed"]) or "npp-unavailable"
+        public, fields = item_intake.caption_answers(msg.text.replace("\ufffc", "").strip(), self._intake_fields)
+        accepted = npp_instant(self._forwarded) or now
+        return jobs.input(msg, self._asker, min(accepted, now), now, item_intake.without_unresolved_finance(public), fields, shas)
 
     def _photo_question(self, code, sha):
         self._reply(PHOTO_QUESTION)
@@ -2335,6 +2455,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     def _outcome_to(self, row, out, now):
         result = out.get("result")
+        if self.npp is not None and self.npp.outcome(row["row_id"], now, result in ("applied", "already-applied")):
+            if result not in ("applied", "already-applied"):
+                # Do not give a failed/stale NPP draft a legacy approval path or resend its old preview.
+                self._move(row, "failed", reason=_reason(out))
+                self._audit("failed", row, "stale" if result == "stale" else "failed")
+                self._reply("I couldn't save that card. Nothing changed. Please send the photo again for a fresh card.")
+                return
         if result in ("applied", "already-applied"):
             self._move(row, "applied", commit=out.get("commit"))
             self._audit("undone" if _is_undo(row) else "applied", row, commit=out.get("commit"))  # AVB-10

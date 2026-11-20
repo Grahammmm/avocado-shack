@@ -32,6 +32,8 @@ from hass import corrlog, editor, media as photos  # noqa: E402
 from hass.conversation import CONTROL, _iso  # noqa: E402
 from hass.content_model import REPO_ROOT  # noqa: E402
 from hass.editor import UnsafeState  # noqa: E402
+from hass.npp.job import job_photos  # noqa: E402
+from hass.npp.receipt import CARD_RE, JOB_RE, read_artifact  # noqa: E402
 
 MANIFEST, CONFIG, DB, LOCK = "MANIFEST.json", "config.json", "conversation.sqlite3", "writer.lock"
 INBOX = "inbox.sqlite3"  # H16 inbound queue; snapshotted like DB
@@ -40,11 +42,14 @@ CLOVER = "clover/cache.sqlite3"  # till cache (hass/clover/cache.py); snapshotte
 BUNDLE = "content.bundle"  # FAV-07: git bundle of the writer worktree's HEAD == contentCommit
 DIRS = ("drafts", "changes", "screenshots", "audit")  # AVB-10: audit/ is the one audit log (ids only), kept with the state
 ORIG = "media/originals/"  # H10 photo originals <aa>/<sha>.<ext> + <aa>/<sha>.json, aa == sha[:2] (hass/media.py)
+NPP = "media/npp/"  # private listing receipts and immutable, content-addressed card PNGs
+MEDIA = (ORIG, NPP)
 FALLBACK_JPEG = r"screenshots/([0-9a-f]{64})\.jpg"  # frozen listing picture, named by its bytes; never arbitrary JPEGs
 FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|transcript\.sqlite3|clover/cache\.sqlite3|content\.bundle"
                      r"|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
                      r"|screenshots/[0-9A-Za-z_-][0-9A-Za-z._-]*\.png"
                      rf"|{FALLBACK_JPEG}"
+                     rf"|{NPP}{JOB_RE}/(?:receipt\.json|{CARD_RE})"
                      r"|audit/[0-9]{4}-[0-9]{2}-[0-9]{2}\.jsonl"
                      r"|media/originals/(?P<aa>[0-9a-f]{2})/(?P=aa)[0-9a-f]{62}\.(json|%s)"
                      % "|".join(sorted(set(photos.EXT.values()))))
@@ -91,6 +96,17 @@ def _rename_noreplace(src: Path, dst: Path) -> None:
 
 def _connect_ro(path: Path):
     return contextlib.closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True))
+
+def _private_dirs(path: Path) -> None:
+    """mkdir -p with every directory it makes 0700 whatever the umask: mkdir(parents=True) gives the parents
+    0777 & ~umask, so a media/npp made that way fails verify's mode check under the usual umask 022."""
+    missing = []
+    while not path.exists():
+        missing.append(path)
+        path = path.parent
+    for directory in reversed(missing):
+        directory.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(directory, 0o700)
 
 def _snapshot(src: Path, dst: Path) -> None:  # a consistent copy via the sqlite online backup API
     _write_new(dst, b"")
@@ -141,11 +157,13 @@ def _media_root(raw, roots) -> Path:  # create --media: the H10 photo store (has
         raise UnsafeState("media dir must lie outside the repository, the worktrees, the state dir and the backup dir")
     return path
 
-def _scan_media(mroot: Path):
-    """(backup rels of settled originals + sidecars, refused names, unsettled names); nothing is followed."""
+def _scan_media(mroot: Path, strict=True):
+    """(backup rels of settled originals + sidecars, refused names, unsettled names); nothing is followed.
+    strict=False (the configured NPP root, never named by --media) takes only originals/ and npp/, ignoring web/ etc."""
     orig, pairs = mroot / "originals", {}
-    bad = [f"unknown media entry: {e.name}" for e in os.scandir(mroot) if e.name != "originals" or e.is_symlink()
-           or not e.is_dir()]
+    bad = [f"unknown media entry: {e.name}" for e in os.scandir(mroot) if e.name not in ("originals", "npp") or e.is_symlink()
+           or not e.is_dir()] if strict else [f"unsafe media entry: {e.name}" for e in os.scandir(mroot)
+                                              if e.name in ("originals", "npp") and (e.is_symlink() or not e.is_dir())]
     subs = list(os.scandir(orig)) if orig.is_dir() and not orig.is_symlink() else []
     for entry in [s for s in subs if s.is_symlink() or not s.is_dir()] + [
             e for s in subs if s.is_dir(follow_symlinks=False) for e in os.scandir(s.path)]:
@@ -156,7 +174,24 @@ def _scan_media(mroot: Path):
         else: bad.append(f"unknown entry: {rel}")
     unsettled = [f"unsettled media: {sha[:12]}" for sha, rels in sorted(pairs.items())
                  if sorted(rel.endswith(".json") for rel in rels) != [False, True]]
-    return sorted(sum(pairs.values(), [])), sorted(bad), unsettled
+    artifacts, invalid = _scan_npp(mroot)
+    return sorted(sum(pairs.values(), []) + artifacts), sorted(bad + invalid), unsettled
+
+
+def _scan_npp(mroot):
+    npp, artifacts, bad = mroot / "npp", [], []
+    if os.path.lexists(npp):
+        if not npp.is_dir() or npp.is_symlink():
+            return [], ["unsafe media/npp directory"]
+        for job in os.scandir(npp):
+            if not (job.is_dir(follow_symlinks=False) and re.fullmatch(JOB_RE, job.name)):
+                bad.append(f"unknown entry: {NPP}{job.name}")
+                continue
+            for entry in os.scandir(job.path):
+                rel = f"{NPP}{job.name}/{entry.name}"
+                if entry.is_file(follow_symlinks=False) and FILE_RE.fullmatch(rel): artifacts.append(rel)
+                else: bad.append(f"unknown entry: {rel}")
+    return sorted(artifacts), sorted(bad)
 
 def create(state, out, now=None, media=None) -> dict:
     if not state or not Path(state).is_dir(): raise UnsafeState("state dir must already exist")  # open_state creates
@@ -164,13 +199,22 @@ def create(state, out, now=None, media=None) -> dict:
     if top: return {"result": "refused", "problems": top}  # before _load reads config / _writer_lock creates the lock
     sdir, cfg, wt = editor._load(state)
     dest_root = _private_out(out, _roots(wt) + [sdir])
+    settings = cfg.get("settings") or {}
+    configured = settings.get("mediaRoot") if settings.get("npp") is True else None
     mroot = None if media is None else _media_root(media, _roots(wt) + [sdir, dest_root])
+    nroot = _media_root(configured, _roots(wt) + [sdir, dest_root]) if configured and os.path.lexists(configured) else None
     with editor._writer_lock(sdir) as held, contextlib.ExitStack() as undo:
         if not held: return {"result": "busy"}
         if (journal := sdir / "journal").is_dir() and not journal.is_symlink() and any(journal.iterdir()):
             return {"result": "unsettled", "problems": ["an interrupted write is pending; run editor.py recover first"]}
         files, bad = _scan(sdir)
         mfiles, mbad, unsettled = _scan_media(mroot) if mroot else ([], [], [])
+        if nroot and nroot != mroot:
+            # The configured NPP root's jobs and the originals they name travel together; an explicit originals root can
+            # differ but not claim a second job tree. The same sha names the same bytes, so a shared rel is kept once.
+            nfiles, nbad, nunsettled = _scan_media(nroot, strict=False)
+            if any(rel.startswith(NPP) for rel in mfiles): nbad.append("two NPP media roots")
+            mfiles, mbad, unsettled = sorted(set(mfiles) | set(nfiles)), mbad + nbad, unsettled + nunsettled
         if bad or mbad: return {"result": "refused", "problems": bad + mbad}
         if unsettled: return {"result": "unsettled", "problems": unsettled}  # a photo write may be in flight
         now = now or datetime.now(timezone.utc)
@@ -185,8 +229,15 @@ def create(state, out, now=None, media=None) -> dict:
         # The inbox goes first: a row it shows `done` was handled before, so the later DB snapshot holds its effect;
         # one handled in between stays `pending` here and a later drain answers it `duplicate` (no second write).
         for rel in sorted(files + mfiles, key=lambda rel: rel != INBOX):
-            (dest / rel).parent.mkdir(mode=0o700, exist_ok=True)
-            src = mroot / rel[len("media/"):] if rel.startswith(ORIG) else sdir / rel
+            _private_dirs((dest / rel).parent)
+            if rel.startswith(NPP):
+                try: data = read_artifact((nroot or mroot) / rel[len("media/"):])
+                except (OSError, ValueError, RecursionError):
+                    return {"result": "refused", "problems": [f"invalid NPP artifact: {rel}"]}
+                _write_new(dest / rel, data)
+                hashes[rel] = hashlib.sha256(data).hexdigest()
+                continue
+            src = next(r for r in (mroot, nroot) if r and os.path.lexists(r / rel[6:])) / rel[6:] if rel.startswith(ORIG) else sdir / rel
             if fallback := re.fullmatch(FALLBACK_JPEG, rel):
                 try: data = _read_fallback(src, fallback[1])
                 except (OSError, ValueError):
@@ -207,12 +258,13 @@ def create(state, out, now=None, media=None) -> dict:
                 return {"result": "refused", "problems": ["content bundle does not hold contentCommit"]}
             os.chmod(dest / BUNDLE, 0o600)
             hashes[BUNDLE] = hashlib.sha256(_read(dest / BUNDLE)).hexdigest()
-        if mroot: doc["media"] = {"originals": len(mfiles) // 2}
+        originals = sum(rel.startswith(ORIG) for rel in mfiles) // 2
+        if mroot or mfiles: doc["media"] = {"originals": originals}
         _write_new(dest / (MANIFEST + ".tmp"), json.dumps(doc, indent=2, sort_keys=True).encode("utf-8"))
         os.replace(dest / (MANIFEST + ".tmp"), dest / MANIFEST)  # last: a backup without it is incomplete
         _rename_noreplace(dest, final)  # a final dir that appeared meanwhile (even empty) is refused, never replaced
         undo.pop_all()  # renamed in: nothing left to clean up
-    extra = {"media": len(mfiles) // 2} if mroot else {}  # settled: one sidecar per original
+    extra = {"media": originals} if mroot or nroot else {}  # settled: one sidecar per original
     return {"result": "ok", "backup": str(final), "files": len(hashes), "contentCommit": commit,
             "contentBundle": BUNDLE in hashes, **extra}
 
@@ -253,6 +305,26 @@ def _intact(path: Path) -> bool:
     except sqlite3.DatabaseError:
         return False
 
+def _open_job_problems(db_path: Path, mrels) -> list:
+    """One {job, why} per open NPP job that cannot resume: an original it reads (its photo_sha or an attachment of its
+    stored request, via npp.job.job_photos) is not in the backup's media, or its request cannot be read. Empty means all
+    resumable; no open jobs means empty. Any doubt (database unreadable) is a problem: fail closed."""
+    have = {m[1] for r in mrels if (m := re.fullmatch(rf"{ORIG}[0-9a-f]{{2}}/([0-9a-f]{{64}})\.(?!json$)\w+", r))}
+    problems = []
+    try:
+        with _connect_ro(db_path) as db:
+            db.row_factory = sqlite3.Row
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE name = 'npp_jobs'").fetchone(): return []
+            for job in db.execute("SELECT job_id, photo_sha, open_request_id FROM npp_jobs WHERE closed_at IS NULL ORDER BY rowid").fetchall():
+                try:
+                    missing = [sha for sha in job_photos(db, job) if sha not in have]
+                    why = f"original missing: {', '.join(sha[:12] for sha in missing[:3])}" if missing else None
+                except (ValueError, TypeError, KeyError, RecursionError) as exc:
+                    why = str(exc) or "request unreadable"
+                if why: problems.append({"job": str(job["job_id"]), "why": why})
+    except sqlite3.DatabaseError: return [{"job": None, "why": "database unreadable"}]  # completeness cannot be established
+    return problems
+
 def _config_worktree(path: Path):  # the worktree a hashed config.json names, else None; never raises
     try: cfg = json.loads(_read_small(path, editor.MAX_CONFIG).decode("utf-8"))  # restore merges it as a dict, rewrites worktree
     except (OSError, ValueError, RecursionError): return None
@@ -267,14 +339,15 @@ def verify(backup) -> dict:
     doc = _manifest(bdir)
     if doc is None: return {"result": "corrupt", "problems": [f"{MANIFEST} missing or invalid"]}
     files, seen, problems = doc["files"], set(), []
-    walkable = set(DIRS) | {"clover"} | ({"media", ORIG[:-1]} if "media" in doc else set())  # + media/originals/<aa> below
+    walkable = set(DIRS) | {"clover"} | ({"media", ORIG[:-1], NPP[:-1]} if "media" in doc else set())
     if bdir.stat().st_mode & 0o777 != 0o700: problems.append("mode: backup dir")
     def walk(path: Path, prefix: str) -> None:
         for entry in sorted(os.scandir(path), key=lambda e: e.name):
             rel, mode = prefix + entry.name, entry.stat(follow_symlinks=False).st_mode
             if stat.S_ISLNK(mode): problems.append(f"symlink: {rel}")
             elif stat.S_ISDIR(mode) and (rel in walkable
-                                         or prefix == ORIG and re.fullmatch("[0-9a-f]{2}", entry.name)):
+                                         or prefix == ORIG and re.fullmatch("[0-9a-f]{2}", entry.name)
+                                         or prefix == NPP and "media" in doc and re.fullmatch(JOB_RE, entry.name)):
                 if mode & 0o777 != 0o700: problems.append(f"mode: {rel}")
                 walk(Path(entry.path), rel + "/")
             elif not stat.S_ISREG(mode) or (rel not in files and rel != MANIFEST): problems.append(f"unlisted: {rel}")
@@ -284,6 +357,11 @@ def verify(backup) -> dict:
     walk(bdir, "")
     for rel, digest in sorted(files.items()):
         if rel not in seen: problems.append(f"missing: {rel}")
+        elif rel.startswith(NPP):
+            try: actual = hashlib.sha256(read_artifact(bdir / rel)).hexdigest()
+            except (OSError, ValueError, RecursionError): problems.append(f"invalid NPP artifact: {rel}")
+            else:
+                if actual != digest: problems.append(f"hash mismatch: {rel}")
         elif fallback := re.fullmatch(FALLBACK_JPEG, rel):
             try: _read_fallback(bdir / rel, fallback[1])
             except (OSError, ValueError): problems.append(f"invalid fallback picture: {rel}")
@@ -312,7 +390,7 @@ def _pair_problems(doc) -> list:
     for _, rels in sorted(pairs.items()):
         if sorted(rel.endswith(".json") for rel in rels) == [False, True]: complete += 1
         else: problems += [f"unpaired: {rel}" for rel in sorted(rels)]
-    if "media" not in doc and not pairs: return problems
+    if "media" not in doc and not pairs and not any(rel.startswith(NPP) for rel in doc["files"]): return problems
     count = doc["media"].get("originals") if isinstance(doc.get("media"), dict) else None
     if type(count) is not int or count != complete: problems.append("media count mismatch")
     return problems
@@ -350,7 +428,8 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
     if checked["result"] != "ok": return {"result": "corrupt", "problems": checked["problems"]}
     bdir = Path(backup).absolute()
     doc = _manifest(bdir)
-    mrels = [rel for rel in doc["files"] if rel.startswith(ORIG)]
+    if doc is None: return {"result": "corrupt", "problems": [f"{MANIFEST} missing or invalid"]}
+    mrels = [rel for rel in doc["files"] if rel.startswith(MEDIA)]
     if os.path.lexists(into): return {"result": "refused", "problems": ["restore dir already exists; left untouched"]}
     if not worktree: return {"result": "refused", "problems": ["--worktree (a separate drill worktree) is required"]}
     if media_into is not None and (not mrels or os.path.lexists(os.path.abspath(media_into))):
@@ -374,7 +453,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
     mtmp = mtarget and mtarget.parent / f".{mtarget.name}.restore-{os.getpid()}"
     ctmp = ctarget and ctarget.parent / f".{ctarget.name}.restore-{os.getpid()}"
     tmp.mkdir(mode=0o700)
-    made, renamed, mrenamed = [tmp], False, False
+    made, renamed, mrenamed, npp_off = [tmp], False, False, []
     try:
         os.chmod(tmp, 0o700)
         if mtmp:
@@ -382,9 +461,9 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
             made.append(mtmp)
             (mtmp / "originals").mkdir(mode=0o700)
         for rel in sorted(doc["files"]):
-            if rel == BUNDLE or rel.startswith(ORIG) and not mtmp: continue  # bundle: FAV-08; media: mediaRestored
-            dst = mtmp / rel[len("media/"):] if rel.startswith(ORIG) else tmp / rel
-            dst.parent.mkdir(mode=0o700, exist_ok=True)
+            if rel == BUNDLE or rel.startswith(MEDIA) and not mtmp: continue  # bundle: FAV-08; media: mediaRestored
+            dst = mtmp / rel[len("media/"):] if rel.startswith(MEDIA) else tmp / rel
+            _private_dirs(dst.parent)
             if fallback := re.fullmatch(FALLBACK_JPEG, rel):
                 _write_new(dst, _read_fallback(bdir / rel, fallback[1]))
                 continue
@@ -392,6 +471,11 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
                 _copy(bdir / rel, dst)
                 continue
             cfg = {**json.loads(_read(bdir / CONFIG).decode("utf-8")), "worktree": str(wt)}
+            if isinstance(cfg.get("settings"), dict) and cfg["settings"].get("npp"):
+                # A drill with no media, or media missing any original an open job reads, must not run NPP.
+                npp_off = _open_job_problems(bdir / DB, mrels if mtarget else [])
+                keep = mtarget and not npp_off
+                cfg["settings"] = {**cfg["settings"], **({"mediaRoot": str(mtarget)} if keep else {"npp": False})}
             _write_new(tmp / CONFIG, json.dumps(cfg, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"))
         if ctmp:
             ctmp.mkdir(mode=0o700)
@@ -411,8 +495,9 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
         if mrenamed: os.rename(mtarget, mtmp)
         for path in made: shutil.rmtree(path, ignore_errors=True)  # only the temp dirs this call created
         raise
-    if mrels: extra.update({"mediaRestored": bool(mtarget), "media": len(mrels) // 2})
+    if mrels: extra.update({"mediaRestored": bool(mtarget), "media": sum(rel.startswith(ORIG) for rel in mrels) // 2})
     if ctarget: extra.update({"contentRestored": True, "contentCheck": _site_check(ctarget)})  # failed: dir kept
+    if npp_off: extra["nppOff"] = npp_off  # NPP was on but is now off: which open job cannot resume, and why
     return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]),
             "contentCommit": doc.get("contentCommit"), **extra}
 
@@ -435,7 +520,7 @@ def drill(backup, into, worktree, media_into=None, now=None, content_into=None) 
         "state": out["state"], "worktree": out["worktree"], "files": out["files"], "paused": out["paused"],
         "contentCommit": out["contentCommit"], "health_problems": ids, "health_info": sorted({p["check"] for p in info}),
         "history": len(hist.get("history") or []),
-        **{k: out[k] for k in ("media", "mediaRestored", "contentRestored", "contentCheck") if k in out}}
+        **{k: out[k] for k in ("media", "mediaRestored", "contentRestored", "contentCheck", "nppOff") if k in out}}
 
 NAME_RE = re.compile(r"hass-state-[0-9]{8}T[0-9]{6}Z")  # create()'s folder name; the name is the UTC time
 def _listed(entry):  # (manifest doc or None, problem or None); a symlink is never followed
