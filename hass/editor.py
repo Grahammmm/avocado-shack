@@ -15,7 +15,7 @@ from types import MappingProxyType
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import migration_check, sitegen, template_compat  # noqa: E402
+from hass import design_check, migration_check, sitegen, template_compat  # noqa: E402
 from hass.content_model import IMAGE_RE, REPO_ROOT, ContentError, load_and_validate, validate  # noqa: E402
 from hass.field_words import field_list  # noqa: E402
 from hass.ops import (  # noqa: E402
@@ -33,6 +33,7 @@ OWNED_PATHS = CONTENT_PATHS + GENERATED_PATHS
 COLLECTION_FILE = dict(products="products", makers="makers", events="community", routeIdeas="community", store="store", club="community")
 MAX_REQUEST, MAX_OPS = 64 * 1024, 20
 CHANGE_ID_RE = re.compile(r"chg-[0-9a-f]{12}")
+LOOK_BRANCH = re.compile(r"look/[a-z0-9][a-z0-9-]{0,23}")  # hass/look_change.py's branch names
 
 class UnsafeState(Exception): """The state dir is missing, shared, foreign-owned or inside a checkout (CLI exit 2)."""
 
@@ -217,12 +218,61 @@ def _compute(ops, wt: Path, settings, registry, now, sdir=None) -> dict:
     return {"result": "ok", "base": base, "records": records, "generated": generated, "assets": assets,
             "warnings": list(ctx.warnings), "summary": summary, "writes": writes, "files": files, "store": new.store}
 
+def _design_call(sdir: Path, ops):
+    """HASS-SITE-LOOK-1b: the one call of a design draft (design.apply, or history.revert of a design change), else None."""
+    call = ops[0] if len(ops) == 1 else {}
+    cid = str((call.get("args") or {}).get("changeId"))
+    if call.get("op") == "history.revert" and CHANGE_ID_RE.fullmatch(cid):
+        try:
+            rec = sdir / "changes" / f"{cid}.json"
+            st = os.lstat(rec)
+            if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_CONFIG: return None  # link, FIFO, socket, folder, too big: never opened
+            return call if _read(rec).get("kind") == "design" else None
+        except (OSError, ValueError, AttributeError, RecursionError): return None  # the history op names an unreadable record
+    return call if call.get("op") == "design.apply" else None
+
+def _design_compute(call, wt: Path, sdir: Path) -> dict:
+    """Check a design draft against writer HEAD; nothing is written. design.apply lands the approved look/<code> head (a LOOK-1
+    `ok` result: its one parent must be HEAD and design_check must say ok); its undo reverts exactly that commit (still HEAD)."""
+    refuse = lambda reason: {"result": "refused", "reason": reason}  # noqa: E731
+    head, args = _out(wt, "rev-parse", "HEAD"), call["args"]
+    if call["op"] == "history.revert":
+        cid = args["changeId"]
+        rec, draft = _read(sdir / "changes" / f"{cid}.json"), _read(sdir / "drafts" / f"{cid}.json")
+        if rec.get("state") != "applied" or rec.get("revertedBy"): return refuse(f"{cid} is not an applied change that can be undone")
+        if any(c.get("op") == "history.revert" for c in draft.get("ops", [])):
+            return refuse(f"{cid} is an undo; to bring the change back, ask for it again")
+        if rec.get("commit") != head: return refuse(f"conflict: the website files changed after {cid}")
+        land, paths = ("revert", head), _out(wt, "diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", head).splitlines()
+        problems = [p for p in paths if p not in design_check.DESIGN]
+    else:
+        if set(args) != {"branch", "base", "head"} or not all(isinstance(v, str) for v in args.values()) \
+                or not LOOK_BRANCH.fullmatch(args["branch"]):
+            return refuse("design.apply needs the branch, base and head of an ok look draft")
+        if _out(wt, "rev-parse", "-q", "--verify", f"refs/heads/{args['branch']}^{{commit}}") != args["head"]:
+            return refuse("the look branch is not at the approved look head")
+        if args["base"] != head or _out(wt, "rev-list", "--parents", "-n", "1", args["head"]).split() != [args["head"], head]:
+            return {"result": "stale", "problems": ["the look draft was not made on the current writer HEAD"]}
+        try: count, problems = design_check.check(head, args["head"], str(wt))
+        except design_check.Usage: count, problems = 0, ["the look draft could not be checked"]
+        land, paths = ("cherry-pick", args["head"]), _out(wt, "diff", "--name-only", "--no-renames", head, args["head"]).splitlines()
+        problems = problems or ([] if count else ["the look draft changes nothing"])
+    if problems: return refuse("not only design files: " + ", ".join(problems))
+    return {"result": "ok", "base": content_revision(wt), "records": [], "generated": [], "assets": {}, "warnings": [],
+            "summary": [f"{call['op']}: {land[0]} {land[1]}"], "land": land, "paths": sorted(paths)}
+
 def prepare(request, *, state=None, registry=None, now=None, environment=None) -> dict:
     sdir, cfg, wt = _load(state)
     ops, problems = _parse_request(request)
     if problems: return {"result": "invalid", "problems": problems}
     try:
-        out = _compute(ops, wt, cfg.get("settings", {}), registry, now, sdir)
+        design = _design_call(sdir, ops)
+        if design:  # a design draft is checked against a clean writer HEAD under the writer lock, as apply will (a dirty writer is refused up front)
+            with _writer_lock(sdir) as held:
+                if not held: return {"result": "busy"}
+                if problems := worktree_problems(wt): return {"result": "refused", "problems": problems}
+                out = _design_compute(design, wt, sdir)
+        else: out = _compute(ops, wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
     if out["result"] != "ok": return out
@@ -274,6 +324,38 @@ def _drop_new_assets(wt: Path, paths) -> None:
             _git(wt, "rm", "-q", "--cached", "--ignore-unmatch", "--", p)
             if (wt / p).parent.resolve().is_relative_to(wt.resolve()): (wt / p).unlink(missing_ok=True)
 
+def _design_undo_problems(wt: Path, journal: dict, draft: dict) -> list[str]:
+    """Interrupted design apply: refuse unless every dirty path is exactly the apply's own staged content (HEAD's or the landed
+    commit's blob); else return [] after restoring just those paths (never a blanket reset --hard: it would eat unrelated edits)."""
+    ops, paths = draft.get("ops") or [{}], journal.get("paths") or []
+    args = (ops[0].get("args") or {}) if isinstance(ops[0], dict) else {}
+    target = args.get("head") if ops[0].get("op") == "design.apply" else "HEAD^"
+    blob = lambda ref, p: _out(wt, "rev-parse", "-q", "--verify", f"{ref}:{p}") if ref else ""  # noqa: E731
+    dirty = [e[3:] for e in _out(wt, "status", "--porcelain", "-z", "--no-renames", "-uall").split("\0") if e]
+    if not paths or not target or set(dirty) - set(paths): return ["interrupted design apply: other worktree changes; needs reconciliation"]
+    def tree(ref, p):  # (mode, blob) at ref, None when absent
+        r = _out(wt, "ls-tree", ref, "--", p).split()
+        return (r[0], r[2]) if r else None
+    def work(p):  # (mode, blob) of the worktree entry: type, exec bit and bytes/link target
+        try: st = os.lstat(wt / p)
+        except OSError: return None
+        if stat.S_ISLNK(st.st_mode):
+            d = os.fsencode(os.readlink(wt / p))
+            return ("120000", hashlib.sha1(b"blob %d\0" % len(d) + d).hexdigest())
+        if not stat.S_ISREG(st.st_mode): return ("?", "")
+        return ("100755" if st.st_mode & 0o100 else "100644", _out(wt, "hash-object", "--", p))
+    for p in dirty:
+        ours = {tree("HEAD", p), tree(target, p)}
+        s = _out(wt, "ls-files", "-s", "--", p).split()
+        if work(p) not in ours or ((s[0], s[1]) if s else None) not in ours:
+            return [f"interrupted design apply: {p} changed since the crash; needs reconciliation"]
+    for p in dirty:
+        if blob("HEAD", p): _git(wt, "checkout", "HEAD", "--", p)
+        else:
+            _git(wt, "rm", "-q", "--cached", "--ignore-unmatch", "--", p)
+            (wt / p).unlink(missing_ok=True)
+    return []
+
 def _recover_locked(sdir: Path, wt: Path, now, guard=None) -> dict:
     """Resolve every journal: committed -> applied; HEAD still at base -> restore and failed. Never re-apply."""
     if problems := worktree_problems(wt, recovering=True): return {"result": "refused", "problems": problems}
@@ -285,9 +367,12 @@ def _recover_locked(sdir: Path, wt: Path, now, guard=None) -> dict:
         if CHANGE_ID_RE.fullmatch(cid) and _out(wt, "log", "-1", "--format=%s") == f"hass content: {cid}":
             rec = {"state": "applied", "change_id": cid, "commit": head, "revision": content_revision(wt),
                    "recovered": True, "applied_at": _now(now), **{k: draft.get(k) for k in ("base", "records", "generated")},
-                   **({"environment": draft["environment"]} if "environment" in draft else {})}
+                   **({"environment": draft["environment"]} if "environment" in draft else {}),
+                   **({"kind": "design"} if journal.get("kind") == "design" else {})}
         elif CHANGE_ID_RE.fullmatch(cid) and head == journal.get("base_commit"):
-            _git(wt, "checkout", "HEAD", "--", *OWNED_PATHS)
+            if journal.get("kind") == "design":  # only the interrupted apply's own files are taken back
+                if problems := _design_undo_problems(wt, journal, draft): return {"result": "refused", "problems": problems}
+            else: _git(wt, "checkout", "HEAD", "--", *OWNED_PATHS)
             _drop_new_assets(wt, journal.get("paths"))
             rec = {"state": "failed", "change_id": cid, "problems": ["interrupted; needs a new approval"],
                    "failed_at": _now(now)}
@@ -345,32 +430,39 @@ def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now, guard=Non
     if rec: return {**rec, "result": "failed", "problems": rec["problems"] + ["prepare again and get a new approval"]}
     if problems := worktree_problems(wt): return {"result": "refused", "problems": problems}
     if (rev := content_revision(wt)) != draft["base"] and draft["base"] != content_revision(wt, previous=True): return {"result": "stale", "base": draft["base"], "current": rev}
+    design = _design_call(sdir, draft["ops"])
     try:
-        out = _compute(draft["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
+        out = _design_compute(design, wt, sdir) if design else _compute(draft["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
+    if design and out["result"] != "ok": return out  # the design check's own refusal (a moved look branch, a moved HEAD)
     if (out["result"] != "ok" or out["records"] != draft["records"] or out["generated"] != draft["generated"]
             or out["assets"] != draft.get("assets", {})):  # also the picture bytes (a setting turned on or off since prepare)
         return {"result": "stale", "problems": ["re-running the operations gave a different result"]}
-    paths, journal = sorted(out["writes"]), sdir / "journal" / f"{change_id}.json"
+    paths, journal = out["paths"] if design else sorted(out["writes"]), sdir / "journal" / f"{change_id}.json"
     if guard and (problem := guard()): return problem
     _write_json(journal, {"phase": "writing", "change_id": change_id, "paths": paths,
-                          "base_commit": _out(wt, "rev-parse", "HEAD")})
-    sitegen.write_files(out["writes"], wt)
-    problems = _post_checks(wt)
+                          "base_commit": _out(wt, "rev-parse", "HEAD"), **({"kind": "design"} if design else {})})
+    if design:  # git cherry-pick / git revert of exactly the checked commit, onto the clean HEAD it was checked against
+        failed = _git(wt, out["land"][0], "--no-commit", out["land"][1]).returncode
+        problems = ["git could not apply the look change"] if failed else _post_checks(wt)
+    else:
+        sitegen.write_files(out["writes"], wt)
+        problems = _post_checks(wt)
     if not problems:
         _git(wt, "add", "--", *paths)
         message = ["-m", f"hass content: {change_id}", "-m", "\n".join(out["summary"])]
         if _git(wt, "commit", "-q", "-s", *message).returncode: problems = ["git commit failed"]
     if problems:
         _git(wt, "checkout", "HEAD", "--", *OWNED_PATHS)
+        if design: _git(wt, "reset", "-q", "--hard", "HEAD")  # the worktree was checked clean: takes back only this apply's files
         _drop_new_assets(wt, paths)
         _write_json(rec_path, {"state": "failed", "change_id": change_id, "problems": problems, "failed_at": _now(now)})
         journal.unlink()
         return {"result": "failed", "problems": problems}
     rec = {"state": "applied", "change_id": change_id, "commit": _out(wt, "rev-parse", "HEAD"), "applied_at": _now(now),
            "revision": content_revision(wt), **{k: draft[k] for k in ("base", "records", "generated")},
-           **({"environment": draft["environment"]} if "environment" in draft else {})}
+           **({"environment": draft["environment"]} if "environment" in draft else {}), **({"kind": "design"} if design else {})}
     _write_json(rec_path, rec)
     _mark_reverted(sdir, draft, change_id)
     journal.unlink()

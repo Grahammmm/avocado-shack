@@ -103,9 +103,10 @@ UI labels below are provisional; step 18 records actual versions/names. Taildrop
 16. **G / AgentOrange runtime:** `cd ~/.local/share/hass/runtime`; `python3 hass/editor.py init --state ~/.local/state/hass/state --worktree ~/.local/share/hass/writer`. Privately edit state's config.json `settings`: `ownerSenders` = ["<owner address>"], `ownerChat` = "iMessage;-;<owner address>", `approvalTtlSeconds` = 3600, `interpreterDailyCap` = a G-chosen integer 1–10000; no `liveSite` yet.
     Write `~/.local/state/hass/host/host.json` BEFORE start-point (it requires --host), mode 0600:
     ```json
-    {"state":"<absolute state path>","secretFile":"<absolute home>/.config/hass/envelope.key","listen":"<agentorange tailnet IP>:8795","allowedPeers":["<Mac tailnet IP>"],"approvals":"hold","runtimeCommit":"<R>","interpreter":{"url":"http://127.0.0.1:11434","model":"<existing approved local model>"},"previewer":true,"pictures":true,"photos":false}
+    {"state":"<absolute state path>","secretFile":"<absolute home>/.config/hass/envelope.key","listen":"<agentorange tailnet IP>:8795","allowedPeers":["<Mac tailnet IP>"],"approvals":"hold","runtimeCommit":"<R>","interpreter":{"url":"http://127.0.0.1:11434","model":"<existing approved local model>"},"previewer":true,"pictures":true,"photos":false,"looks":false}
     ```
     `photos` defaults to false; enabling it lets the host receive sealed owner photos from the Mac.
+    `looks` defaults to false; enabling it lets an owner change the website's look by text (one yes publishes, `undo` takes it back).
     `python3 hass/host.py start-point --host ~/.local/state/hass/host/host.json --at '<now ISO>'`; `python3 hass/host.py check --host ~/.local/state/hass/host/host.json`.
     Expected: ok, immutable start point; key and runtime validated, approvals held. Existing approved interpreter and screenshot runtime must be available; stop if missing, do not install/change a model here.
     <!-- step 16 needs: R,runtime,writer,host-key makes: state,host-config -->
