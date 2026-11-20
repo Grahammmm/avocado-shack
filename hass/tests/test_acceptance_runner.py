@@ -249,7 +249,10 @@ class RunnerTest(unittest.TestCase):
                          "test_store_field_undo", "test_history_times",
                          "test_undo_cancel_phrases"))
         self.assertEqual(acceptance.MAP["H10"], ("test_label_reader", "test_label_reader_amounts",
-                         "test_label_question_brand", "test_photos_to_take", "test_commands_doc"))
+                         "test_label_question_brand", "test_photos_to_take", "test_commands_doc",
+                         "test_social_draft", "test_social_draft_inputs", "test_social_draft_text",
+                         "test_social_draft_tags", "test_social_draft_fullwidth",
+                         "test_social_draft_shapes", "test_post_command"))
         self.assertEqual(acceptance.MAP["H15"], ("test_memory", "test_memory_source",
                          "test_memory_alias", "test_memory_listing", "test_memory_unchanged",
                          "test_memory_chat", "test_limits_doc", "test_design_notes",
@@ -268,7 +271,7 @@ class RunnerTest(unittest.TestCase):
                  "H12": ("test_qa1_new_item_chat",), "H13": ("test_phone_wording",),
                  "H14": ("test_hike_change_words", "test_chat_dead_end_reasons"),
                  "H17": ("test_qa1_waiting_reminders",)}
-        appended = {"H03": 6, "H05": 1, "H13": 4, "H17": 4}  # AV1052-17 tails follow these
+        appended = {"H03": 6, "H04": 2, "H05": 2, "H13": 4, "H17": 7}  # AV1052-17 and AV1352-12 tails follow these
         for id_, mods in added.items():
             row = acceptance.MAP[id_]
             row = row[:len(row) - appended.get(id_, 0)]
@@ -401,9 +404,9 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual([n for n in rec.names if n[len("hass.tests."):] in mods],
                              ["hass.tests." + m for m in mods])
         # omission of a new member is detected by the pinned tuple
-        self.assertNotEqual(acceptance.MAP["H10"][:-1], ("test_label_reader",
-                            "test_label_reader_amounts", "test_label_question_brand",
-                            "test_photos_to_take", "test_commands_doc"))
+        self.assertEqual(acceptance.MAP["H10"][:5], ("test_label_reader",
+                         "test_label_reader_amounts", "test_label_question_brand",
+                         "test_photos_to_take", "test_commands_doc"))
         # a missing module file is a bad map (exit 2) before anything runs
         rec = Recorder()
         rows, code, probs = acceptance.run({"H10": ("test_photos_to_take", "test_no_such_av0222")},
@@ -450,21 +453,32 @@ class RunnerTest(unittest.TestCase):
                 "test_qa1_waiting_reminders", "test_shelf_command", "test_command_typo",
                 "test_status_reader_failed", "test_commands_doc"),
     }
-    UNAFFECTED = {
-        "H01": ("test_content", "test_content_read_errors", "test_browser_freshness", "test_publish"),
-        "H02": ("test_editor", "test_maker_product_batch"),
+    # AV1352-12 contract: complete final tuples of the five rows AV1352-03..09 registered into.
+    # Each is the inherited tuple (AV1052 / AV2007 / earlier pins above) plus the appended
+    # modules in dependency order. Written out independently of MAP; H15 gains nothing new
+    # (test_memory_chat, test_memory_alias, test_limits_doc, test_interpreter_notes already there).
+    AV1352 = {
         "H04": ("test_hike_ops", "test_route_add", "test_route_edit", "test_route_hide",
                 "test_hike_samples", "test_hike_repeat", "test_hike_ics", "test_hike_cancel_note",
                 "test_preview_cancel_note", "test_nl_prep_calendar", "test_weekday_date_mismatch",
-                "test_nl_prep_ordinal_words"),
+                "test_nl_prep_ordinal_words", "test_interpreter_local", "test_interpreter_today"),
+        "H05": AV1052["H05"] + ("test_phone_answers",),
+        "H10": ("test_label_reader", "test_label_reader_amounts", "test_label_question_brand",
+                "test_photos_to_take", "test_commands_doc", "test_social_draft",
+                "test_social_draft_inputs", "test_social_draft_text", "test_social_draft_tags",
+                "test_social_draft_fullwidth", "test_social_draft_shapes", "test_post_command"),
+        "H15": AV1052["H15"],
+        "H17": AV1052["H17"] + ("test_readonly_questions", "test_margin_chat", "test_purchase_cost"),
+    }
+    UNAFFECTED = {
+        "H01": ("test_content", "test_content_read_errors", "test_browser_freshness", "test_publish"),
+        "H02": ("test_editor", "test_maker_product_batch"),
         "H06": ("test_preview", "test_undo", "test_history_search", "test_store_field_undo",
                 "test_history_times", "test_undo_cancel_phrases"),
         "H07": "needs Michael's devices",
         "H08": ("test_bridge", "test_owner_sender_match", "test_host", "test_relay"),
         "H09": ("test_demo_transcript", "test_demo_negative", "test_demo_browser",
                 "test_demo_transcript_photo"),
-        "H10": ("test_label_reader", "test_label_reader_amounts", "test_label_question_brand",
-                "test_photos_to_take", "test_commands_doc"),
         "H11": ("test_media_audio",),
         "H12": ("test_attachment_reply", "test_photo_draft", "test_photo_on_product",
                 "test_photo_new_product", "test_photo_home_image", "test_photo_batch",
@@ -481,6 +495,8 @@ class RunnerTest(unittest.TestCase):
         "H25": "release step",
     }
 
+    FINAL = {**UNAFFECTED, **AV1052, **AV1352}
+
     @staticmethod
     def _recording(names, imports):
         class Recorder(unittest.TestLoader):
@@ -491,9 +507,11 @@ class RunnerTest(unittest.TestCase):
                                              side_effect=imports.append)
 
     def test_av1052_complete_tuples_and_preservation(self):
-        self.assertEqual(dict(self.AV1052, **self.UNAFFECTED), acceptance.MAP)
+        final = dict(self.UNAFFECTED, **dict(self.AV1052, **self.AV1352))
+        self.assertEqual(final, acceptance.MAP)
         for id_, row in self.AV1052.items():
-            self.assertEqual(acceptance.MAP[id_], row, id_)
+            # inherited tuple is preserved in order as the prefix of the final row
+            self.assertEqual(acceptance.MAP[id_][:len(row)], row, id_)
             self.assertEqual(len(row), len(set(row)), id_)
             self.assertFalse([m for m in row if not m.startswith("test_") or "." in m], id_)
         # test_interpreter_prompt_design is deliberately in H03 (AV1052-04) and H05 (inherited)
@@ -508,13 +526,13 @@ class RunnerTest(unittest.TestCase):
                 rows, code, probs = acceptance.run({id_: acceptance.MAP[id_]}, rec,
                                                    expected_ids=(id_,))
                 self.assertEqual((code, probs, rows[0]["result"]), (0, [], "pass"), id_)
-                want = ["hass.tests." + m for m in self.AV1052[id_]]
+                want = ["hass.tests." + m for m in self.FINAL[id_]]
                 self.assertEqual((names, imports), (want, want), id_)
             # mixed selection: only the selected rows load, H25 stays not covered, never a pass
             del names[:], imports[:]
             ids = ("H13", "H17", "H25")
             rows, code, _ = acceptance.run({i: acceptance.MAP[i] for i in ids}, rec, expected_ids=ids)
-        want = ["hass.tests." + m for i in ids[:2] for m in self.AV1052[i]]
+        want = ["hass.tests." + m for i in ids[:2] for m in self.FINAL[i]]
         self.assertEqual((code, names, imports), (0, want, want))
         self.assertEqual([(r["id"], r["result"]) for r in rows],
                          [("H13", "pass"), ("H17", "pass"), ("H25", "not covered")])
@@ -544,6 +562,88 @@ class RunnerTest(unittest.TestCase):
             '{"id": "H25", "result": "not covered", "tests": 0, "failures": 0, "note": "release step"}',
             '{"summary": {"ids": 1, "pass": 0, "fail": 0, "not covered": 1}}'])
         self.assertIsInstance(acceptance.MAP["H25"], str)
+
+    def test_av1352_complete_tuples_and_preservation(self):
+        # Bug caught: a dropped, reordered or duplicated AV1352 module, or a row that loses
+        # an inherited member, silently shrinks the standing acceptance evidence.
+        for id_, row in self.AV1352.items():
+            self.assertEqual(acceptance.MAP[id_], row, id_)
+            self.assertEqual(len(row), len(set(row)), id_)
+        self.assertEqual(self.FINAL, acceptance.MAP)
+        self.assertEqual(sorted(self.FINAL), list(acceptance.ALL_IDS))
+        # every table-designated module sits in its designated row
+        for id_, mods in {"H04": ("test_interpreter_local", "test_interpreter_today"),
+                          "H05": ("test_phone_answers",),
+                          "H10": ("test_social_draft", "test_social_draft_inputs",
+                                  "test_social_draft_text", "test_social_draft_tags",
+                                  "test_social_draft_fullwidth", "test_social_draft_shapes",
+                                  "test_post_command"),
+                          "H15": ("test_memory_chat", "test_memory_alias", "test_limits_doc",
+                                  "test_interpreter_notes"),
+                          "H17": ("test_readonly_questions", "test_margin_chat",
+                                  "test_purchase_cost", "test_help", "test_commands_doc")}.items():
+            self.assertEqual([m for m in mods if m not in acceptance.MAP[id_]], [], id_)
+        # shared modules are not copied into extra rows; none of the new ones is in H25
+        self.assertEqual([k for k, v in acceptance.MAP.items() if "test_purchase_cost" in v], ["H17"])
+        self.assertEqual([k for k, v in acceptance.MAP.items() if "test_phone_answers" in v], ["H05"])
+        self.assertEqual([k for k, v in acceptance.MAP.items() if "test_post_command" in v], ["H03", "H10"])
+        self.assertEqual(acceptance.MAP["H15"], self.AV1052["H15"])
+        # a tuple with a required member removed, or doubled, is not the pinned one
+        self.assertNotEqual(acceptance.MAP["H17"][:-1], self.AV1352["H17"])
+        self.assertNotEqual(acceptance.MAP["H17"] + ("test_margin_chat",), self.AV1352["H17"])
+
+    def test_av1352_selected_modules_once_in_order(self):
+        names, imports = [], []
+        rec, patched = self._recording(names, imports)
+        with patched:
+            for id_ in self.AV1352:
+                del names[:], imports[:]
+                rows, code, probs = acceptance.run({id_: acceptance.MAP[id_]}, rec,
+                                                   expected_ids=(id_,))
+                self.assertEqual((code, probs, rows[0]["result"]), (0, [], "pass"), id_)
+                want = ["hass.tests." + m for m in self.AV1352[id_]]
+                self.assertEqual((names, imports), (want, want), id_)
+                self.assertEqual(len(names), len(set(names)), id_)
+            # mixed selection: only the selected rows load, in selection order
+            del names[:], imports[:]
+            ids = ("H05", "H10", "H25")
+            rows, code, _ = acceptance.run({i: acceptance.MAP[i] for i in ids}, rec, expected_ids=ids)
+        want = ["hass.tests." + m for i in ids[:2] for m in self.AV1352[i]]
+        self.assertEqual((code, names, imports), (0, want, want))
+        self.assertEqual([(r["id"], r["result"]) for r in rows],
+                         [("H05", "pass"), ("H10", "pass"), ("H25", "not covered")])
+
+    def test_av1352_missing_module_stops_before_loading(self):
+        names, imports = [], []
+        rec, patched = self._recording(names, imports)
+        with patched:
+            rows, code, probs = acceptance.run(
+                {"H05": acceptance.MAP["H05"], "H17": acceptance.MAP["H17"] + ("test_no_such_av1352",),
+                 "H25": "release step"}, rec, expected_ids=("H05", "H17", "H25"))
+        self.assertEqual((rows, code, names, imports), ([], 2, [], []))
+        self.assertEqual(probs, ["missing module: test_no_such_av1352"])
+        # unmocked, real disk: every registered module (including the new ones) exists
+        self.assertEqual(acceptance._validate(acceptance.MAP, acceptance._TESTS_DIR,
+                                              acceptance.ALL_IDS), [])
+
+    def test_av1352_h25_remains_release_step(self):
+        names, imports = [], []
+        rec, patched = self._recording(names, imports)
+        out = io.StringIO()
+        with patched, contextlib.redirect_stdout(out):
+            code = acceptance.main(["--only", "H25"])
+        self.assertEqual((code, names, imports), (0, [], []))
+        self.assertEqual(out.getvalue().splitlines(), [
+            '{"id": "H25", "result": "not covered", "tests": 0, "failures": 0, "note": "release step"}',
+            '{"summary": {"ids": 1, "pass": 0, "fail": 0, "not covered": 1}}'])
+        # mixed selection keeps H25 not covered; H07/H18 reasons unchanged
+        ids = ("H05", "H07", "H18", "H25")
+        with patched:
+            rows, code, _ = acceptance.run({i: acceptance.MAP[i] for i in ids}, rec, expected_ids=ids)
+        self.assertEqual([(r["id"], r["result"], r["note"]) for r in rows], [
+            ("H05", "pass", ""), ("H07", "not covered", "needs Michael's devices"),
+            ("H18", "not covered", "needs Michael's devices"), ("H25", "not covered", "release step")])
+        self.assertEqual(acceptance.MAP["H25"], "release step")
 
     def test_h25_stays_release_step(self):
         out = io.StringIO()

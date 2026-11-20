@@ -9,7 +9,7 @@ import argparse, contextlib, importlib, io, json, os, sys, unittest
 TESTS_PKG = "hass.tests"
 _TESTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests")
 
-MAP = {  # frozen; AV2007-20 and AV1052-17 added modules: H id -> covering modules, or a "not covered" reason
+MAP = {  # frozen; AV2007-20, AV1052-17 and AV1352-12 added modules: H id -> covering modules, or a "not covered" reason
     "H01": ("test_content", "test_content_read_errors", "test_browser_freshness", "test_publish"),
     "H02": ("test_editor", "test_maker_product_batch"),
     "H03": ("test_catalog_ops", "test_clear_availability", "test_product_new",
@@ -20,7 +20,7 @@ MAP = {  # frozen; AV2007-20 and AV1052-17 added modules: H id -> covering modul
             "test_post_command"),
     "H04": ("test_hike_ops", "test_route_add", "test_route_edit", "test_route_hide", "test_hike_samples",
             "test_hike_repeat", "test_hike_ics", "test_hike_cancel_note", "test_preview_cancel_note",
-            "test_nl_prep_calendar", "test_weekday_date_mismatch", "test_nl_prep_ordinal_words"),
+            "test_nl_prep_calendar", "test_weekday_date_mismatch", "test_nl_prep_ordinal_words", "test_interpreter_local", "test_interpreter_today"),
     "H05": ("test_conversation", "test_near_approval", "test_unknown_approval_code", "test_again",
             "test_interpreter_prompt_shelf_maker", "test_interpreter_prompt_descriptions",
             "test_claims_health_awards", "test_interpreter_no_undo", "test_field_words",
@@ -28,13 +28,15 @@ MAP = {  # frozen; AV2007-20 and AV1052-17 added modules: H id -> covering modul
             "test_social_message", "test_interpret_check_enum", "test_shelf_labels",
             "test_interpret_check_prices", "test_interpreter_prompt_design",
             "test_proposal_notice_words", "test_shelf_check_flow", "test_repeat_outcome",
-            "test_non_hike_question_turns", "test_second_question", "test_cancel_all"),
+            "test_non_hike_question_turns", "test_second_question", "test_cancel_all", "test_phone_answers"),
     "H06": ("test_preview", "test_undo", "test_history_search", "test_store_field_undo",
             "test_history_times", "test_undo_cancel_phrases"), "H07": "needs Michael's devices",
     "H08": ("test_bridge", "test_owner_sender_match", "test_host", "test_relay"),
     "H09": ("test_demo_transcript", "test_demo_negative", "test_demo_browser", "test_demo_transcript_photo"),
     "H10": ("test_label_reader", "test_label_reader_amounts", "test_label_question_brand",
-            "test_photos_to_take", "test_commands_doc"),
+            "test_photos_to_take", "test_commands_doc", "test_social_draft", "test_social_draft_inputs",
+            "test_social_draft_text", "test_social_draft_tags", "test_social_draft_fullwidth",
+            "test_social_draft_shapes", "test_post_command"),
     "H11": ("test_media_audio",),
     "H12": ("test_attachment_reply", "test_photo_draft", "test_photo_on_product", "test_photo_new_product",
             "test_photo_home_image", "test_photo_batch", "test_media_batch", "test_qa1_new_item_chat"),
@@ -51,7 +53,8 @@ MAP = {  # frozen; AV2007-20 and AV1052-17 added modules: H id -> covering modul
     "H17": ("test_status_pause", "test_help", "test_status_photos", "test_listing_command",
             "test_status_notice", "test_social_draft_maker", "test_post_maker_command", "test_qa1_waiting_reminders",
             "test_shelf_command", "test_command_typo", "test_status_reader_failed",
-            "test_commands_doc"), "H18": "needs Michael's devices",
+            "test_commands_doc", "test_readonly_questions", "test_margin_chat",
+            "test_purchase_cost"), "H18": "needs Michael's devices",
     "H19": ("test_health", "test_health_host"), "H20": ("test_statebackup_drill", "test_statebackup", "test_statebackup_bundle"),
     "H21": ("test_retention",), "H22": ("test_interpreter_cap", "test_interpreter_prompt"),
     "H23": ("test_auto_policy",), "H24": ("test_design_check", "test_design_check_modes",
