@@ -18,6 +18,7 @@ SHELF_NEW_DAYS = 14  # AV0222-09 / shop.js NEW_BADGE_DAYS: a product added 0..13
 PHOTOS_TO_TAKE_MAX = 5  # AV0222-04, HASS-VOICE-1: names listed by `photos to take` (a short list, then ask again)
 
 HIDDEN_MAX = 20  # AV1222-13: lines of the hidden list
+HELD_MAX = 20  # AV2137-07: held products listed by `held`, then "... and N more"
 LISTING_DESC_MAX = 120  # AV1622-09: characters of a product description in `listing`
 
 LISTING_STORY_MAX = 80  # AV1052-06: characters of the story in `listing store`
@@ -379,3 +380,29 @@ class SitePack:
                                + ["To bring one back, tell me, like " + q(f"Bring back {first}") + "."])
                     if lines else "Nothing is hidden right now.", long_ok=True)
         return "hidden"
+
+    def _held(self) -> str:
+        """AV2137-07 (H03/H17): the held products (id, name, the recorded hold reason and source), by id, up to HELD_MAX. Read-only:
+        the saved copy only, never a release, a restore or a safety verdict; stored text that cannot be read refuses the whole list."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            content = load_content(wt / "hass" / "content")
+            validate(content, wt / "storefront-mockup")
+            one = lambda text: " ".join(text.split())  # stored text on one line, nothing cut
+            held = []
+            for p in sorted((p for p in content.products if p["status"] == "held"), key=lambda p: p["id"]):
+                hold = p["hold"]
+                reason, source = one(hold["reason"]), hold["source"]
+                if not reason or not isinstance(source, str) or source != source.strip() or any(c.isspace() or not c.isprintable() for c in source):
+                    raise ValueError("unreadable hold")
+                held.append(f"- {q(p['id'])}: {q(one(p['name']))} \u2014 {q(reason)} (source {q(source)})")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            self._problem("error", "shop-list-unreadable")
+            self._reply(CANT_READ)
+            return "held"
+        if not held:
+            self._reply("No products are held.")
+            return "held"
+        more = [f"... and {len(held) - HELD_MAX} more"] if len(held) > HELD_MAX else []
+        self._reply("\n".join(["Held products:"] + held[:HELD_MAX] + more + [voice.HELD_GUIDANCE]), long_ok=True)
+        return "held"
