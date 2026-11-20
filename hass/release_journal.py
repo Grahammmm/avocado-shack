@@ -71,6 +71,10 @@ def _pairs(items):
     return out
 
 
+def _reject_constant(_token):
+    raise BooksError('release-books')
+
+
 def _admitted(st):
     return stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid() and stat.S_IMODE(st.st_mode) == 0o600 and st.st_size <= MAX_BYTES
 
@@ -89,7 +93,7 @@ def read(path):
             raise
         with stream: raw = stream.read(MAX_BYTES + 1)
         if len(raw) > MAX_BYTES: raise BooksError('release-books')
-        data = json.loads(raw, object_pairs_hook=_pairs)
+        data = json.loads(raw, object_pairs_hook=_pairs, parse_constant=_reject_constant)
         if not isinstance(data, dict): raise BooksError('release-books')
         return data
     except (OSError, ValueError, RecursionError): raise BooksError('release-books; run adopt if missing') from None
