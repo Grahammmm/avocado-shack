@@ -26,6 +26,7 @@ name: check
 #   The site and commerce checks run on every event.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
   schedule:
@@ -61,6 +62,7 @@ env:
 jobs:
   quick:
     name: quick
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -136,7 +138,7 @@ jobs:
   hass:
     name: hass shard ${{ matrix.shard }}
     needs: quick
-    if: needs.quick.outputs.tier == 'full'
+    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.quick.outputs.tier == 'full'
     runs-on: ubuntu-latest
     # Hosted shard jobs reached 30:16 at the old limit; allow 1.5x that time, rounded up.
     timeout-minutes: 46
@@ -195,6 +197,7 @@ jobs:
 
   site:
     name: site ${{ matrix.part }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     # Measured inside the old single job: catalog + community 5.7 min, static site 3.8 min.
     timeout-minutes: 30
@@ -267,7 +270,7 @@ jobs:
   check:
     name: check
     needs: [quick, hass, site]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
