@@ -219,6 +219,52 @@ def _folder_unusable(site_dir):
     return False
 
 
+@dataclass(frozen=True)
+class PictureVariant:
+    variant: str
+    path: str
+    data: bytes
+
+
+def select_variant(sha, web, *, house, polish, cleaned, owner_fallback):
+    """Pure selection from supplied web bytes and settled polish bytes; no site/store access."""
+    data, ext = web
+    variant = "raw"
+    if cleaned is not None:
+        variant, data, ext = "polished", cleaned, "jpg"
+    elif house and not (owner_fallback and polish):
+        verdict = _verdict(data)
+        if not isinstance(verdict, Refused) and verdict["ok"]:
+            variant, data, ext = "house", verdict["jpeg"], "jpg"
+        elif not owner_fallback:
+            return verdict if isinstance(verdict, Refused) else Retake(verdict["reason"], tuple(verdict["problems"]))
+        # Never use rejected rendered pixels as the fallback: keep the web copy.
+    return PictureVariant(variant, f"assets/products/photo-{sha[:16]}.{ext}", data)
+
+
+def _installation_picture(settings, sha, *, style, owner_fallback):
+    """Load selection inputs, settling polish exactly as install does. No site access.
+
+    Return (selected picture or refusal, original web bytes, house enabled).
+    """
+    root = settings.get("mediaRoot")
+    if not root:
+        return Refused("photo store is not configured"), None, False
+    found = _web_bytes(root, sha)
+    if isinstance(found, Refused):
+        return found, None, False
+    house = style and settings.get(HOUSE_FLAG) is True
+    polish = house and photo_polish.enabled(settings)
+    cleaned = None
+    if polish:
+        try:
+            cleaned = photo_polish.polished(root, sha)
+        except (OSError, media.Refused, editor.UnsafeState):  # the polish store is unusable: today's behaviour
+            cleaned = None
+    chosen = select_variant(sha, found, house=house, polish=polish, cleaned=cleaned, owner_fallback=owner_fallback)
+    return chosen, found[0], house
+
+
 def install(ctx, sha, alt, *, style=True, owner_fallback=False):
     """Queue the stored photo's web copy for commit; the site path ``assets/products/photo-<sha16>.<ext>`` or Refused.
     Shared by product.set_photo and product.add (AV0022-02). Same bytes already there are reused, not rewritten.
@@ -231,32 +277,10 @@ def install(ctx, sha, alt, *, style=True, owner_fallback=False):
     problem = _alt_problem(alt, sha)
     if problem:
         return Refused(problem)
-    root = ctx.settings.get("mediaRoot")
-    if not root:
-        return Refused("photo store is not configured")
-    found = _web_bytes(root, sha)
-    if isinstance(found, Refused):
-        return found
-    data, ext = found
-    house = style and ctx.settings.get(HOUSE_FLAG) is True
-    cleaned = None
-    if house and photo_polish.enabled(ctx.settings):  # HASS-IMAGE-1: the settled cleaned picture, if it passed the gate
-        try:
-            cleaned = photo_polish.polished(root, sha)
-        except (OSError, media.Refused, editor.UnsafeState):  # the polish store is unusable: today's behaviour
-            cleaned = None
-    if cleaned is not None:
-        data, ext = cleaned, "jpg"
-    elif house and not (owner_fallback and photo_polish.enabled(ctx.settings)):
-        verdict = _verdict(data)
-        if not isinstance(verdict, Refused) and verdict["ok"]:
-            data, ext = verdict["jpeg"], "jpg"
-        elif not owner_fallback:
-            return verdict if isinstance(verdict, Refused) else Retake(verdict["reason"], tuple(verdict["problems"]))
-        # Styling is optional. The already decoded, resized, metadata-free owner
-        # web copy remains usable even when isolation/style checks fail. Never
-        # publish the rejected generated/rendered pixels as the fallback.
-    target = f"assets/products/photo-{sha[:16]}.{ext}"
+    chosen, web, house = _installation_picture(ctx.settings, sha, style=style, owner_fallback=owner_fallback)
+    if isinstance(chosen, Refused):
+        return chosen
+    target, data = chosen.path, chosen.data
     path, have, link = Path(ctx.site_dir) / target, ctx.assets.get(target), False
     try:  # read the site file only when not already queued; lstat first so a FIFO is never opened
         if target not in ctx.assets:
@@ -272,7 +296,7 @@ def install(ctx, sha, alt, *, style=True, owner_fallback=False):
     except OSError:  # fixed reply: no path or exception text
         return Refused("the website photo file cannot be read")
     if link or (have is not None and have != data):
-        if house and not link and have == found[0]:  # flag turned on after the photo went up as it came
+        if house and not link and have == web:  # flag turned on after the photo went up as it came
             return Refused(ALREADY_RAW)
         return Refused("a different photo already uses that name")
     if have is None:
