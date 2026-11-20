@@ -97,6 +97,44 @@ class StageTests(unittest.TestCase):
         self.assertIsNotNone(self.case.version(1))
         self.no_draft()
 
+    def test_duplicate_confirmation_is_invalidated_when_item_changes(self):
+        content = self.port.catalog()
+        content.products.extend({'name': name, 'status': 'active'} for name in ('Wild Plum Jam', 'Other Jam'))
+        self.port.catalog = lambda: content
+        self.case.say('sell $7 each', photos=1)
+        self.case.work()
+        self.assertEqual(self.case.transport.texts[-1], stages.missing.DUPLICATE)
+        self.case.say('it is Other Jam')
+        self.case.say('yes')  # must not bind the previous item's question
+        self.assertEqual(self.conv.db.execute('SELECT count(*) FROM npp_answers').fetchone()[0], 0)
+        self.case.work()
+        self.assertEqual(self.case.transport.texts[-1], stages.missing.DUPLICATE)
+        self.assertEqual(self.case.transport.texts.count(stages.missing.DUPLICATE), 2)
+        self.assertIsNone(self.case.version(1))
+        self.no_draft()
+        self.case.say('yes')
+        self.case.work()
+        self.assertEqual(self.case.version(1)['state'], 'queued')
+        self.assertEqual(self.saved[0]['ops'][-1]['args']['name'], 'Other Jam')
+        self.case.assert_unpublished()
+
+    def test_replacement_photo_invalidates_duplicate_confirmation(self):
+        content = self.port.catalog()
+        content.products.extend({'name': name, 'status': 'active'} for name in ('Wild Plum Jam', 'Other Jam'))
+        self.port.catalog = lambda: content
+        self.case.say('sell $7 each', photos=1)
+        self.case.work()
+        self.case.say('yes')
+        self.reading['item'] = 'Other Jam'
+        self.case.say('new photo', photos=1)
+        self.case.work()
+        self.assertEqual(self.case.transport.texts.count(stages.missing.DUPLICATE), 2)
+        self.assertIsNone(self.case.version(1))
+        self.no_draft()
+        self.case.say('yes')
+        self.case.work()
+        self.assertEqual(self.saved[0]['ops'][-1]['args']['name'], 'Other Jam')
+
     def test_stale_render_tickets_never_persist_even_if_worker_runs(self):
         # Each subcase gets its own scheduler/DB. A render may finish after invalidation.
         for index, reason in enumerate(('cancel', 'supersede', 'expire')):

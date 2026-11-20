@@ -53,6 +53,12 @@ ACTIVE = "'working','asking','card_out','editing','retake'"
 YES = re.compile(r"yes ([0-9a-f]{4,12})(?:-([1-9][0-9]{0,8}))?", re.I)
 NO = re.compile(r"(?:no|cancel)(?: ([0-9a-f]{4,12})(?:-[1-9][0-9]{0,8})?)?", re.I)
 EXPIRED = "That question expired. Please send the photo again to start over."
+ITEM_IDENTITY = re.compile(r"\s*(?:it(?: is|[’']s)|(?:the )?(?:item|product)(?: is|:))\s+([^;\n]+)", re.I)
+
+
+def owner_item(text):
+    match = ITEM_IDENTITY.fullmatch(text)
+    return match[1] if match else None
 
 
 def dump(value):
@@ -210,6 +216,11 @@ class Jobs:
                             "VALUES (?,?,?,?,?,'working',?)", (jid, msg.chat, sender, photos[0], req_id, accepted.isoformat()))
         elif photos and photos[0] != job["photo_sha"]:
             self.db.execute("UPDATE npp_jobs SET photo_sha=?,polish_started_at=NULL,polish_eligible=0 WHERE job_id=?", (photos[0], jid))
+        if job and (photos or owner_item(finance.public_words)):
+            # A new identification invalidates both an outstanding duplicate ask
+            # and an earlier confirmation; neither belongs to the new item.
+            self.db.execute("UPDATE npp_questions SET state='expired' WHERE job_id=? AND qid='duplicate' "
+                            "AND state IN ('open','answered')", (jid,))
         if job and job["state"] == "asking" and not photos:
             # The next plan can leave these open (an unrelated/insufficient answer) or mark the resolved ids.
             kind = "answer"
@@ -313,7 +324,7 @@ class Jobs:
         if isinstance(result, Plan):
             for qid, sentence in result.questions[:self.replies["caps"]["max_questions_per_reply"]]:
                 if not self.one("SELECT 1 FROM npp_questions WHERE job_id=? AND qid=? AND state='answered'", jid, qid) and self.one(
-                        "SELECT COUNT(*) FROM npp_questions WHERE job_id=? AND qid=?", jid, qid)[0] < 2:
+                        "SELECT COUNT(*) FROM npp_questions WHERE job_id=? AND qid=? AND state!='expired'", jid, qid)[0] < 2:
                     questions.append((qid, sentence))
         if questions and len(text := " ".join(sentence for _, sentence in questions)) <= self.replies["caps"]["question_max_chars"]:
             outcome, state = "question", "asking"
@@ -382,8 +393,8 @@ class Jobs:
             parent = self.version(jid, version["parent_n"] if version else job["current_version"])
             answers = {qid: bool(answer) for qid, answer in self.db.execute(
                 "SELECT a.qid,a.answer FROM npp_answers a JOIN npp_questions q "
-                "ON q.job_id=a.job_id AND q.qid=a.qid AND q.answered_by=a.provider_id WHERE a.job_id=?", (jid,))}
-            questions = self.db.execute("SELECT qid,state FROM npp_questions WHERE job_id=?", (jid,)).fetchall()
+                "ON q.job_id=a.job_id AND q.qid=a.qid AND q.answered_by=a.provider_id WHERE a.job_id=? AND q.state='answered'", (jid,))}
+            questions = self.db.execute("SELECT qid,state FROM npp_questions WHERE job_id=? AND state!='expired'", (jid,)).fetchall()
             counts = {}
             for qid, _ in questions:
                 counts[qid] = counts.get(qid, 0) + 1

@@ -10,7 +10,7 @@ import time
 from hass import claims, editor, live_policy, maker_site, media, photo_polish
 from hass.content_model import load_content
 from hass.npp import copy, edits, identify, missing, picture, private_numbers, research, research_hermes, validate
-from hass.npp.job import Card, Plan
+from hass.npp.job import Card, Plan, owner_item
 from hass.npp.reply import Stages, compose
 from hass.ops import photos
 
@@ -125,10 +125,9 @@ class ProductionStages(Stages):
         reading = {} if local else self.identifier.read(self._photo(s) for s in shas).evidence or {}
         slot = work.request['slots'].get('intake', {})
         amount = slot.get('price') if slot.get('price_span') else None
-        owner_item = next((m[1] for text in reversed(texts)
-                           if (m := re.fullmatch(r'\s*(?:it(?: is|[’\']s)|(?:the )?(?:item|product)(?: is|:))\s+([^;\n]+)', text, re.I))), None)
+        named_item = next((item for text in reversed(texts) if (item := owner_item(text))), None)
         decision = self.missing.decide(reading, price=missing.OwnerPrice(amount, slot.get('sold_by')),
-                                       owner_item=owner_item, owner_texts=texts, products=content.products, makers=content.makers,
+                                       owner_item=named_item, owner_texts=texts, products=content.products, makers=content.makers,
                                        clover=self.clover(), ask_counts=work.ask_counts, answered=work.answered,
                                        duplicate_confirmed=work.answers.get('duplicate') is True,
                                        near_maker_confirmed=work.answers.get('near_maker'))
