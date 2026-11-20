@@ -473,7 +473,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
             cfg = {**json.loads(_read(bdir / CONFIG).decode("utf-8")), "worktree": str(wt)}
             if isinstance(cfg.get("settings"), dict) and cfg["settings"].get("npp"):
                 # A drill with no media, or media missing any original an open job reads, must not run NPP.
-                npp_off = _open_job_problems(bdir / DB, mrels) if mtarget else []
+                npp_off = _open_job_problems(bdir / DB, mrels if mtarget else [])
                 keep = mtarget and not npp_off
                 cfg["settings"] = {**cfg["settings"], **({"mediaRoot": str(mtarget)} if keep else {"npp": False})}
             _write_new(tmp / CONFIG, json.dumps(cfg, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"))

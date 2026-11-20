@@ -87,8 +87,8 @@ class MorningReportShapeTests(unittest.TestCase):
         self.assertEqual(self.report().split("\n")[0], "Your last shelf check was Sunday, October 25. That was more than a week ago, so the website says to call to confirm.")
         self.content([product("Figs", "yes"), product("Pears", "no")], checked_days_ago=-1)
         self.assertEqual(self.report().split("\n"), ["Your last shelf check is dated Tuesday, November 3, which is still to come. Please check the date on the computer.",
-                                                    "On the shelves: 1 available, 0 running low, 1 sold out, 0 not confirmed.",
-                                                    "Sold out: Pears", LAST])
+                                                    "On the shelves: 0 available, 0 running low, 0 sold out, 2 not confirmed.",
+                                                    LAST])
 
     def test_unreadable_file_line_is_unchanged(self):
         self.content([product("Figs", "yes")], checked_days_ago=1)

@@ -24,7 +24,7 @@ import sqlite3
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from hass import morning_report, voice
+from hass import morning_report, sitegen, voice
 from hass.content_model import ContentError, iso_day
 from hass.skills import kinds
 from hass.skills.model import Skill, Slot, Trigger, Undo, _fold
@@ -105,8 +105,8 @@ def _count_reply(content, facts, query, ctx) -> str:
     product = _product(content, found.value) if found.status == "one" else None
     if product is None or product.get("status") != "active":
         return NOT_ON_REPORT  # held, hidden or unreadable: the report never shows it either
-    fresh = facts["checked_on"] is not None and product.get("available_on") == facts["checked_on"]  # as morning_report.facts
-    word = WORDS[product.get("available") if fresh and product.get("available") in ("yes", "limited", "no") else None]
+    today = _today(ctx)  # AV1922-02: the same predicate as morning_report.facts
+    word = WORDS[sitegen.availability_state(product, content.store, today) if today is not None else None]
     name = " ".join(str(product.get("name", "")).split())
     text = f"{COUNTS_LEAD}{voice.quote(name)}: {word}"
     if facts["checked_on"] is None or facts["stale"] or facts["future"]:

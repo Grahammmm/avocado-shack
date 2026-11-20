@@ -407,14 +407,14 @@ class JobTests(unittest.TestCase):
 
     # Contract (rule: NPP stays on after a restore only if EVERY photo of EVERY open job is in the restored originals; a
     # request that cannot be read fails closed and the report names the job). Bug caught: only npp_jobs.photo_sha was checked.
-    def restore_open_jobs(self, tag=""):
+    def restore_open_jobs(self, tag="", media=True):
         out = self.root.parent / f"backups{tag}"
         out.mkdir(mode=0o700)
         saved = Path(statebackup.create(self.repo.state, out, now=self.now)["backup"])
         restored_wt = self.root.parent / f"restored-wt{tag}"
         git(self.repo.main, "worktree", "add", "-qb", f"hass/npp-drill{tag}", str(restored_wt))
         target, images = self.root.parent / f"restore{tag}", self.root.parent / f"restore-media{tag}"
-        got = statebackup.restore(saved, target, restored_wt, media_into=images)
+        got = statebackup.restore(saved, target, restored_wt, media_into=images if media else None)
         self.assertEqual(got["result"], "ok", got)
         return got, json.loads((target / "config.json").read_text())["settings"]
 
@@ -482,5 +482,32 @@ class JobTests(unittest.TestCase):
         gone.with_suffix(".json").unlink()
         got, settings = self.restore_open_jobs()
         self.assertTrue(settings["npp"])
+        self.assertNotIn("nppOff", got)
+
+    # Contract: a restore without media turns NPP off, and the report still names each open job that cannot resume and
+    # why (bug: with no media_into the open-job check was skipped, so nppOff was missing).
+    def test_restore_without_media_names_each_open_job(self):
+        first, second = self.two_photo_job()
+        job = self.job()["job_id"]
+        got, settings = self.restore_open_jobs(media=False)
+        self.assertFalse(settings["npp"])
+        self.assertEqual(got["nppOff"], [{"job": job, "why": f"original missing: {first[:12]}, {second[:12]}"}])
+
+    def test_restore_without_media_names_job_with_unreadable_request(self):
+        self.two_photo_job()
+        job = self.job()["job_id"]
+        self.conv.db.execute("UPDATE open_requests SET attachments_json = 'not json'")
+        self.conv.db.commit()
+        got, settings = self.restore_open_jobs(media=False)
+        self.assertFalse(settings["npp"])
+        self.assertEqual([p["job"] for p in got["nppOff"]], [job])
+        self.assertRegex(got["nppOff"][0]["why"], "request (missing|unreadable)")
+
+    def test_restore_without_media_and_no_open_jobs_has_no_nppoff(self):
+        self.two_photo_job()
+        self.conv.db.execute("UPDATE npp_jobs SET closed_at = ?, state = 'expired'", (self.now.isoformat(),))
+        self.conv.db.commit()
+        got, settings = self.restore_open_jobs(media=False)
+        self.assertFalse(settings["npp"])
         self.assertNotIn("nppOff", got)
 

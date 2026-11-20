@@ -15,7 +15,7 @@ from dataclasses import replace
 from decimal import Decimal
 
 from hass import voice
-from hass.clover import cache, drafts as d, reads, reports
+from hass.clover import cache, drafts as d, links as linkmod, reads, reports
 from hass.clover.apply import ApplyEngine
 from hass.clover.config import from_settings
 from hass.clover.mapper import (CATEGORIES, MapError, cents_from_text, format_money, norm_name, parse_item, parse_items,
@@ -40,7 +40,13 @@ SITE_MOVED = ("The website word for that item changed after you were shown this 
               "kept the newer word. Send the change again if it is still needed.")
 HELP = "Till (each needs your yes and its code): " + "; ".join(map(voice.quote, (
     "received 12 Sunshine olive oil", "set Sunshine olive oil to 7", "Sunshine olive oil is sold out", "new item: Sunshine olive oil, 12.50, pantry",
-    "change price of Sunshine olive oil to 14.00", "hide Sunshine olive oil on the till", "show Sunshine olive oil on the till", "undo <code>"))) + "."
+    "change price of Sunshine olive oil to 14.00", "hide Sunshine olive oil on the till", "show Sunshine olive oil on the till", "undo <code>"))) + "." \
+       + " Website links (owner only): " + "; ".join(map(voice.quote, ("link all <code>", "link Sunshine olive oil to <SKU>", "unlink Sunshine olive oil",
+                                                                       "stock yes <code>", "stock no <code>"))) + "."
+LINKS = re.compile(r"(?:link all (?P<all>\S+)|link (?P<x>.+) to (?P<sku>\S+)|unlink (?P<u>.+)|stock (?P<w>yes|no) (?P<c>\S+))")
+LINK_NO = {"unknown": "I have no waiting link list with that code, so nothing was linked.",
+           "stale": "The till or the website changed after that link list was made, so nothing was linked. The list has to be made again."}
+STOCK_NO = "That stock code is not waiting for you, so nothing was changed."
 
 
 class BundleEngine(ApplyEngine):
@@ -137,6 +143,9 @@ class TillDesk:
         t = _clean(text)
         if not t or len(t) > 200 or len((text or "").strip().splitlines()) > 1:   # any line boundary (CR, VT, FF, NEL, U+2028...), not just LF
             return None
+        if self.engine is not None and (m := LINKS.fullmatch(t)) and (not m["sku"] or any(i.sku and i.sku.casefold() == m["sku"] for i in getattr(self._snapshot()[0], "items", ()))):
+            # HASS-LINK: owners only (checked again in answer). `link X to Y` is claimed only when Y is exactly a till SKU: other talk of linking goes on as before
+            return ("link", {"all": "all", "sku": "one", "u": "unlink", "c": m["w"]}[m.lastgroup], m["all"] or m["x"] or m["u"] or m["c"], m["sku"])
         if LOW.fullmatch(t):
             return ("low",)
         for pattern, kind in ((HOW_MANY, "how_many"), (COUNT_OF, "how_many"), (IN_STOCK, "in_stock")):
@@ -203,6 +212,8 @@ class TillDesk:
         """The reply text for a parsed intent at `now` (timezone-aware). Till names and SKUs are quoted (shown as the till has them)."""
         if intent[0] == "write":
             return WRITE_REPLY if self.engine is None else HOW
+        if intent[0] == "link":
+            return voice.till(self._link(intent[1:], sender, chat, worktree))
         if intent[0] in ("till", "no", "undo", "yes"):
             return voice.till(self._change(intent, sender, chat, worktree))
         snapshot, reachable = self._snapshot()
@@ -215,6 +226,50 @@ class TillDesk:
         if intent[0] == "sold_out":
             return reads.in_stock(intent[1], snapshot, now, reachable, show=voice.quote, sold_out=True)
         return reads.how_many(intent[1], snapshot, now, reachable, show=voice.quote)
+
+    def _link(self, intent, sender, chat, worktree):
+        """`link all <code>`, `link X to <SKU>`, `unlink X`, `stock yes|no <code>`: Mike only. Links never set a website word."""
+        kind, a, b = intent
+        if (sender, chat) not in self.engine.owners or ";+;" in chat:
+            return NOT_OWNER
+        if kind in ("yes", "no"):
+            return self._stock(kind == "yes", a)
+        try:
+            snapshot, _ = self._snapshot()
+            content, links = reports.read_inputs(self.state, worktree())
+        except Exception:  # noqa: BLE001 - no worktree, or the website or the links cannot be read: nothing is linked
+            return "I couldn't read the website items or the links, so nothing was changed."
+        if snapshot is None:
+            return NEVER_READ
+        if kind == "all":
+            status, n = linkmod.apply(self.state, a, snapshot, content, links)
+            return f"Linked {n} website items to till items. No website word was changed." if status == "ok" else LINK_NO[status]
+        pids = [p["id"] for p in content["products"] if p.get("status") == "active" and a in (p["id"].casefold(), norm_name(p["name"]))]
+        if len(pids) != 1:
+            return f"I couldn't find exactly one website item called {voice.quote(a)}, so nothing was changed."
+        if kind == "unlink":
+            if pids[0] not in links:
+                return f"{voice.quote(a)} is not linked, so nothing was changed."
+            linkmod.write(linkmod.table(self.state), {p: v for p, v in links.items() if p != pids[0]})
+            return f"Unlinked {voice.quote(a)}. No website word was changed."
+        items = [i for i in snapshot.items if i.sku and i.sku.casefold() == b.casefold()]
+        if len(items) != 1 or pids[0] in links or items[0].id in linkmod.reserved(snapshot.items, links):
+            return "That needs one website item and one till SKU, both not linked yet, so nothing was changed. Say unlink first to move a link."
+        linkmod.write(linkmod.table(self.state), {**links, pids[0]: {"cloverId": items[0].id, "sku": items[0].sku}})
+        return f"Linked {voice.quote(a)} to SKU {items[0].sku}. No website word was changed."
+
+    def _stock(self, yes, code):
+        """The website stock words waiting for his yes (STOCK-SITE): one approve or decline call, only for a code that is open now."""
+        from hass import stock_site   # lazy: it pulls in the editor and the live policy
+        try:
+            waiting = stock_site.StockSite(self.state, None, None).load()["sets"].get(code)
+        except Exception:  # noqa: BLE001 - an unreadable stock file is never guessed at
+            return "I couldn't read the website stock list, so nothing was changed."
+        if not waiting or waiting["state"] != "open" or (yes and waiting["approved_by"]):
+            return STOCK_NO
+        if not (stock_site.approve if yes else stock_site.decline)(self.state, code, "owner"):
+            return "I couldn't record that just now, so nothing was changed. Please try again in a minute."
+        return "Okay, those website stock words will go up with the next till reads." if yes else "Okay, I've dropped those website stock words. Nothing was changed on the website."
 
     def _change(self, intent, sender, chat, worktree):
         if intent[0] == "yes":   # only while paused; the real yes is `approve`

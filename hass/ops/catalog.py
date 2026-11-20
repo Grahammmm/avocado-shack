@@ -248,28 +248,45 @@ def _product_restore(content, args, ctx):
 NOT_CHECKED_TODAY = "the selection was not checked today; check the selection first"  # HASS-SHELFCHECK-FLOW-1: Conversation asks the owner instead
 
 
+def _word_day(content, ctx):
+    """AV1922-02: (last full check, Pacific today) once a usable first check exists, else None. A word then carries its own day."""
+    day, today = checked_on(content.store), shop_today(ctx.now)
+    return (day, today) if day is not None and day <= today else None
+
+
+def _from_today_note(word, check, today):
+    """The one explanation shown with a word set on a day after the last full shelf check; None on the check day."""
+    if check == today:
+        return None
+    from hass.sitegen import _day_text
+    lead = {"yes": "Available", "limited": "Limited", "no": "Sold out"}[word]
+    return f"{lead} from today (your last full shelf check was {_day_text(check)})"
+
+
 def _product_set_availability(content, args, ctx):
-    """SHOP-1: mark one active product yes|limited|no. Shown on its card only while the selection check is recent."""
+    """SHOP-1/AV1922-02: mark one active product yes|limited|no with its own Pacific day. Needs a first recorded full shelf
+    check, not one today; the store's check day never moves (store.confirm_selection owns it)."""
     product = _product(content, args["id"])
     if not isinstance(product, dict):
         return product
     if product["status"] != "active":
         return Refused(f"{product['id']} is {product['status']}; restore it before marking it available")
-    day = checked_on(content.store)
-    if (product.get("available") == args["available"]
-            and product.get("available_on") == shop_today(ctx.now).isoformat()):  # HASS-SHELFCHECK-FLOW-1: a stale same word is a re-check
+    if product.get("available") == args["available"]:  # an equal word is not a recheck, even a stale one
         return Refused(f"{product['id']} is already marked available={args['available']}; nothing to change")
-    if day != shop_today(ctx.now):  # AV1102-01: only onto today's shelf check
+    if (days := _word_day(content, ctx)) is None:
         return Refused(NOT_CHECKED_TODAY)
+    check, today = days
     before = copy.deepcopy(product)
     product["available"] = args["available"]
-    product["available_on"] = day.isoformat()
+    product["available_on"] = today.isoformat()
+    if note := _from_today_note(args["available"], check, today):
+        ctx.warnings.append(note)
     return _touch("products", product["id"], before, product)
 
 
 def _product_set_availability_all(content, args, ctx):
-    """AV1052-04: set one availability word on every active product of a shelf and/or maker that does not have it yet.
-    Words only: available_on and the store's shelf-check day stay exactly as they are (store.confirm_selection owns the check)."""
+    """AV1052-04/AV1922-02: set one availability word on every active product of a shelf and/or maker that does not have it yet.
+    Each changed product gets its own Pacific day; the store's shelf-check day stays exactly as it is."""
     shelf, maker = args.get("shelf"), args.get("maker")
     if shelf is None and maker is None:
         return NeedsDetails(["shelf", "maker"], "Which shelf or maker should change?")
@@ -278,11 +295,17 @@ def _product_set_availability_all(content, args, ctx):
                        and p.get("available") != args["available"]), key=lambda p: p["id"])
     if not changing:
         return Refused("No active products would change availability; nothing to change")
+    if (days := _word_day(content, ctx)) is None:
+        return Refused(NOT_CHECKED_TODAY)
+    check, today = days
     touched = []
     for product in changing:
         before = copy.deepcopy(product)
         product["available"] = args["available"]
+        product["available_on"] = today.isoformat()
         touched += _touch("products", product["id"], before, product)
+    if note := _from_today_note(args["available"], check, today):
+        ctx.warnings.append(note)
     return touched
 
 
