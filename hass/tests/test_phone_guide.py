@@ -24,7 +24,9 @@ AV1352_EXPLAINS = {  # AV1352-11: each safety clause once; dropping or rewording
     "? is for read-only commands": "A closing `?` works on read-only commands", "spaces become hyphens": "Spaces in the name become `-`, so `parking spot` is kept as `parking-spot`",
     "margins are private": "they save nothing and put no price on the website", "ending never rounds down": "never lower than the margin needs",
     "illustration warning": "the `post` reply starts with a warning that the picture is not a photo of the product", "owner photo exception": "an owner photo gets no warning",
-    "post is a draft only": "nothing is uploaded, sent or published"}
+    "post reply carries the photo": "a draft caption and, when the product has an eligible site photo, that photo as an attachment (the illustration or the owner photo alike)",
+    "post publishes nothing": "Hass posts or uploads nothing to any social account", "hike and maker are text only": "`post hike` and `post maker` come back as text only"}
+STALE_POST_CLAIMS = ("only a draft caption comes back", "nothing is uploaded, sent or published")  # AV1352-11 RETURN: the product reply attaches the photo (reports_pack._post)
 NEW_EXAMPLES = {"hide the sample hikes", "bring the sample hikes back", "put the old photo back", "stop showing the eggs as sold out"}  # AV1622-11
 LISTING = "listing photo-product-001"
 AV1937_PLAIN = (
@@ -392,6 +394,13 @@ class AV1352Test(unittest.TestCase):
             self.assertIsNone(route(text), text)
         self.assertEqual(problems(self.doc), [])
         self.assertLessEqual(len(self.doc.splitlines()), LINE_CAP)
+
+    def test_post_wording_matches_what_the_reply_sends(self):
+        """Contract: the guide says the product `post` reply carries the eligible photo, yet publishes nothing. Bug caught: the guide denying the attachment."""
+        for stale in STALE_POST_CLAIMS:
+            self.assertNotIn(stale, self.doc)
+            self.assertIn(f"required explanation missing (post reply carries the photo): {AV1352_EXPLAINS['post reply carries the photo']}", problems(self.doc.replace(AV1352_EXPLAINS["post reply carries the photo"], stale)))
+        self.assertNotRegex(self.doc, r"(?i)\bnothing is [^.]*\bsent\b")
 
     def test_illustration_wording_follows_the_post_warning(self):
         from hass.chat import reports_pack
