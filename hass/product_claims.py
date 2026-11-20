@@ -9,6 +9,34 @@ import re
 
 from hass import live_policy, media
 
+
+def drop_copy_claims(value, owner_words, evidence=()):
+    """NPP: drop unsupported clauses before filling slots; return only safe owner-note labels.
+
+    Evidence is inspected for omissions, not used to authorize a claim. The old draft
+    gates still run on the rebuilt listing. Never echo an arbitrary removed span.
+    """
+    reasons = []
+    owner = '\n'.join(map(live_policy.claims.fold, owner_words.splitlines()))
+
+    def kept(text):
+        kinds = live_policy._protected(text)[1]
+        if 'health/awards/endorsements' in kinds:
+            folded = live_policy.claims.fold(text)
+            reasons.append(next((label for label in ('immune support', 'cures colds')
+                                 if live_policy.claims._said(label, folded)), 'health or award wording'))
+            return False
+        if 'origin/organic' in kinds and not live_policy._owner_said(text, owner):
+            reasons.append('unconfirmed origin or organic wording')
+            return False
+        return True
+
+    parts = re.split(r'[,;\n]+|(?<=[.!?])\s+', value)
+    clean = ' '.join(part.strip() for part in parts if part.strip() and kept(part))
+    for text in evidence:
+        kept(text)
+    return clean, tuple(dict.fromkeys(reasons))
+
 FOOD_KINDS = frozenset({'origin/organic', 'health/awards/endorsements'})
 
 
