@@ -10,7 +10,7 @@ from hass.tests.test_near_approval import TextInterpreter
 from hass.tests.test_undo import H06TestCase
 
 READ_ONLY = ("status", "history", "report", "memory", "find eggs", "show a1b2", "post photo-product-001",
-             "listing photo-product-024", "hidden", "margin 24 for 12 at 35%", "help", "did it work")
+             "listing photo-product-024", "hidden", "held", "margin 24 for 12 at 35%", "help", "did it work")
 
 
 class ReadOnlyQuestionTests(H06TestCase):

@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 SAFE_LINE = "I'm not sure how to put that. Could you say it another way?"
 OPEN, CLOSE = "\ue000", "\ue001"  # private-use marks around words that are Mike's own; removed before sending
+HELD_GUIDANCE = "Held products stay off the website and Hass cannot release them. Check the package against the recall notice and tell G or the operator."  # AV2137-07: the one fixed line the word `operator` is allowed in (VOICE.md)
 LONG_AFTER = 600  # characters; a longer message needs long_ok (he asked for a list, or it is a draft he must read)
 
 # Whole words that Mike should never see. Matched case-insensitively on word boundaries.
@@ -106,7 +107,7 @@ def check(text, *, emoji_ok=False, long_ok=False, ids_ok=False) -> list:
     emoji_ok: Mike used an emoji first. long_ok: he asked for a list, or it is a draft he must read in full.
     ids_ok: the message teaches a command whose answer is an id he has to type (find, listing, post, alias)."""
     if not isinstance(text, str) or not plain(text).strip(): return ["empty"]  # empty = blank once the marks are gone (what Mike would see)
-    ours = _ours(text)
+    ours = "\n".join(line for line in _ours(text).split("\n") if line != HELD_GUIDANCE)  # AV2137-07: only this exact standalone line is exempt
     broken = []
     for hit in _WORD_RE.finditer(ours):
         if ids_ok and hit.group(1).lower() in ("id", "ids"): continue
