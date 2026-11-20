@@ -497,8 +497,11 @@ class LiveEditor(conversation.Editor):
         elif state == 'live':
             shot = self.conv.screenshot(j['change_id'])
             attachments = [shot] if shot else []
-            text = owner_answers.LIVE_SHOWN.format()
-            text += ' ' + (owner_answers.LIVE_PICTURE if shot else owner_answers.LIVE_NO_PICTURE)
+            posted = getattr(self.conv, 'npp_posted', lambda cid: None)(j['change_id'])  # NPP-G S13: a listing's own live confirmation
+            if posted: text, attachments = posted, []
+            else:
+                text = owner_answers.LIVE_SHOWN.format()
+                text += ' ' + (owner_answers.LIVE_PICTURE if shot else owner_answers.LIVE_NO_PICTURE)
             if original and original[0] != chat:  # another owner's undo went live: the owner whose change it was is told too
                 who = getattr(self.conv, '_who', lambda _chat: 'the owner')(chat)
                 extra = (original[0], owner_answers.undone_by_other(who, self._summary(j['orig'])))

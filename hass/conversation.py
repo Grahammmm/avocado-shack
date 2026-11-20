@@ -22,10 +22,10 @@ from hass.social_message import classify_social  # noqa: E402
 from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, nl_prep, voice  # noqa: E402
 from hass import capabilities, photo_polish, stagelog, transcript  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
-from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
+from hass.skills import dispatch as dispatch_mod, intake_simple, item_intake, openreq  # noqa: E402
 from hass.clover import approvals as till_approvals  # noqa: E402
 from hass import npp as npp_package  # noqa: E402
-from hass.npp import job as listing_jobs  # noqa: E402
+from hass.npp import job as listing_jobs, reply as npp_reply  # noqa: E402
 from hass.npp.receipt import instant as npp_instant  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
 # imported back here, so hass.conversation.<name> still works for every caller and test.
@@ -1520,12 +1520,41 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             disposition = "no-target"
         elif (jobs.stages is not None and len(text) <= MAX_OWNER_TEXT and not HOSTILE_RE.search(text)
               and (text == "?" and jobs.needs_retry(active) or not command and jobs.stages.takes_turn(text, active["state"]))):
-            public, fields = item_intake.caption_answers("" if text == "?" else text, {"photo_fields": self._intake_fields})
+            public, fields = self._npp_words(text)
             disposition = jobs.input(msg, self._asker, accepted or now, now, item_intake.without_unresolved_finance(public), fields)
         if disposition is not None:
             self._record(msg, disposition)
             return disposition, None
         return None
+
+    def _npp_words(self, text):
+        """(public words, private finance slots) of an owner turn while a listing job is open. A plain-words price edit
+        (\"make it $4\", \"wait $4.50\", \"actually make it 4 bucks\") is read by the F4 pattern the legacy edit uses, as an
+        edit and not as a photo caption; anything else is parsed as before."""
+        words = " ".join(text.split())
+        if (match := intake_simple.PRICE_EDIT.fullmatch(words)) and (value := item_intake._parse_money(match["amount"])) is not None:
+            fields = {"price": value}
+            if match["unit"]:
+                fields["sold_by"] = "pound" if re.search(r"lb|pound", match["unit"], re.I) else "item"
+            return "", fields
+        return item_intake.caption_answers("" if text == "?" else text, {"photo_fields": self._intake_fields})
+
+    def npp_posted(self, change_id):
+        """S13: the one-line `Posted: <item link>` confirmation for a published listing job's change, or None when the change
+        is not one (the live release engine then says its ordinary line). It is only asked once the live check has seen the
+        change, never at apply."""
+        if self.npp is None:
+            return None
+        job = self.db.execute("SELECT j.job_id FROM npp_jobs j JOIN drafts d ON d.row_id = j.approval_row "
+                              "WHERE d.change_id = ? AND j.state = 'published'", (change_id,)).fetchone()
+        if job is None:
+            return None
+        try:
+            records = (self.editor.show(change_id).get("change") or {}).get("records") or []
+            keys = [r["key"] for r in records if r.get("collection") == "products"]
+            return npp_reply.posted(self.npp.replies, keys[0]) if len(keys) == 1 else None
+        except (KeyError, TypeError, ValueError):
+            return None
 
     def _npp_approve(self, jobs, job, msg, n, accepted, now):
         failure, version = jobs.select(job, msg, n, accepted, now)

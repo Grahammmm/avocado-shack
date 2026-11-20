@@ -4,6 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from hass import voice
 from hass.skills.item_intake import caption_answers
 from hass.tests import test_item_add_dispatch as base
 from hass.tests.test_browser_freshness import catalog_of
@@ -136,7 +137,9 @@ class PricedTextConversation(unittest.TestCase):
         with patch.object(chat.conv, "polish_transport", SimpleNamespace(generate=self.illustration)):
             disposition, (reply,) = chat.say("add strawberries $6 a basket")
         self.assertEqual(disposition, "not-drafted", reply)
-        self.assertEqual(reply, "That's already how it is, so nothing changed.")
+        # NPP-G F5: the refusal names the same-name product instead of the misleading "That's already how it is".
+        self.assertIn("Strawberries is already on the website", voice.plain(reply))
+        self.assertNotIn("already how it is", reply)
         self.assertEqual(chat.drafts(), [])
 
     def test_price_without_product_words_prompts_for_name_and_never_drafts(self):
