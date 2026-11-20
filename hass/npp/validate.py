@@ -1,5 +1,6 @@
 """S7 checks on reviewed copy, exact draft records, OCR, and the rendered card."""
 from dataclasses import dataclass
+from hashlib import sha256
 import re
 
 from hass import claims, live_policy, publish_live
@@ -65,7 +66,30 @@ def _flat(text):
     return ' '.join(text.split())
 
 
-def dom_problem(nodes, price_index, price, name, approved=(), private=(), allowed=None, required=()):
+def _fixed_ui(maker, count, organic):
+    """Closed table for storefront-mockup/shop.js badges(), makerStory() and card()."""
+    return {
+        ':scope > .card-link': ('Link to this',),
+        '.food-badges > span': ('New', 'Organic') if organic else ('New',),
+        '.maker-story > summary': ('Meet the maker',) if maker else (),
+        '.maker-story-content > a': (f'Visit {maker} ↗',) if maker else (),
+        '.maker-story-content > button.text-link[data-from]': (
+            (f'See all {count} from {maker}',) if maker and type(count) is int and count >= 2 else ()),
+        '.availability': (),
+    }
+
+
+def captured_dom(evidence, png, product_id):
+    """Refuse fragments/index from a different capture, even for the same product."""
+    if (not isinstance(evidence, dict) or not isinstance(png, bytes)
+            or evidence.get('pngSha256') != sha256(png).hexdigest()
+            or not product_id or evidence.get('productId') != product_id):
+        return None, None, None
+    return evidence.get('fragments'), evidence.get('priceIndex'), evidence.get('makerCount')
+
+
+def dom_problem(nodes, price_index, price, name, approved=(), private=(), allowed=None, required=(), *,
+                maker=None, maker_count=None, organic=False):
     """`nodes` are visible DOM text fragments in order, with the exact price element identified.
 
     Keep numbers licensed in copy only in exact, already checked fields; no numeric-value
@@ -74,28 +98,50 @@ def dom_problem(nodes, price_index, price, name, approved=(), private=(), allowe
     strings (whitespace-folded) and every `required` string must be rendered, so a swapped
     description or any extra claim fails even if it has no contact or number in it.
     """
-    if not isinstance(nodes, (tuple, list)) or not all(isinstance(s, str) for s in nodes) or name not in nodes:
+    if not isinstance(nodes, (tuple, list)):
         return 'card-text'
-    if type(price_index) is not int or not 0 <= price_index < len(nodes) or nodes[price_index] != '$' + price:
+    texts, roles = [], []
+    for node in nodes:
+        if isinstance(node, str):
+            node = {'text': node, 'role': None}
+        if (not isinstance(node, dict) or set(node) != {'text', 'role'} or not isinstance(node['text'], str)
+                or node['role'] is not None and not isinstance(node['role'], str)):
+            return 'card-text'
+        texts.append(node['text'])
+        roles.append(node['role'])
+    if not any(text == name and role is None for text, role in zip(texts, roles)):
+        return 'card-text'
+    if (type(price_index) is not int or not 0 <= price_index < len(texts)
+            or roles[price_index] is not None or texts[price_index] != '$' + price):
         return 'card-price'
     remaining = list(approved)
-    for index, text in enumerate(nodes):
+    ui = _fixed_ui(maker, maker_count, organic)
+    scan, shown = [], []
+    for index, (text, role) in enumerate(zip(texts, roles)):
         if _contact(text):
             return 'card-contact'
         if index == price_index:
+            scan.append(' ; ')
             continue
+        if role is not None:
+            if text not in ui.get(role, ()):
+                return 'card-copy'
+            # Only the renderer's checked count is exempt from the numeric scan.
+            scan.append(f'from {maker}' if role == '.maker-story-content > button.text-link[data-from]' else text)
+            continue
+        shown.append(_flat(text))
         if text in remaining:
             remaining.remove(text)
+            scan.append(' ; ')
             continue
         if numbers.problem(text, private):
             return 'card-number'
+        scan.append(text)
     # Also inspect adjacent fragments for OCR-like/spoken splits of numbers and money.
-    rest = ' '.join(text if i != price_index and text not in approved else ' ; ' for i, text in enumerate(nodes))
-    if numbers.problem(rest, private):
+    if numbers.problem(' '.join(scan), private):
         return 'card-number'
     if allowed is not None:
-        shown = {_flat(text) for i, text in enumerate(nodes) if i != price_index}
-        if any(text.strip() and _flat(text) not in allowed for i, text in enumerate(nodes) if i != price_index):
+        if any(text and text not in allowed for text in shown):
             return 'card-copy'
         if any(_flat(text) not in shown for text in required):
             return 'card-copy'
@@ -122,7 +168,8 @@ class Verdict:
 
 
 def listing(writer, ctx, copy, draft, *, finance, origin, makers, live_site, photo_sha,
-            frozen_sha, rendered_sha, picture_read, card_nodes, price_index, label_words=()):
+            frozen_sha, rendered_sha, picture_read, card_nodes=None, price_index=None, label_words=(),
+            card_evidence=None, card_png=None):
     """Check a fully assembled S7/S8 listing; this function cannot publish or send.
 
     `makers` is the existing catalog, `photo_sha` is the source photo and `frozen_sha`
@@ -206,12 +253,19 @@ def listing(writer, ctx, copy, draft, *, finance, origin, makers, live_site, pho
     origin_ok = bool(supplier) or not maker.get('place') or (_panel_clean(maker.get('place')) and _panel_clean(origin))
     shown_ok = {_flat(v) for v in (text.get('name'), text.get('description'), text.get('story'), product.get('displayBrand'), product.get('brand'),
                                    *([origin] if origin_ok else []), *panel) if isinstance(v, str) and v.strip()}
+    claims_passed = not claims.unstated(draft, ctx.owner_words, makers)
+    maker_count = None
+    if card_evidence is not None or card_png is not None:
+        card_nodes, price_index, maker_count = captured_dom(card_evidence, card_png, product.get('id'))
     if price and (problem := dom_problem(card_nodes, price_index, price, text.get('name'),
                                         tuple(text[k] for k in ('name', 'story') if text.get(k)), private,
                                         allowed=shown_ok,
+                                        maker=maker['name'] if _panel_clean(maker.get('name')) else None,
+                                        maker_count=maker_count,
+                                        organic=claims_passed and bool(re.search(r'\borganic\b', product.get('name') or '', re.I)),
                                         required=tuple(text[k] for k in ('name', 'description', 'story') if text.get(k)))):
         problems.append(problem)
-    if claims.unstated(draft, ctx.owner_words, makers):
+    if not claims_passed:
         problems.append('existing-claims')
     if live_site:
         if live_policy.unsaid(draft, ctx.owner_words):
