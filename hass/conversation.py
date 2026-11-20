@@ -1511,6 +1511,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(f"The listing {active['job_id']} is still open.\n" + self._status(now, self._paused()),
                         long_ok=True, ids_ok=True)
             disposition = "status"
+        elif (text.casefold() in ("yes", "no") and
+              (disposition := jobs.answer(active, msg, text.casefold() == "yes", accepted, now)) is not None):
+            pass
         elif (match := listing_jobs.NO.fullmatch(text)) and (match[1] is None or match[1].lower() == active["job_id"]):
             jobs.turn(active["job_id"], msg, "other", accepted or now)
             jobs.close(active, "cancelled", now)

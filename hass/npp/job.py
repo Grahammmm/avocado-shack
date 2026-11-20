@@ -7,7 +7,7 @@ never a wait for an outstanding future. Work.request is private (finance include
 pass only eligible projections to remote readers. Stages do not write job state or send messages.
 """
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
@@ -31,6 +31,9 @@ CREATE INDEX IF NOT EXISTS npp_segment_turns ON npp_turns(segment_id);
 CREATE TABLE IF NOT EXISTS npp_questions(
  job_id TEXT NOT NULL, qid TEXT NOT NULL, asked_outbox_id INTEGER NOT NULL, asked_at TEXT NOT NULL,
  answered_by TEXT, answered_at TEXT, state TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS npp_answers(
+ job_id TEXT NOT NULL, qid TEXT NOT NULL, provider_id TEXT NOT NULL UNIQUE,
+ answer INTEGER NOT NULL, accepted_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS npp_segments(
  segment_id INTEGER PRIMARY KEY, job_id TEXT NOT NULL, started_by TEXT NOT NULL, accepted_at TEXT NOT NULL,
  deadline_at TEXT NOT NULL, ended_at TEXT, outcome TEXT, revision INTEGER NOT NULL DEFAULT 0);
@@ -106,6 +109,7 @@ class Work:
     request: dict
     parent: dict | None
     deadline: object
+    answers: dict[str, bool] = field(default_factory=dict)
 
 
 class Jobs:
@@ -208,6 +212,33 @@ class Jobs:
             kind = "answer"
         else:
             kind = "photo" if photos and job else "start" if not job else "edit"
+        self._resume(jid, job, msg, kind, accepted, now)
+        return "npp-working"
+
+    def answer(self, job, msg, polarity, accepted, now):
+        """Bind an exact owner answer inside the caller's conversation transaction."""
+        jid = job["job_id"]
+        questions = self.db.execute("SELECT * FROM npp_questions WHERE job_id=? AND state='open'", (jid,)).fetchall()
+        if len(questions) != 1 or accepted is None:
+            return None
+        q = questions[0]
+        asked_at = instant(q["asked_at"])
+        if (q["qid"] not in ("duplicate", "near_maker") or asked_at is None or accepted < asked_at
+                or not self.one("SELECT 1 FROM outbox WHERE id=? AND chat=?", q["asked_outbox_id"], job["chat"])
+                or not self.request(job, accepted) or not self.request(job, now)):
+            return None
+        self.db.execute("INSERT INTO npp_answers VALUES (?,?,?,?,?)", (jid, q["qid"], msg.provider_id, int(polarity), accepted.isoformat()))
+        self.db.execute("UPDATE npp_questions SET state='answered',answered_by=?,answered_at=? "
+                        "WHERE job_id=? AND qid=? AND state='open'", (msg.provider_id, now.isoformat(), jid, q["qid"]))
+        if q["qid"] == "duplicate" and not polarity:
+            self.turn(jid, msg, "answer", accepted)
+            self.close(job, "cancelled", now)
+            self.reply(job, "Okay, I've cancelled that. Nothing changed.", msg.provider_id)
+            return "cancelled"
+        self._resume(jid, job, msg, "answer", accepted, now)
+        return "npp-working"
+
+    def _resume(self, jid, job, msg, kind, accepted, now):
         seg = self.one("SELECT * FROM npp_segments WHERE job_id=? AND ended_at IS NULL", jid)
         frozen = seg and self.one("SELECT 1 FROM npp_versions WHERE segment_id=?", seg["segment_id"])
         if frozen:
@@ -226,7 +257,6 @@ class Jobs:
                             ("editing" if job["current_version"] else "working", jid))
         self.turn(jid, msg, kind, accepted, sid)
         self.dirty.add(jid)
-        return "npp-working"
 
     def end(self, segment, now, outcome):
         self.db.execute("UPDATE npp_segments SET ended_at=?,outcome=? WHERE segment_id=?",
@@ -293,7 +323,7 @@ class Jobs:
 
     def answer_questions(self, jid, pid, now, still_open):
         for row in self.db.execute("SELECT DISTINCT qid FROM npp_questions WHERE job_id=? AND state='open'", (jid,)).fetchall():
-            if row[0] not in still_open:
+            if row[0] not in still_open and row[0] not in ("duplicate", "near_maker"):
                 self.db.execute("UPDATE npp_questions SET state='answered',answered_by=?,answered_at=? WHERE job_id=? AND qid=? AND state='open'",
                                 (pid, now.isoformat(), jid, row[0]))
 
@@ -341,7 +371,10 @@ class Jobs:
                 continue
             version = self.one("SELECT * FROM npp_versions WHERE segment_id=?", seg["segment_id"])
             parent = self.version(jid, version["parent_n"] if version else job["current_version"])
-            work = Work(jid, req, dict(parent) if parent else None, instant(seg["deadline_at"]))
+            answers = {qid: bool(answer) for qid, answer in self.db.execute(
+                "SELECT a.qid,a.answer FROM npp_answers a JOIN npp_questions q "
+                "ON q.job_id=a.job_id AND q.qid=a.qid AND q.answered_by=a.provider_id WHERE a.job_id=?", (jid,))}
+            work = Work(jid, req, dict(parent) if parent else None, instant(seg["deadline_at"]), answers)
             listing = json.loads(version["listing_json"]) if version else None
             ticket = seg["segment_id"], seg["revision"], version["n"] if version else None
             if now >= work.deadline:
