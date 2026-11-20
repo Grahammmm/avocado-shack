@@ -20,7 +20,7 @@ if __package__ in (None, ""):
 from hass import voice  # noqa: E402
 from hass.content_model import CONTENT_DIR, DATE_RE, INVISIBLE_RE, TEXT_LIMITS, ContentError, checked_on, iso_day, load_content, shop_today  # noqa: E402
 from hass.ops import hikes  # noqa: E402
-from hass.sitegen import STALE_AFTER_DAYS, _day_text  # noqa: E402
+from hass.sitegen import STALE_AFTER_DAYS, _day_text, availability_state  # noqa: E402
 
 MAX_NAMES, MAX_CHARS = 10, 1200
 UNAVAILABLE = object()  # --guests given but the database could not be read
@@ -121,8 +121,7 @@ def facts(content, today: date, guests=None) -> dict:
     day = checked_on(content.store)
     names, counts = {"limited": [], "no": []}, {"yes": 0, "limited": 0, "no": 0, "none": 0}
     for p in _products(content):  # hidden and held products never appear
-        fresh = day is not None and p.get("available_on") == day.isoformat()  # AV1102-01: confirmed on the latest check
-        key = p.get("available") if fresh and p.get("available") in ("yes", "limited", "no") else "none"
+        key = availability_state(p, content.store, today) or "none"  # AV1922-02: the same rule as the cards
         counts[key] += 1
         if key in names:
             names[key].append(" ".join(str(p.get("name", "")).split()))
@@ -146,9 +145,13 @@ def check_line(f: dict, stale_tail=None) -> str:
     return f"Your last shelf check was {when}."
 
 
+def count_line(f: dict) -> str:
+    return (f"On the shelves: {f['available']} available, {f['limited']} running low, {f['sold_out']} sold out, "
+            f"{f['not_confirmed']} not confirmed.")
+
+
 def render(f: dict) -> str:
-    counts = (f"On the shelves: {f['available']} available, {f['limited']} running low, {f['sold_out']} sold out, "
-              f"{f['not_confirmed']} not confirmed.")
+    counts = count_line(f)
     lists = [(label, [g[0] if len(g) == 1 else f"{g[0]} ({len(g)})"  # one entry per shared name, in sorted order
                       for g in (list(v) for _, v in groupby(f[key], key=str.casefold))])
              for label, key in (("Running low", "limited_names"), ("Sold out", "sold_out_names"))]

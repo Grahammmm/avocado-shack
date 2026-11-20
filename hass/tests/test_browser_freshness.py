@@ -119,9 +119,9 @@ class ParityTests(unittest.TestCase):
             cases.append({"fn": "availabilityWord", "args": [state, ok, ok, "2026-10-21"]})
         cases += [{"fn": "selectionLine", "args": [ok, "2026-10-19", None]},                # store check in the visitor's future
                   {"fn": "availabilityWord", "args": ["yes", ok, ok, "2026-10-19"]},
-                  {"fn": "availabilityWord", "args": ["yes", "2026-10-21", ok, "2026-10-22"]}]  # product after the store check
+                  {"fn": "availabilityWord", "args": ["yes", "2026-10-23", ok, "2026-10-22"]}]  # product day after the visitor's today
         self.assertEqual(probe(cases), [None] * len(cases))
-        self.assertIsNone(sitegen.availability_label({"available": "yes", "available_on": "2026-10-21"}, sel(CHECK), date(2026, 10, 22)))
+        self.assertIsNone(sitegen.availability_label({"available": "yes", "available_on": "2026-10-23"}, sel(CHECK), date(2026, 10, 22)))
 
 
 class RenderedTests(unittest.TestCase):

@@ -23,6 +23,7 @@ class SetAvailabilityAllTests(CatalogTestCase):
         self.r = DatedRepo()
         self.addCleanup(self.r.cleanup)
         self.r.now = datetime(2026, 11, 17, 20, tzinfo=timezone.utc)
+        self.r.run(("store.confirm_selection", {"date": "2026-11-16"}))  # AV1922-02: the first recorded full check; words then carry their own day
         self.active = [p for p in self.r.products() if p["status"] == "active"]
         self.veg = [p for p in self.active if p["category"] == "vegetables"]
         self.maker = next(m for m in sorted({p.get("producerKey") for p in self.veg} - {None})
@@ -71,13 +72,13 @@ class SetAvailabilityAllTests(CatalogTestCase):
         self.assertEqual([r["key"] for r in draft["records"]], want)
         for p in before:
             if p["id"] in want:
-                self.assertEqual(after[p["id"]], {**p, "available": "yes"})
+                self.assertEqual(after[p["id"]], {**p, "available": "yes", "available_on": "2026-11-17"})
             else:
                 self.assertEqual(after[p["id"]], p)  # hidden, held, already yes, other shelves: byte-identical
         self.assertEqual(after[hidden_id]["status"], "hidden")
         self.assertEqual(after[held_id], next(p for p in before if p["id"] == held_id))
-        self.assertEqual(self.r.store(), store)  # no shelf-check day
-        self.assertNotIn("selection_checked_on", self.r.store())
+        self.assertEqual(self.r.store(), store)  # the full-check day does not move
+        self.assertEqual(self.r.store()["selection_checked_on"], "2026-11-16")
         # maker alone, and shelf + maker together (intersection)
         draft = self.r.run((ALL, {"available": "no", "maker": self.maker}))
         mine = {p["id"] for p in self.r.products() if p["status"] == "active" and p.get("producerKey") == self.maker}
@@ -129,7 +130,7 @@ class SetAvailabilityAllTests(CatalogTestCase):
         self.assertEqual(self.r.prepare(_req((REVERT, {"changeId": done["change_id"]})))["result"], "refused")
         self.assertEqual(self.r.products(), state)
 
-    def test_no_shelf_check_day_and_available_on_kept(self):
+    def test_changed_words_get_their_own_day_and_the_full_check_stays(self):
         target = self.veg[0]["id"]
         path = self.r.wt / "hass/content/products.json"
         data = json.loads(path.read_text("utf-8"))
@@ -144,10 +145,11 @@ class SetAvailabilityAllTests(CatalogTestCase):
         store_path.write_text(json.dumps(store_data, indent=2) + "\n", "utf-8")
         git(self.r.wt, "commit", "-qam", "stale words")
         store = self.r.store()
-        self.r.run((ALL, {"available": "yes", "shelf": "vegetables"}))
-        self.assertEqual(self.product(target), {**rows[target], "available": "yes", "available_on": "2026-01-02"})
-        self.assertNotIn("available_on", self.product(self.veg[1]["id"]))
+        draft = self.r.run((ALL, {"available": "yes", "shelf": "vegetables"}))
+        self.assertEqual(self.product(target), {**rows[target], "available": "yes", "available_on": "2026-11-17"})
+        self.assertEqual(self.product(self.veg[1]["id"])["available_on"], "2026-11-17")
         self.assertEqual(self.r.store(), store)
+        self.assertIn("Available from today (your last full shelf check was Tuesday, November 10)", draft["warnings"])
         self.assertIn("nothing to change", self.refused((ALL, {"available": "yes", "shelf": "vegetables"})))  # same word is not refreshed
 
 
