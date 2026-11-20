@@ -6,7 +6,7 @@
     python3 hass/social_draft.py --recap EVENT_ID
     python3 hass/social_draft.py --notice
 
-Prints one JSON object. Success: {"draft": true, "image", "alt", "caption", "illustration"} (illustration: true unless the image is an installed owner photo, HOME_IMAGE_RE) built only from the product's
+Prints one JSON object. Success: {"draft": true, "image", "alt", "caption", "illustration", "availability"} (illustration: true unless the image is an installed owner photo, HOME_IMAGE_RE; availability: the card word the website shows for the product on the shop day, sitegen.availability_label, e.g. "Sold out", "Limited", "Available today", "Last confirmed Monday, November 2", or null) built only from the product's
 stored name, description, image, imageAlt and its maker's name and place (caption <= 2200 characters, at most
 5 hashtags: #AvocadoShack plus one fixed tag per category, never derived from free text). Refusal (exit 1):
 {"draft": false, "reason"}: "cannot read content" | "no such product" | "not on the site" | "no photo on the site" |
@@ -50,6 +50,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass.content_model import CATEGORIES, CONTENT_DIR, HOME_IMAGE_RE, INVISIBLE_RE, SITE_DIR, ContentError, load_content, notice_days, shop_today  # noqa: E402
 from hass.ops import hikes  # noqa: E402
+from hass import sitegen  # noqa: E402
 
 MAX_CAPTION = 2200
 HIKE_TAGS = "#AvocadoShack #NorthCoastHikingClub"  # fixed; never from free text
@@ -77,8 +78,9 @@ def _photo_ok(image, site_dir: Path) -> bool:
         return False
 
 
-def build(content, product_id: str, site_dir: Path = SITE_DIR) -> dict:
-    """Return the draft dict, or {"draft": False, "reason": ...}. The id is only matched against loaded products."""
+def build(content, product_id: str, site_dir: Path = SITE_DIR, *, today=None) -> dict:
+    """Return the draft dict, or {"draft": False, "reason": ...}. The id is only matched against loaded products.
+    AV2137-08: success carries "availability", the card word shown on ``today`` (default: the shop day now), or None."""
     def refuse(reason): return {"draft": False, "reason": reason}
     if not isinstance(content.products, list) or not all(isinstance(p, dict) for p in content.products):
         return refuse("cannot read content")
@@ -101,7 +103,8 @@ def build(content, product_id: str, site_dir: Path = SITE_DIR) -> dict:
     if len(caption) > MAX_CAPTION: return refuse("caption too long")
     alt = product.get("imageAlt")
     alt = alt if _line(alt) and not _TAG_RE.search(alt) else name
-    return {"draft": True, "image": product["image"], "alt": alt, "caption": caption, "illustration": not HOME_IMAGE_RE.fullmatch(product["image"])}
+    shown = sitegen.availability_label(product, content.store, today if today is not None else shop_today())
+    return {"draft": True, "image": product["image"], "alt": alt, "caption": caption, "illustration": not HOME_IMAGE_RE.fullmatch(product["image"]), "availability": shown}
 
 
 def _when(starts_at):  # (aware start, "Saturday, October 17 at 9:00 am (Pacific)"), or None when unreadable
@@ -232,7 +235,7 @@ def main(argv=None, content_dir: Path = CONTENT_DIR, site_dir: Path = SITE_DIR) 
     elif args.recap is not None: result = build_recap(content, args.recap)
     elif args.notice: result = build_notice(content, args.now or datetime.now(timezone.utc))
     elif args.hike is not None: result = build_hike(content, args.hike, args.now or datetime.now(timezone.utc))
-    else: result = build(content, args.product_id, site_dir)
+    else: result = build(content, args.product_id, site_dir, today=shop_today(args.now or datetime.now(timezone.utc)))
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["draft"] else 1
 
