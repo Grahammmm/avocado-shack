@@ -71,7 +71,7 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Hiking club opening paragraph: at most **400 characters** <!-- content_model.MAX_CLUB_INTRO -->; it is club page copy only and, like every change, a draft you approve.
 - Hiking club: name, organizer and sender **400 characters** <!-- content_model.TEXT_LIMITS[club][clubName] --> each.
 - Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->, at most **7** <!-- content_model.MAX_HOURS_LINES --> lines of hours.
-- A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->; spaces in its name become `-`, and the stored name stays 1-64 of a-z, 0-9, `.` or `-`.
+- A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->; spaces in its name become `-`, the stored name stays 1-64 of a-z, 0-9, `.` or `-`, starting with a letter or digit.
 
 ## Phone and prices
 

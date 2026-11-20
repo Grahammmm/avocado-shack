@@ -334,6 +334,20 @@ class LimitsDocTest(unittest.TestCase):
             self.assertEqual(problems(gone), [])  # the doc check alone is clean; REQUIRED coverage is what fails
             self.assertFalse(REQUIRED <= {f"{c[3]}.{c[4]}" for c in claims(gone)})
 
+    def test_note_name_rule_matches_the_parser_and_key_pattern(self):  # AV1352-11
+        from hass import conversation, memory
+        line = next(ln for ln in self.doc.splitlines() if "memory.MAX_VALUE" in ln)
+        for phrase in ("spaces in its name become `-`", "stays 1-64 of a-z, 0-9, `.` or `-`, starting with a letter or digit"):
+            self.assertEqual(line.count(phrase), 1, phrase)
+            self.assertNotIn(phrase, line.replace(phrase, ""), phrase)
+        self.assertEqual(conversation.parse_memory("remember parking spot: use the back lot")[1], "parking-spot")
+        self.assertEqual(conversation.parse_memory("forget  parking   spot")[1], "parking-spot")
+        for name, ok in (("a" * 64, True), ("a" * 65, False), ("9.x-y", True), ("a.", True), (".a", False), ("-a", False), ("a_b", False), ("Ünï", False), ("", False)):
+            key = (conversation.parse_memory(f"remember {name}: x") or (None, ""))[1]
+            self.assertEqual(memory.KEY_RE.fullmatch(key) is not None and not key.startswith("cost."), ok, name)
+        self.assertEqual(memory.MAX_VALUE, 500)
+        self.assertEqual(problems(self.doc.replace("**500 characters**", "**501 characters**")), [f"line {self.doc.splitlines().index(line) + 1}: doc says 501 characters, memory.MAX_VALUE is 500"])
+
     def test_bulk_limits_are_operations_not_record_count(self):  # AV1052-15: one shelf or maker is one operation; the 20 stays a per-message operation cap
         from hass import editor
         line = next(ln for ln in self.doc.splitlines() if "editor.MAX_OPS" in ln)
