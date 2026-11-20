@@ -5,7 +5,7 @@ does every write. handle() stores each result (message id, draft state, reply) b
 sends. Approval is bound to sender, chat, change id, draft hash, base revision and expiry. Fixture adapter only.
 """
 import contextlib, copy, hashlib, json, os, re, sqlite3, stat, sys, time  # noqa: E401
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
@@ -1521,24 +1521,47 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             disposition = "no-target"
         elif (jobs.stages is not None and len(text) <= MAX_OWNER_TEXT and not HOSTILE_RE.search(text)
               and (text == "?" and jobs.needs_retry(active) or not command and jobs.stages.takes_turn(text, active["state"]))):
-            public, fields = self._npp_words(text)
-            disposition = jobs.input(msg, self._asker, accepted or now, now, item_intake.without_unresolved_finance(public), fields)
+            req = jobs.request(active, accepted or now)
+            prior = (req or {}).get("slots", {}).get("intake", {})
+            basis = {"item": "each", "pound": "per lb"}.get(prior.get("sold_by")) if prior.get("price_span") else None
+            answering_price = jobs.one("SELECT 1 FROM npp_questions WHERE job_id=? AND state='open' AND qid='selling_price'",
+                                       active["job_id"]) is not None
+            finance, replace_price = self._npp_words(text, basis, answering_price)
+            disposition = jobs.input(msg, self._asker, accepted or now, now, finance, replace_price=replace_price)
         if disposition is not None:
             self._record(msg, disposition)
             return disposition, None
         return None
 
-    def _npp_words(self, text):
-        """(public words, private finance slots) of an owner turn while a listing job is open. A plain-words price edit
-        (\"make it $4\", \"wait $4.50\", \"actually make it 4 bucks\") is read by the F4 pattern the legacy edit uses, as an
-        edit and not as a photo caption; anything else is parsed as before."""
-        words = " ".join(text.split())
-        if (match := intake_simple.PRICE_EDIT.fullmatch(words)) and (value := item_intake._parse_money(match["amount"])) is not None:
-            fields = {"price": value}
+    def _npp_words(self, text, basis=None, answering_price=False, *, photo=False):
+        """Parse local provenance; send neither raw finance nor reader-derived prices to the job."""
+        from hass.npp import private_numbers
+
+        local = self._intake_fields.get("photo_fields") if photo else self._intake_fields
+
+        # F4 licenses only its exact amount span. Keep offsets in the original turn.
+        match = None if photo else intake_simple.PRICE_EDIT.fullmatch(text)
+        if match and item_intake._parse_money(match["amount"]) is not None:
             if match["unit"]:
-                fields["sold_by"] = "pound" if re.search(r"lb|pound", match["unit"], re.I) else "item"
-            return "", fields
-        return item_intake.caption_answers("" if text == "?" else text, {"photo_fields": self._intake_fields})
+                basis = "per lb" if re.search(r"lb|pound", match["unit"], re.I) else "each"
+            result = private_numbers.finance(match["amount"], answer_unit=basis or "each", local_answers=local)
+            if result.price_span:
+                price = result.selling_price if basis else result.selling_price.split()[0]
+                result = replace(result, selling_price=price, price_span=match.span("amount"))
+            return result, True
+        _, parsed = item_intake.caption_answers(text)
+        result = private_numbers.finance(text, answer_unit=basis if not photo and ("price" in parsed or answering_price) else None,
+                                         local_answers=local)
+        if not result.price_span and not basis and ("price" in parsed or answering_price):
+            # Same amount under either hypothetical basis proves only an amount,
+            # never a unit. S3 resolves packaged vs. fresh from checked identity.
+            each = private_numbers.finance(text, answer_unit="each", local_answers=local)
+            pound = private_numbers.finance(text, answer_unit="per lb", local_answers=local)
+            if (each.price_span and each.price_span == pound.price_span and pound.selling_price
+                    and (each.selling_price or "").split()[0] == pound.selling_price.split()[0]):
+                result = replace(each, selling_price=each.selling_price.split()[0])
+        price_attempt = result.price_span is not None or bool(re.search(r"\b(?:sell|selling|price|retail)\b", text, re.I))
+        return result, price_attempt
 
     def npp_posted(self, change_id):
         """S13: the one-line `Posted: <item link>` confirmation for a published listing job's change, or None when the change
@@ -2362,9 +2385,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         # One batch is one intake; the first photo supplies the picture, the others are identification input.
         if jobs.stages is None:
             return self._reply(jobs.replies["guards"]["render_failed"]) or "npp-unavailable"
-        public, fields = item_intake.caption_answers(msg.text.replace("\ufffc", "").strip(), self._intake_fields)
+        finance, replace_price = self._npp_words(msg.text.replace("\ufffc", ""), photo=True)
         accepted = npp_instant(self._forwarded) or now
-        return jobs.input(msg, self._asker, min(accepted, now), now, item_intake.without_unresolved_finance(public), fields, shas)
+        return jobs.input(msg, self._asker, min(accepted, now), now, finance, shas, replace_price=replace_price)
 
     def _photo_question(self, code, sha):
         self._reply(PHOTO_QUESTION)
