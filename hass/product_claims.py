@@ -83,7 +83,12 @@ def source(root, sha, text, kind='label'):
         receipt = json.loads(raw) if raw and len(raw) <= media.SIDECAR_MAX else {}
     except ValueError:
         return None
-    if receipt.get('source') != kind or receipt.get('photo') != sha or any(t not in receipt.get('text', []) for t in text):
+    if not isinstance(receipt, dict) or receipt.get('source') != kind or receipt.get('photo') != sha:
+        return None
+    lines = receipt.get('text')
+    if not isinstance(lines, list) or any(not isinstance(line, str) for line in lines):
+        return None
+    if any(t not in lines for t in text):
         return None
     return {'source': kind, 'photo': sha, 'text': text}
 
