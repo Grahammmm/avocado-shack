@@ -95,12 +95,13 @@ class Plan:
 
 @dataclass(frozen=True)
 class Card:
-    draft: dict  # exact prepared Editor draft; publish is never a second lookup of the latest draft
+    draft: dict  # exact checked editor draft; publish is never a second lookup of the latest draft
     png: bytes
     variant: str
     image_path: str
     image_sha256: str
     note: str = ""  # text inside the single bounded fallback bracket
+    candidate: bool = False  # older injected fixture stages supply a draft they already prepared
 
 
 @dataclass(frozen=True)
@@ -110,6 +111,8 @@ class Work:
     parent: dict | None
     deadline: object
     answers: dict[str, bool] = field(default_factory=dict)
+    ask_counts: dict[str, int] = field(default_factory=dict)
+    answered: tuple[str, ...] = ()
 
 
 class Jobs:
@@ -289,6 +292,12 @@ class Jobs:
                     card_path, card_sha = self.artifacts.write_card(jid, result.png)
                 except (OSError, ValueError):
                     pass
+                if card_path is not None and result.candidate:
+                    try:
+                        if self.stages.persist(draft).get("result") != "ok":
+                            card_path = None
+                    except Exception:  # no stage details (including owner words) in logs
+                        card_path = None
             if card_path is not None:
                 text = self.replies["prompts"]["ready"].format(code=jid, n=version["n"])
                 if result.note and len(result.note) + 2 <= self.replies["caps"]["bracket_max_chars"]:
@@ -374,7 +383,12 @@ class Jobs:
             answers = {qid: bool(answer) for qid, answer in self.db.execute(
                 "SELECT a.qid,a.answer FROM npp_answers a JOIN npp_questions q "
                 "ON q.job_id=a.job_id AND q.qid=a.qid AND q.answered_by=a.provider_id WHERE a.job_id=?", (jid,))}
-            work = Work(jid, req, dict(parent) if parent else None, instant(seg["deadline_at"]), answers)
+            questions = self.db.execute("SELECT qid,state FROM npp_questions WHERE job_id=?", (jid,)).fetchall()
+            counts = {}
+            for qid, _ in questions:
+                counts[qid] = counts.get(qid, 0) + 1
+            work = Work(jid, req, dict(parent) if parent else None, instant(seg["deadline_at"]), answers,
+                        counts, tuple(qid for qid, state in questions if state == 'answered'))
             listing = json.loads(version["listing_json"]) if version else None
             ticket = seg["segment_id"], seg["revision"], version["n"] if version else None
             if now >= work.deadline:

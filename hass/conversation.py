@@ -843,9 +843,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             reasons = sorted({*reasons, live_policy.UNDO_NOT_LIVE})
         return reasons
 
-    def _capture(self, draft):
+    def _capture(self, draft, *, candidate=False):
         """The proposal screenshot of ``draft`` (H06): {"ok", "png", "error"}; never raises past the previewer's own guard."""
-        rendered = self.editor.render_draft(draft["change_id"])
+        rendered = self.editor.render_candidate(draft) if candidate else self.editor.render_draft(draft["change_id"])
         for path, digest in draft.get("assets", {}).items():
             data = rendered.get("assets", {}).get("storefront-mockup/" + path)
             if data is None or "sha256:" + hashlib.sha256(data).hexdigest() != digest:
@@ -855,14 +855,18 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if record.get("collection") == "products":
             record = next((r for r in reversed(draft["records"]) if r.get("collection") == "products" and r.get("key") == record.get("key")), record)
         target = preview_mod.target_for(record, shop_today(), store=rendered.get("store"))
-        if (self.settings.get("itemIntake") is True and target.get("kind") == "product"
+        if ((candidate or self.settings.get("itemIntake") is True) and target.get("kind") == "product"
                 and any(call.get("op") == "product.add" for call in draft.get("ops", []))):
             target.update(cardOnly=True, image=record["after"].get("image"))
             if price := record["after"].get("sellingPrice"):
                 target["price"] = "$" + price
-        return self.previewer.capture(rendered["files"], target,
-                                      self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
-            if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
+        if rendered.get("result") != "ok":
+            return {"ok": False, "png": None, "error": _reason(rendered)}
+        shot = self.previewer.capture(rendered["files"], target,
+                                      self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra)
+        if candidate and shot.get("ok"):
+            shot = {**shot, "picture": rendered.get("assets", {}).get("storefront-mockup/" + target["image"])}
+        return shot
 
     def _proposal_reply(self, row, draft, prefix="", notes=()):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06). HASS-CHAT-1: a picture
