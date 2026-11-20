@@ -166,6 +166,10 @@ def run_checks(repo: Path) -> tuple[list[str], dict]:
     lost_makers = [k for k in base_makers if k not in content.makers]
     if lost_makers:
         failures.append(f"baseline makers deleted: {lost_makers}")
+    # Content validation already requires any present maker URL to be public HTTPS.
+    unlinked_makers = [k for k in base_makers if k in content.makers and "url" not in content.makers[k]]
+    if unlinked_makers:
+        failures.append(f"baseline makers missing an https source link: {unlinked_makers}")
     recorded_urls = {m["url"] for m in content.makers.values() if "url" in m}
     recorded_urls |= {r["sourceUrl"] for r in content.community["routeIdeas"]}
     recorded_urls |= {p["hold"]["source"] for p in content.products if p["status"] == "held"}
