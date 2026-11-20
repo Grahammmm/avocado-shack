@@ -1285,7 +1285,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(NEAR_STOP_REPLY if near == "stop" else NEAR_RESUME_REPLY)
             self._record(msg, "near-control")
             return "near-control", None
-        self._close_asks(now)  # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten (FW-3: and a closed one older than 24 h)
+        if not (command and command[0] == "held"): self._close_asks(now)  # AV2137-07: listing held products sweeps nothing
+        # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten (FW-3: and a closed one older than 24 h)
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
@@ -1295,7 +1296,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         late = cutoff != now and self._forwarded_late(msg)  # HASS-SEC-2 (L5): forwarded long after it was sent
         if late: cutoff = now  # ... judged when it arrived, never at its send time
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog", "shelf", "look", "costs")
+        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog", "shelf", "look", "costs", "held")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         if bulk is not None and command is None:  # AV1052-08: before the interpreter, till and memory; works paused and at the daily cap
             if bulk == "reject": self._expire(expired)
@@ -2646,6 +2647,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if verb == "shelf": return self._shelf(code, now)  # AV1052-05
         if verb == "backlog": return self._backlog_list()  # SKILLS-FW-3
         if verb == "costs": return self._costs()  # AV2137-06
+        if verb == "held": return self._held()  # AV2137-07
         if verb == "history" and code is not None: return self._history_search(code)
         if verb == "again": return self._again(msg, now, code)  # AV2152-03
         if verb == "history":

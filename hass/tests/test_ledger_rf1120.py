@@ -106,7 +106,7 @@ def av0222_problems(text, tests=REPO_ROOT / "hass" / "tests"):
         clean = clean.replace("https://github.com/Grahammmm/avocado-shack/", "")  # the PR link is not private data
         out += [f"{u}: private data"] * bool(private_data(clean) or PRIVATE.search(clean))
     out += [f"summary: missing {h}" for h in AV0222_SUMMARY if text.count(h) < 1]
-    summary = text.split("## AV0222 milestone issue summaries")[-1] if "## AV0222 milestone issue summaries" in text else ""
+    summary = text.split("## AV0222 milestone issue summaries")[-1].split("\n## ")[0] if "## AV0222 milestone issue summaries" in text else ""
     out += [f"summary: no link #{n}" for n in (1, 2, 3) if f"github.com/Grahammmm/avocado-shack/issues/{n})" not in summary]
     out += ["summary: claims live evidence"] * bool(re.search(r"\b(released|deployed|(?<!no )trial (?:was|has been) run|checked the box)\b", summary))
     return out
@@ -301,7 +301,7 @@ class LedgerRF1120Tests(unittest.TestCase):
         self.assertTrue(av0222_problems(LEDGER.replace(sec, stack)) == [], "text check accepts both status wordings")
 
     def test_av0222_issue_summaries_preserve_holds(self):
-        summary = LEDGER.split("## AV0222 milestone issue summaries")[-1]
+        summary = LEDGER.split("## AV0222 milestone issue summaries")[-1].split("\n## ")[0]
         for h in AV0222_SUMMARY:
             self.assertEqual(summary.count(h), 1, h)
         for n in (1, 2, 3):
