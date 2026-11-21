@@ -12,6 +12,12 @@ from hass.clover.mapper import parse_item, format_quantity
 
 REFUSED = "I can read the till but I can't change it yet."
 
+
+def _compared_values(item):
+    return {"price": item.price_cents, "stock": None if item.stock is None else format_quantity(item.stock),
+            "sku": item.sku, "hidden": item.hidden, "name": item.name}
+
+
 class ApplyEngine:
     def __init__(self, state, config, client_factory, *, mike, g=None, g_is_owner=False, clock=time.time):
         self.config, self.factory, self.clock = config, client_factory, clock
@@ -80,7 +86,8 @@ class ApplyEngine:
                 raw = client.get_item(item_id)
                 status = "applied" if self._matches(entry, raw) else "failed"
                 wrong_item = bool(entry["item_id"]) and raw.get("id") != entry["item_id"]
-                self.journal.settle(db, row["code"], status, None if wrong_item else self._result(entry, raw))
+                result = None if wrong_item else self._result(entry, raw, mismatch=status == "failed")
+                self.journal.settle(db, row["code"], status, result)
                 return status
             except d.DraftRefused:
                 self.journal.settle(db, row["code"], "failed")
@@ -92,16 +99,24 @@ class ApplyEngine:
     def _matches(entry, raw):
         if entry["item_id"] and raw.get("id") != entry["item_id"]:
             return False  # an existing-item change is bound to the approved item id
-        item = parse_item(raw)
-        values = {"price": item.price_cents, "stock": None if item.stock is None else format_quantity(item.stock),
-                  "sku": item.sku, "hidden": item.hidden, "name": item.name}
+        values = _compared_values(parse_item(raw))
         categories = {e["id"] for e in raw.get("categories", {}).get("elements", [])}
         return all(values.get(k) == v for k, v in entry["after"].items()) and all(
             r["json"]["elements"][0]["category"]["id"] in categories for r in entry["requests"] if r["path"] == "/category_items")
 
     @staticmethod
-    def _result(entry, raw):
-        return {**entry, "result_item_id": raw["id"], "result_base": d._base(parse_item(raw))}
+    def _result(entry, raw, *, mismatch=False):
+        item = parse_item(raw)
+        result = {**entry, "result_item_id": raw["id"], "result_base": d._base(item)}
+        if mismatch:
+            # Keep the approved `after` intact; record only the checked facts
+            # from the existing read-back, never the full response.
+            observed = {key: value for key, value in _compared_values(item).items() if key in entry["after"]}
+            if any(r["path"] == "/category_items" for r in entry["requests"]):
+                observed["categories"] = [e["id"] for e in raw.get("categories", {}).get("elements", [])
+                                          if isinstance(e["id"], str)]
+            result["read_back"] = observed
+        return result
 
     def reconcile(self, code, *, sender, chat):
         """Durable approval hook: inspect under the journal lock, never resend an intent.
