@@ -14,8 +14,8 @@ The rule, applied per changed path (renames count under both names). The first m
      imports, plus every mention of a file's basename or hass.* dotted name. A test module is selected when its
      closure reaches the path, or reaches code that mentions the path's basename, its stem (4+ chars), its top
      directory, or its suffix pattern ("*.md", ".md").
-     For Python scripts in scripts/hass/, only imports and basename/stem references count;
-     generic directory and suffix mentions are not references to an individual script.
+     For Python scripts in scripts/hass/, imports, basename/stem references and matching
+     path-qualified globs count; unrelated generic directory and suffix mentions do not.
        a hass/ path that no test reaches            -> FULL (unmapped)
        a hass/ or scripts/hass/ Python module reached by >50% of the tests -> FULL (shared library)
        an unreached path in a known non-hass area   -> nothing (docs, planning, reports, branding, commerce,
@@ -37,6 +37,7 @@ Commands:
 import argparse
 import ast
 import collections
+import fnmatch
 import json
 import os
 import re
@@ -68,6 +69,7 @@ CODE_SUFFIXES = (".py", ".cjs", ".mjs", ".js", ".sh")
 MAX_CODE_BYTES = 2_000_000
 FILE_RE = re.compile(r"[\w.-]+\.(?:py|cjs|mjs|js|sh)\b")
 DOTTED_RE = re.compile(r"\bhass(?:\.\w+)+")
+PATH_GLOB_RE = re.compile(r"[\w./*?\[\]-]+")
 
 
 # ---------------------------------------------------------------- inventory
@@ -294,7 +296,9 @@ def select(paths, modules, texts, edges, notes=None):
             # A longer name such as other_X is not a reference to X. Generic tokens like
             # "scripts" would otherwise fan out through ordinary shared QA helpers.
             ref = re.compile(r"(?<!\w)(?:" + "|".join(map(re.escape, sorted(toks))) + r")(?!\w)")
-            mentions = {f for f, text in texts.items() if ref.search(text)}
+            mentions = {f for f, text in texts.items() if ref.search(text) or any(
+                "/" in pattern and any(c in pattern for c in "*?[") and fnmatch.fnmatchcase(path, pattern)
+                for pattern in PATH_GLOB_RE.findall(text))}
         else:
             mentions = {f for f, text in texts.items() if any(t in text for t in toks)}
         for f in mentions:

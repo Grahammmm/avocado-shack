@@ -174,6 +174,18 @@ class ScriptPlanTest(unittest.TestCase):
                 self.assertEqual(plan["tier"], "affected", plan["reason"])
                 self.assertEqual(plan["shards"], [sorted([cs.SMOKE, cs.PRIVACY_GUARD, self.TEST])])
 
+    def test_script_selects_matching_directory_glob_not_unrelated_glob(self):
+        files = {
+            self.PATH: "VALUE = 1\n",
+            cs.test_path(self.TEST): "import scripts.hass.install_probe\n",
+            cs.test_path("test_other"): "PATTERN = 'scripts/hass/*.py'\n",
+            cs.test_path("test_qa"): "PATTERN = 'hass/ops/*.py'\n",
+        }
+        texts, edges = graph(files)
+        selected, reason = cs.select([self.PATH], self.MODULES, texts, edges)
+        self.assertIsNone(reason)
+        self.assertEqual(selected, {self.TEST, "test_other"})
+
     def test_script_used_by_majority_is_full_even_below_budget(self):
         # Catches treating widely imported scripts like local scripts just because they are cheap.
         plan = self.plan("from scripts.hass import install_probe\n", additional_consumers=True)
