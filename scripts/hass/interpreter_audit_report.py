@@ -3,14 +3,16 @@
 
 import argparse
 from collections import Counter
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime
 import math
 import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import stat
+import tempfile
 
 
 DB_NAME = "conversation.sqlite3"
@@ -43,21 +45,44 @@ def fail(*reasons):
     return 1
 
 
+@contextmanager
+def _open_snapshot(path):
+    """Copy the validated store and let SQLite recover only the private copy."""
+    sources = [path]
+    for suffix in ("-wal", "-journal"):
+        sidecar = path.with_name(path.name + suffix)
+        try:
+            mode = sidecar.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISREG(mode):
+            raise ValueError("unsafe audit sidecar")
+        sources.append(sidecar)
+
+    # Use an explicit parent so tempfile cannot probe or fall back to the input
+    # directory, even if it is the current directory or configured as TMPDIR.
+    state = path.parent.resolve()
+    temp_parent = Path(os.environ.get("TMPDIR") or "/tmp").resolve()
+    if temp_parent.is_relative_to(state):
+        temp_parent = state.parent
+        if temp_parent == state:
+            raise ValueError("no temporary directory outside the state directory")
+    with tempfile.TemporaryDirectory(dir=temp_parent) as directory:
+        snapshot = Path(directory)
+        for source in sources:
+            shutil.copyfile(source, snapshot / source.name)
+        # SQLite rebuilds shared memory as needed; the source -shm is never used.
+        with closing(sqlite3.connect(snapshot / path.name)) as db:
+            db.execute("PRAGMA query_only=ON")
+            yield db
+
+
 def summarize(path, since, until, expected):
     backends, primary_errors, errors = Counter(), Counter(), Counter()
     unexpected = set()
     calls = fallbacks = unparsed = 0
     seconds = []
-    # Immutable reads cannot create SQLite sidecars, but may ignore a WAL.
-    # Refuse an uncheckpointed snapshot rather than reporting stale data.
-    try:
-        wal = os.lstat(path.with_name(path.name + "-wal"))
-    except FileNotFoundError:
-        pass
-    else:
-        if wal.st_size or not stat.S_ISREG(wal.st_mode):
-            raise ValueError("audit snapshot has an active WAL")
-    with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro&immutable=1", uri=True)) as db:
+    with _open_snapshot(path) as db:
         has_table = db.execute(
             "SELECT COUNT(*) FROM sqlite_schema "
             "WHERE type = 'table' AND name = 'interpreter_audit' COLLATE NOCASE"
@@ -110,7 +135,7 @@ def summarize(path, since, until, expected):
 
 def main(argv=None):
     parser = Parser(prog=REPORT, description=__doc__)
-    parser.add_argument("--state", required=True, type=Path, help="checkpointed state snapshot (not a live store)")
+    parser.add_argument("--state", required=True, type=Path, help="saved state snapshot (not a live store)")
     parser.add_argument("--since", required=True, help="inclusive ISO timestamp with offset")
     parser.add_argument("--until", required=True, help="exclusive ISO timestamp with offset")
     parser.add_argument("--expect-backend", action="append", metavar="NAME", help="allowed backend (repeatable)")

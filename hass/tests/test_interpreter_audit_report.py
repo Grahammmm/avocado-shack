@@ -2,7 +2,9 @@
 
 from contextlib import closing
 import importlib.util
+import os
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -39,11 +41,11 @@ class InterpreterAuditReportTests(unittest.TestCase):
             if rows:
                 db.executemany("INSERT INTO interpreter_audit VALUES (?, ?, ?, ?, ?, ?)", rows)
 
-    def invoke(self, *extra, since=SINCE, until=UNTIL, argv=None):
+    def invoke(self, *extra, since=SINCE, until=UNTIL, argv=None, env=None):
         if argv is None:
             argv = ["--state", str(self.root), "--since", since, "--until", until, *extra]
         return subprocess.run([sys.executable, "-B", str(SCRIPT), *argv], cwd=self.root,
-                              capture_output=True, text=True, timeout=10)
+                              capture_output=True, text=True, timeout=10, env=env)
 
     def assert_result(self, result, exit_code, last):
         self.assertEqual(result.returncode, exit_code, result.stdout + result.stderr)
@@ -58,6 +60,12 @@ class InterpreterAuditReportTests(unittest.TestCase):
         self.assertEqual([line for line in lines[:-1] if line.startswith("FAIL ")],
                          [f"FAIL {reason}" for reason in reasons])
         return lines
+
+    def input_state(self):
+        return self.root.stat().st_mtime_ns, {
+            path.name: (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
+            for path in self.root.iterdir()
+        }
 
     def test_c1_full_pass(self):
         # Lexical time filtering, inclusive end, interpolated ranks, and counting
@@ -142,30 +150,92 @@ class InterpreterAuditReportTests(unittest.TestCase):
             self.assertTrue(result.stderr.startswith("usage: "))
 
     def test_c4_read_only(self):
-        # Even a checkpointed WAL-mode DB can get new SQLite sidecars on open.
+        # Neither SQLite nor tempfile may create files inside the input directory.
         with closing(sqlite3.connect(self.db)) as writer, writer:
             writer.execute("PRAGMA journal_mode=WAL")
             writer.execute(SCHEMA)
             writer.execute("INSERT INTO interpreter_audit VALUES (?, 'local', 0, NULL, NULL, 1)", (SINCE,))
-        before = self.db.read_bytes(), self.db.stat().st_mtime_ns, self.db.stat().st_mode
-        self.assertIn("calls 1", self.assert_result(self.invoke(), 0, PASS))
         self.assertEqual(set(self.root.iterdir()), {self.db})
-        self.assertEqual((self.db.read_bytes(), self.db.stat().st_mtime_ns, self.db.stat().st_mode), before)
+        before = self.input_state()
+        result = self.invoke(env={**os.environ, "TMPDIR": str(self.root)})
+        self.assertEqual(self.assert_result(result, 0, PASS), [
+            "calls 1", "backend local 1", "fallback 0", "seconds p50 1.000 p90 1.000", "unparsed 0", PASS,
+        ])
+        self.assertEqual(self.input_state(), before)
 
-        # A valid outstanding WAL must not produce a silently stale report.
+    def test_a1_uncheckpointed_wal(self):
+        # Rejecting the WAL or reading only the main DB would lose the second call.
         source = self.root.parent / DB_NAME
-        source.write_bytes(before[0])
         wal = self.db.with_name(DB_NAME + "-wal")
-        with closing(sqlite3.connect(source)) as writer, writer:
-            writer.execute("INSERT INTO interpreter_audit VALUES (?, 'local', 0, NULL, NULL, 1)", (SINCE,))
+        with closing(sqlite3.connect(source)) as writer:
+            self.assertEqual(writer.execute("PRAGMA journal_mode=WAL").fetchone(), ("wal",))
+            writer.execute("PRAGMA wal_autocheckpoint=0")
+            writer.execute(SCHEMA)
+            writer.execute("INSERT INTO interpreter_audit VALUES (?, 'cloud', 0, NULL, NULL, 1)", (SINCE,))
             writer.commit()
-            wal.write_bytes(source.with_name(wal.name).read_bytes())
-        wal_before = wal.read_bytes(), wal.stat().st_mtime_ns
-        self.assertEqual(self.assert_findings(self.invoke(), f"not-sqlite {DB_NAME}"),
-                         [f"FAIL not-sqlite {DB_NAME}", FAIL])
+            self.assertEqual(writer.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone(), (0, 0, 0))
+            writer.execute("INSERT INTO interpreter_audit VALUES (?, 'local', 1, 'time_out', NULL, 2)", (SINCE,))
+            writer.commit()
+            shutil.copyfile(source, self.db)
+            shutil.copyfile(source.with_name(wal.name), wal)
+        self.assertGreater(wal.stat().st_size, 0)
         self.assertEqual(set(self.root.iterdir()), {self.db, wal})
-        self.assertEqual((self.db.read_bytes(), self.db.stat().st_mtime_ns, self.db.stat().st_mode), before)
-        self.assertEqual((wal.read_bytes(), wal.stat().st_mtime_ns), wal_before)
+        before = self.input_state()
+        self.assertEqual(self.assert_result(self.invoke(), 0, PASS), [
+            "calls 2", "backend cloud 1", "backend local 1", "fallback 1", "primary-error time_out 1",
+            "seconds p50 1.000 p90 2.000", "unparsed 0", PASS,
+        ])
+        self.assertEqual(self.input_state(), before)
+
+    def test_a1_harmless_journal(self):
+        # A regular zero-byte journal must not trigger a blanket sidecar refusal.
+        self.seed([(SINCE, "local", 0, None, None, None)])
+        self.db.with_name(DB_NAME + "-journal").write_bytes(b"")
+        before = self.input_state()
+        self.assertEqual(self.assert_result(self.invoke(), 0, PASS), [
+            "calls 1", "backend local 1", "fallback 0", "seconds none", "unparsed 0", PASS,
+        ])
+        self.assertEqual(self.input_state(), before)
+
+    def test_a1_hot_journal(self):
+        # Ignoring a hot journal can expose an uncommitted audit row change.
+        source = self.root.parent / DB_NAME
+        journal = self.db.with_name(DB_NAME + "-journal")
+        with closing(sqlite3.connect(source)) as writer:
+            writer.execute("PRAGMA journal_mode=DELETE")
+            writer.execute("PRAGMA synchronous=FULL")
+            writer.execute(SCHEMA)
+            writer.execute("INSERT INTO interpreter_audit VALUES (?, 'cloud', 0, NULL, NULL, NULL)", (SINCE,))
+            writer.execute("CREATE TABLE padding (data BLOB)")
+            writer.executemany("INSERT INTO padding VALUES (zeroblob(4096))", [()] * 8)
+            writer.commit()
+            committed = source.read_bytes()
+            # Force dirty pages to disk without committing, then copy the crash snapshot.
+            writer.execute("PRAGMA cache_size=1")
+            writer.execute("UPDATE interpreter_audit SET backend = 'local'")
+            writer.execute("UPDATE padding SET data = randomblob(4096)")
+            shutil.copyfile(source, self.db)
+            shutil.copyfile(source.with_name(journal.name), journal)
+        self.assertNotEqual(self.db.read_bytes(), committed)
+        before = self.input_state()
+        self.assertEqual(self.assert_result(self.invoke(), 0, PASS), [
+            "calls 1", "backend cloud 1", "fallback 0", "seconds none", "unparsed 0", PASS,
+        ])
+        self.assertEqual(self.input_state(), before)
+
+    def test_a1_symlinked_sidecar(self):
+        # Following a symlink would accept an otherwise harmless empty sidecar.
+        self.seed()
+        target = self.root.parent / "empty"
+        target.touch()
+        for suffix in ("-wal", "-journal"):
+            with self.subTest(suffix=suffix):
+                sidecar = self.db.with_name(DB_NAME + suffix)
+                sidecar.symlink_to(target)
+                self.assertEqual(self.assert_findings(self.invoke(), f"not-sqlite {DB_NAME}"),
+                                 [f"FAIL not-sqlite {DB_NAME}", FAIL])
+                self.assertTrue(sidecar.is_symlink())
+                sidecar.unlink()
 
     def test_c5_no_private_values(self):
         # Check both streams on successful output, unexpected-backend output,
