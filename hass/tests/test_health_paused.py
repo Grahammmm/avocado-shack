@@ -80,7 +80,7 @@ class HealthPausedTest(unittest.TestCase):
         for raw in ("yesterday", "", "2026-11-02T10:00:00"):  # words, empty, zone-less: unreadable (fail closed)
             with self.subTest(raw=raw):
                 self.db(paused=raw)
-                self.assert_long(raw, "unreadable time")
+                self.assert_long("unreadable time", "unreadable time")
                 (self.state / "conversation.sqlite3").unlink()
 
     def test_future_time_is_not_long(self):  # a readable time ahead of the clock is a short pause
