@@ -135,20 +135,26 @@ def _install_locked(sdir, cfg, wt, change_id, now) -> dict:
     want = {rel: _blob(wt, f"{commit}:{rel}") for rel in paths}
     if None in want.values(): return {"result": "refused", "reason": "the change commit cannot be read"}
     targets = {rel: site / rel[len(PREFIX):] for rel in paths}
-    if odd := [rel[len(PREFIX):] for rel in paths if _not_regular(site, rel[len(PREFIX):])]:
-        return _finish(rec_path, rec, change_id, {"state": "failed", "reason": f"site path is not a regular file: {odd[0]}",
-                                                  "failed_at": editor._now(now), "commit": commit})
     prev, modes, sub = {}, {}, ""
+    reason = None
     try:  # every pre-write read: a failure is recorded naming the site path, never the exception text
         for rel in paths:
             sub = rel[len(PREFIX):]
-            sitegen._check_folders(site, sub)
-        for rel in paths:
-            sub = rel[len(PREFIX):]
-            prev[rel] = _current(targets[rel])
-            modes[rel] = targets[rel].stat().st_mode & 0o777 if prev[rel] is not None else 0o644
+            if _not_regular(site, sub):
+                reason = f"site path is not a regular file: {sub}"
+                break
+        else:
+            for rel in paths:
+                sub = rel[len(PREFIX):]
+                sitegen._check_folders(site, sub)
+            for rel in paths:
+                sub = rel[len(PREFIX):]
+                prev[rel] = _current(targets[rel])
+                modes[rel] = targets[rel].stat().st_mode & 0o777 if prev[rel] is not None else 0o644
     except OSError:
-        return _finish(rec_path, rec, change_id, {"state": "failed", "reason": f"site file cannot be read: {sub}",
+        reason = f"site file cannot be read: {sub}"
+    if reason:
+        return _finish(rec_path, rec, change_id, {"state": "failed", "reason": reason,
                                                   "failed_at": editor._now(now), "commit": commit})
     done = {"commit": commit, "files": len(paths)}
     own = rec["install"] if isinstance(rec.get("install"), dict) else {}  # a damaged entry is "not installed yet"
