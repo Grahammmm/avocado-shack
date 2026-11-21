@@ -129,7 +129,8 @@ def build(bundle_row, journal_rows, preview_text, register_verdict, site_verdict
             evidence = "settled"
             observed = result.get("read_back")
             if observed is None and status == "applied":
-                # _matches checked these facts; a failed comparison proves none of them.
+                # Only a match establishes the approved values. Older failed
+                # rows without explicit read-back evidence remain unknown.
                 observed = result.get("after", draft.get("after", {}))
             read_back.append({"code": row["code"], "item_id": result["result_item_id"],
                               "revision": _pick(result.get("result_base"), _FACTS),

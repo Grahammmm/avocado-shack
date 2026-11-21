@@ -9,10 +9,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from hass.clover import drafts as d
+from hass.clover.apply import ApplyEngine
 from hass.clover.cache import CacheUnsafe
 from hass.clover.checks import Verdict
+from hass.clover.client import CloverWriteClient
+from hass.clover.config import from_settings
 from hass.clover.inventory_receipt import build, summary, write
-from hass.tests.test_clover_client import NoNetwork
+from hass.tests.test_clover_apply import Till
+from hass.tests.test_clover_client import FAKE_TOKEN, MID, NoNetwork
 
 CODE, STOCK_CODE = "aabbccdd", "eeff0011"
 CREATE = {"method": "POST", "path": "/items", "json": {"name": "Test mug", "price": 123,
@@ -98,6 +103,48 @@ class InventoryReceiptTests(NoNetwork):
         self.assertEqual(uncertain["read_back"], [])
         with self.assertRaisesRegex(ValueError, "approver role"):
             build(bundle, rows, PREVIEW, None, None, "guest", links)
+
+    def test_c1_fields_preserve_distinct_failed_read_backs(self):
+        # C1: the same approved write and revision can return different SKUs.
+        # Keeping only the approved values loses both observations in the receipt.
+        for observed_sku in ("FIXTURE-WRONG-A", "FIXTURE-WRONG-B"):
+            with self.subTest(observed_sku=observed_sku), tempfile.TemporaryDirectory() as tmp:
+                state = Path(tmp)
+                token_file = state / "fake-write"
+                token_file.write_text(FAKE_TOKEN)
+                token_file.chmod(0o600)
+                cfg = from_settings({"environment": "sandbox", "merchantId": MID, "writes": True,
+                                     "liveApproved": True, "writeTokenFile": str(token_file),
+                                     "tokenFile": str(state / "fake-read"), "categoryMap": {"pantry": "Pantry"}})
+                till = Till()
+
+                def transport(request):
+                    response = till(request)
+                    if request.method == "POST" and request.url.endswith("/category_items"):
+                        till.items["NEWITEM"].update(sku=observed_sku, cost=999,
+                                                     categories={"elements": [{"id": "FIXTURE-OTHER-CAT"}]})
+                    return response
+
+                engine = ApplyEngine(state, cfg, lambda token: CloverWriteClient(MID, token, transport, min_interval=0),
+                                     mike=("fixture@example.test", "fixture-chat"))
+                draft = d.build_create_item("Test mug", 123, "pantry", [], cfg, categories=[("FIXTURE-CAT", "Pantry")])
+                code, preview = engine.offer(draft, sender="fixture@example.test", chat="fixture-chat")
+                self.assertEqual(engine.handle("yes " + code, sender="fixture@example.test", chat="fixture-chat"), "failed")
+                self.assertEqual([request.method for request in till.seen], ["GET", "POST", "POST", "GET"])
+                with engine.journal.locked() as db:
+                    row = db.execute("SELECT * FROM changes WHERE code=?", (code,)).fetchone()
+                    result = json.loads(row["result"])
+                    bundle = dict(bundle=dict(code=code, bundle_hash="ab" * 32), state="failed", till="failed", site="draft")
+                    receipt = build(bundle, [row], preview, None, None, "mike", {"yes": "fixture-yes"})
+                self.assertEqual(result["after"], draft.after)
+                self.assertEqual(receipt["journal"][0]["status"], "failed")
+                self.assertNotIn("undo_code", receipt)
+                self.assertEqual(receipt["requests"][0]["calls"][0]["json"]["sku"], draft.after["sku"])
+                self.assertEqual(receipt["read_back"], [{"code": code, "item_id": "NEWITEM",
+                    "revision": {"modifiedTime": 1, "stockModifiedTime": None},
+                    "values": {"name": "Test mug", "sku": observed_sku, "price": 123, "hidden": False,
+                               "categories": ["FIXTURE-OTHER-CAT"]}}])
+                self.assertEqual(result["read_back"], receipt["read_back"][0]["values"])
 
     def test_c2_private_write(self):
         # C2: catch direct overwrite (old open file would change too), chmod
