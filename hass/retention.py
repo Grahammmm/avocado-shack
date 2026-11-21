@@ -76,6 +76,13 @@ def _shots(folder: Path, cutoff) -> dict:
            and (s := e.stat(follow_symlinks=False)).st_mtime < cutoff.timestamp()]
     return {"files": len(old), "bytes": sum(old)}
 
+def _web_stems(root: Path):
+    """Stems of completed web images; ignore temp files and other non-images."""
+    for entry in _files(root / "web"):
+        stem, ext = os.path.splitext(entry.name)
+        if ext[1:] in EXT.values():
+            yield stem
+
 def _media(root: Path, cutoff) -> dict:
     """Originals (jpg/png beside a <sha>.json sidecar) and their web copies, dated by the sidecar received_at."""
     dated, undated, size = {}, 0, 0
@@ -86,14 +93,14 @@ def _media(root: Path, cutoff) -> dict:
         undated += when is None
         size += entry.stat(follow_symlinks=False).st_size if when is not None and when < cutoff else 0
     out = _tally(cutoff, (("originals", w) for w in dated.values()), ("originals",))
-    web = sum(1 for e in _files(root / "web") if (w := dated.get(os.path.splitext(e.name)[0])) and w < cutoff)
+    web = sum(1 for stem in _web_stems(root) if (w := dated.get(stem)) and w < cutoff)
     return {"originals": out["originals"], "bytes": size, "web": web, "oldest": out["oldest"], "undated": undated}
 
 def _web_orphans(root: Path) -> int:
     """Web copies whose stem names no original image (a sidecar alone is none); _files rule, no link followed."""
     names = (os.path.splitext(e.name) for e in _files(root / "originals"))
     stems = {stem for stem, ext in names if ext[1:] in EXT.values()}
-    return sum(1 for e in _files(root / "web") if os.path.splitext(e.name)[0] not in stems)
+    return sum(1 for stem in _web_stems(root) if stem not in stems)
 
 def _backups(folder: Path, cutoff) -> dict:
     """hass-state-<stamp> entries: complete with a regular MANIFEST.json (statebackup writes it last), else not."""
