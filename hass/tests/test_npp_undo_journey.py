@@ -180,7 +180,6 @@ class NppUndoJourneyTests(unittest.TestCase):
         self.assertEqual(self.repo.products(), self.base_products + [dict(self.product, status="hidden")])
         self.assertEqual(self.engine.show(self.change)["change"]["revertedBy"], self.hide_change)
 
-    @unittest.expectedFailure  # _proposal_reply omits the code from the sole undo draft's prompt.
     def test_c1_undo_drafts_hide(self):
         # Do not auto-hide on "undo" or reuse the publication approval.
         self.publish()
@@ -218,7 +217,6 @@ class NppUndoJourneyTests(unittest.TestCase):
                 self.assertEqual(self.repo.head(), head)
                 self.assertEqual((self.site(), self.repo.products(), self.repo.makers()), undone)
 
-    @unittest.expectedFailure  # _proposal_reply omits the sole undo draft's code for known makers too.
     def test_c5_known_maker(self):
         # Product-only publication must undo without hiding or rewriting the pre-existing maker.
         self.publish(new_maker=False)
