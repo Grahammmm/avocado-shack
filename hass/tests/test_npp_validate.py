@@ -1,6 +1,8 @@
 """S7 fixture checks use assembled draft records and independently supplied image/DOM evidence."""
 from dataclasses import replace
+from datetime import datetime, timezone
 import unittest
+from unittest.mock import patch
 
 from hass import claims
 from hass.npp import assets, validate
@@ -31,6 +33,32 @@ class ValidateTests(unittest.TestCase):
 
     def verdict(self, **changes):
         return validate.listing(self.writer, self.ctx, self.copy, self.draft, **(self.kw | changes))
+
+    def test_added_on_requires_exact_shop_day_and_explicit_clock(self):
+        # Reject implicit-clock exemptions, permissive parsing and a freshness window.
+        now = datetime(2026, 11, 21, 3, tzinfo=timezone.utc)  # still Nov 20 at the shop
+        self.product['addedOn'] = '2026-11-20'
+        self.assertEqual(self.verdict(added_on_now=now).problems, ())
+        self.assertEqual(self.verdict().problems, ('public-text',))
+        for value in ('2026-02-30', '20261120', '2026-11-19', '2026-11-21'):
+            with self.subTest(value=value):
+                self.product['addedOn'] = value
+                self.assertEqual(self.verdict(added_on_now=now).problems, ('public-text',))
+
+    def test_added_on_does_not_exempt_elsewhere_or_bypass_contact(self):
+        # Catch global value-based exemptions and short-circuiting the contact scan.
+        now = datetime(2026, 11, 20, 20, tzinfo=timezone.utc)
+        day = self.product['addedOn'] = '2026-11-20'
+        self.product['displayBrand'] = day
+        self.assertIn('public-text', self.verdict(added_on_now=now).problems)
+        self.product['displayBrand'] = 'From the market'
+        self.product['producerKey'] = 'oak-farm'
+        maker = {'name': 'Oak Farm', 'addedOn': day}
+        self.assertIn('public-text', self.verdict(added_on_now=now, makers={'oak-farm': maker}).problems)
+        del self.product['producerKey']
+        self.assertEqual(self.verdict(added_on_now=now, card_nodes=[*self.nodes, day]).problems, ('card-number',))
+        with patch.object(validate, '_contact', side_effect=lambda text: text == day):
+            self.assertEqual(self.verdict(added_on_now=now).problems, ('public-text',))
 
     def test_independent_price_and_size_pass_but_alt_gets_no_size_permit(self):
         # Case 32: banning values globally blocks legal price/size; granting by value leaks into other text.

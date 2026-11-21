@@ -20,12 +20,35 @@ if(Object.hasOwn(target,'effectiveDay')){
   if(typeof d!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(d)||!Number.isFinite(Date.parse(d+'T12:00:00Z'))||new Date(d+'T12:00:00Z').toISOString().slice(0,10)!==d){console.error('bad effectiveDay');process.exit(1);}
 }
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const {createHash}=require('node:crypto');
 const origin=new URL(base).origin;
 const allowed=req=>{
   if(!['GET','HEAD'].includes(req.method()))return false;
   try{const url=new URL(req.url());return url.protocol==='data:'||(url.origin===origin&&url.hostname==='127.0.0.1');}
   catch{return false;}
 };
+// Only exact renderer elements get a UI role, never listing text.
+function cardEvidence(card){
+  const roles=[':scope > .card-link','.food-badges > span','.maker-story > summary',
+    '.maker-story-content > a','.maker-story-content > button.text-link[data-from]', '.availability'];
+  const ui=new Map(roles.flatMap(role=>Array.from(card.querySelectorAll(role),el=>[el,role])));
+  const ws=s=>s.replace(/\s+/g,' ').trim(), fragments=[], elements=[];
+  const walk=document.createTreeWalker(card,NodeFilter.SHOW_TEXT);
+  for(let n=walk.nextNode();n;n=walk.nextNode()){
+    const el=n.parentElement, text=ws(n.data);
+    if(!text||el.closest('.sr-only,script,style')||getComputedStyle(el).visibility!=='visible')continue;
+    const range=document.createRange();range.selectNodeContents(n);
+    if(!Array.from(range.getClientRects()).some(r=>r.width&&r.height))continue;
+    let owner=el;
+    for(let p=el;p!==card;p=p.parentElement)if(ui.has(p)){owner=p;break;}
+    if(elements.at(-1)===owner)fragments.at(-1).text+=n.data;
+    else{elements.push(owner);fragments.push({text:n.data,role:ui.get(owner)||null});}
+  }
+  const prices=elements.flatMap((el,i)=>el.matches('.product-price')?[i]:[]);
+  return {fragments:fragments.map(f=>({...f,text:ws(f.text)})),priceIndex:prices.length===1?prices[0]:null,
+    productId:card.dataset.productId,
+    makerCount:card.dataset.makerKey&&typeof makerCounts!=='undefined'?makerCounts.get(card.dataset.makerKey)??null:null};
+}
 (async()=>{
   if(!base||new URL(base).hostname!=='127.0.0.1')throw new Error('PREVIEW_URL must be a 127.0.0.1 address');
   const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
@@ -213,10 +236,19 @@ const allowed=req=>{
       else await page.evaluate(()=>window.scrollTo(0,0));
     }
     await page.waitForTimeout(150);
-    if(cardShot)await cardShot.screenshot({path:out});
+    let cardOutput={};
+    if(cardShot){
+      const before=await cardShot.evaluate(cardEvidence);
+      const png=await cardShot.screenshot({path:out});
+      const after=await cardShot.evaluate(cardEvidence);
+      cardOutput.cardText=await cardShot.innerText();
+      if(JSON.stringify(before)===JSON.stringify(after)){
+        cardOutput.cardEvidence={...after,pngSha256:createHash('sha256').update(png).digest('hex')};
+      }
+    }
     else await page.screenshot({path:out});
     checks.noPageErrors=errors.length===0;
     checks.noPosts=!blocked.some(m=>m!=='GET'&&m!=='HEAD');
-    console.log(JSON.stringify({checks,blockedRequests:blocked.length,...(cardShot?{cardText:await cardShot.innerText()}:{}),...(unshown?{unshown:true}:{})}));
+    console.log(JSON.stringify({checks,blockedRequests:blocked.length,...cardOutput,...(unshown?{unshown:true}:{})}));
   }finally{await browser.close();}
 })().catch(e=>{console.error(String((e&&e.message)||e).split('\n')[0]);process.exit(1);});

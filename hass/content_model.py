@@ -160,7 +160,8 @@ def load_content(content_dir: Path = CONTENT_DIR) -> Content:
     problems: list[str] = []
     for name, doc in (("products.json", products), ("makers.json", makers),
                       ("community.json", community), ("store.json", store)):
-        if not isinstance(doc, dict) or doc.get("schemaVersion") != SCHEMA_VERSION:
+        version = doc.get("schemaVersion") if isinstance(doc, dict) else None
+        if type(version) is not int or version != SCHEMA_VERSION:
             problems.append(f"{name}: schemaVersion must be {SCHEMA_VERSION}")
     # products.json and makers.json have closed root envelopes: only the schema
     # version and the payload. Anything else (a stray price or private note) is
