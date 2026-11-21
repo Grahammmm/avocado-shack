@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+from hass import answer_reader, cloud_codex
 from hass.conversation import Conversation
 from hass.npp import assets, private_numbers, stages
 from hass.npp.job import Jobs, Work
@@ -65,27 +66,19 @@ CAPTIONS = (
     ('Beet chips; got 18 at 2.57 selling 4.31 each', '4.31 each', '18 2.57 257'),
     ('Pear preserves; got 16 at 2.51 selling 4.28', '4.28 each', '16 2.51 251'),
     ('Blackberry syrup; paid 2.56 selling 5.21 each; 15 bottles', '5.21 each', '2.56 256 15'),
+    # Bare dictation 'three fifty' leaves the cost unresolved under the typed grammar.
     ('Pumpkin seeds; cost three fifty; sell $5.67 each; have 25 bags', 'ask', '3.50 350 25'),
     ('Cider vinegar; qty 1,200; paid 64 cents; sell $2.38 each', '2.38 each', '1200 .64 64'),
     ('Herb oil; bought 17 at $2.43; selling 4 dollars and 35 cents each', '4.35 each', '17 2.43 243'),
+    ('Cranberry spread; wholesale $2.32; $6.14 retail; stock 17', '6.14 each', '2.32 232 17'),
+    ("Rice cakes; cost $1.45; don't sell $4.50 each; have 28 bags", 'ask', '1.45 145 4.50 28'),
+    ('Cocoa wafers; paid 2 dollars and 5 cents; sell $4.63 each', '4.63 each', '2.05 205'),
+    ('Melon strips; cost $1.74/lb; sell $6.84 each; have 27 bags', '6.84 each', '1.74 174 27'),
+    # A case price is not an item price; the public schema cannot display this unit.
+    ('Oat clusters; paid $2.67; stock 19 cases; sell $8.95 per case', 'ask', '2.67 267 19'),
 )
 FRESH = {8, 9, 10, 11, 33, 34, 37, 40}  # fixture identification, not inferred from cost units
-AMBIGUOUS = {35, 36, 37, 38, 39, 40, 44}
-KNOWN_PRICE = {
-    13: 'Sale price is tagged, but its remaining cue invalidates the span.',
-    16: 'The caption parser splits a sentence before Selling; NPP does not.',
-    18: 'The caption parser splits before I’ll sell; NPP does not.',
-    20: 'Cost/sell slash shorthand works only at the start of the caption.',
-    41: 'No delimiter between got, purchase cost, and selling span.',
-    42: 'No delimiter between got, purchase cost, and unitless selling span.',
-    43: 'No delimiter between paid and selling spans.',
-}
-KNOWN_PRIVATE = {
-    41: 'The cost cents are missing; the explicit selling amount is quarantined too.',
-    42: 'The cost cents are missing; the explicit selling amount is quarantined too.',
-    43: 'The cost cents are missing; the explicit selling amount is quarantined too.',
-    44: 'The dictation screen also stores the component readings three and fifty.',
-}
+AMBIGUOUS = {35, 36, 37, 38, 39, 40, 44, 48}
 NOW = datetime(2000, 1, 1, tzinfo=timezone.utc)
 PHOTO_SHA = 'a' * 64
 PHOTO = b'synthetic product photo'
@@ -114,7 +107,7 @@ class FixtureConversation(Conversation):
         return NOW
 
 
-def replay(caption, kind, pinned, local=None):
+def replay(caption, kind, pinned, local=None, *, reader=None):
     """Use real caption dispatch, Jobs.input, request store, and S2/S3 planner."""
     identify_calls, copy_calls = [], []
 
@@ -132,13 +125,18 @@ def replay(caption, kind, pinned, local=None):
 
     with closing(sqlite3.connect(':memory:')) as db:
         db.row_factory = sqlite3.Row
+        db.execute('CREATE TABLE messages (provider_id TEXT)')
         conv = FixtureConversation(db, local)
         pipeline = stages.ProductionStages(conv, pinned)
         pipeline.identifier = stages.identify.Identifier(pinned, runner=identify_runner)
         pipeline.selector = stages.copy.codex_selector(copy_transport)
         jobs = Jobs(conv, pipeline, pinned, executor=Mock())
         msg = SimpleNamespace(chat='fixture-chat', provider_id='fixture-caption', text=caption,
-                              received_at=NOW.isoformat())
+                              received_at=NOW.isoformat(), attachments=1, from_me=False, kind='new')
+        if reader is not None:
+            with (patch.object(conv, 'answer_reader', reader),
+                  patch.object(conv, '_is_owner', return_value=True), patch.object(conv, 'stage')):
+                conv._intake_fields = conv._read_intake(msg)
         disposition = conv._npp_photo(jobs, msg, NOW, [PHOTO_SHA])
         job = jobs.active(msg.chat, conv._asker)
         request = jobs.request(job, NOW) if job is not None else None
@@ -188,6 +186,8 @@ class CaptionTable(unittest.TestCase):
             if 'selling_price' in ids:
                 self.assertIsNone(slot['price'])
                 self.assertIsNone(slot['price_span'])
+            if index == 33:  # the only "per lb" belongs to the cost, not to the unitless sale
+                self.assertNotIn('sold_by', parsed)
             return
 
         amount, _, basis = expected.partition(' ')
@@ -200,6 +200,9 @@ class CaptionTable(unittest.TestCase):
         _, tagged = item_intake.caption_answers(caption[start:end])
         self.assertEqual(tagged.get('price'), amount)
         self.assertNotIn('cost', tagged)
+        self.assertEqual(parsed.get('sold_by'), tagged.get('sold_by'))
+        if 'sold_by' in tagged:
+            self.assertEqual(tagged['sold_by'], 'pound' if basis == 'per lb' else 'item')
         self.assertIsNotNone(listing, plan.questions)
         assert listing is not None
         self.assertEqual((listing['sellingPrice'], listing['priceUnit']), (amount, 'lb' if basis == 'per lb' else basis))
@@ -208,12 +211,10 @@ class CaptionTable(unittest.TestCase):
         # C1: catch an amount selected from cost/count, a dropped tagged price,
         # or a unit silently borrowed from a private span.
         for index in self.rows:
-            if index not in KNOWN_PRIVATE:
-                with self.subTest(row=index, check='private-set'):
-                    self._check_private(index)
-            if index not in KNOWN_PRICE:
-                with self.subTest(row=index, check='plan'):
-                    self._check_price(index)
+            with self.subTest(row=index, check='private-set'):
+                self._check_private(index)
+            with self.subTest(row=index, check='plan'):
+                self._check_price(index)
 
     def test_c2_private_never_public(self):
         # C2: catch forwarding an unresolved clause or copying the complete
@@ -249,44 +250,34 @@ class CaptionTable(unittest.TestCase):
             disposition, request, plan, *_ = replay(caption, kind, self.pinned, local)
             with self.subTest(row=index):
                 self.assertEqual(expected, 'ask')
+                if index != 44:  # row 44 tags a price, but the still-unresolved cost blocks it
+                    self.assertNotIn('price', self.rows[index][2])
                 self.assertEqual(disposition, 'npp-working')
                 self.assertIsNone(request['slots']['intake']['price'])
                 self.assertIsNone(request['slots']['intake']['price_span'])
                 self.assertIsNone(plan.listing)
                 self.assertIn('selling_price', {qid for qid, _ in plan.questions})
 
-    @unittest.expectedFailure
     def test_c2_private_never_public_local_reader(self):
-        """C2 literally includes the finance-local reader; design S1 allows its raw input."""
-        caption, _, private = CAPTIONS[43]  # spoken cost and digit count
-        with closing(sqlite3.connect(':memory:')) as db:
-            db.execute('CREATE TABLE messages (provider_id TEXT)')
-            conv = FixtureConversation(db, None)
-            reader = Mock()
-            reader.fields.return_value = None
-            msg = SimpleNamespace(attachments=1, from_me=False, kind='new', text=caption,
-                                  provider_id='fixture-caption', chat='fixture-chat')
-            with (patch.object(conv, 'answer_reader', reader),
-                  patch.object(conv, '_is_owner', return_value=True), patch.object(conv, 'stage')):
-                conv._read_intake(msg)
-        private_values = set(map(Decimal, private.split()))
-        exposed = {n for call in reader.fields.call_args_list
-                   for word in private_numbers.values(call.args[0]) for n in word.amounts & private_values}
-        self.assertFalse(exposed, 'Private caption values were handed to the finance-local model reader')
+        # A cloud-configured finance reader must not call its remote runner;
+        # only the real loopback fallback's model payload may contain raw words.
+        caption = CAPTIONS[43][0]  # spoken cost and digit count
+        local_bodies = []
+        cloud_runner = Mock(return_value={'ok': False, 'code': 'model'})
 
+        def local_transport(url, body, headers, timeout):
+            local_bodies.append(json.loads(body))
+            result = json.dumps(dict(price_cents=None, cost_cents=350, quantity=25))
+            return 200, json.dumps(dict(done=True, message={'content': result})).encode()
 
-def _known_failure(check, index, reason):
-    # unittest expectedFailure is method-level, not per subTest. A separate
-    # test per discrepancy preserves the other checks and flags each repair
-    # as an unexpected success until its marker is removed.
-    def test(self):
-        check(self, index)
-
-    test.__doc__ = reason
-    return unittest.expectedFailure(test)
-
-
-for _label, _check, _cases in (('price', CaptionTable._check_price, KNOWN_PRICE),
-                              ('private', CaptionTable._check_private, KNOWN_PRIVATE)):
-    for _index, _reason in _cases.items():
-        setattr(CaptionTable, f'test_c1_table_{_label}_{_index:02d}', _known_failure(_check, _index, _reason))
+        fallback = answer_reader.AnswerReader('http://127.0.0.1:11434', 'fixture', transport=local_transport)
+        reader = answer_reader.AnswerReader(None, 'fixture', api='codex', fallback=fallback,
+                                            transport=cloud_codex.CodexTransport(runner=cloud_runner))
+        _, request, plan, identify, copy, research = replay(caption, 'food', self.pinned, reader=reader)
+        self.assertEqual([m['content'] for b in local_bodies for m in b['messages'] if m['role'] == 'user'], [caption])
+        cloud_runner.assert_not_called()
+        self.assertIsNone(plan.listing)
+        self.assertEqual(request['texts'], ['Pumpkin seeds'])
+        self.assertEqual(identify, self.clean['food'][0])
+        self.assertEqual(copy, [])
+        self.assertIsNone(research)
