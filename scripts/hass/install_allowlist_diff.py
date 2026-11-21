@@ -3,6 +3,7 @@
 
 import argparse
 from collections import Counter
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import os
@@ -31,6 +32,30 @@ def reject_constant(_token):
     raise ValueError
 
 
+def canonical_json(value):
+    """Serialize JSON deterministically without rounding decimal numbers."""
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            raise ValueError
+        sign, digits, exponent = value.as_tuple()
+        assert isinstance(exponent, int)
+        digits = list(digits)
+        while len(digits) > 1 and digits[-1] == 0:
+            digits.pop()
+            exponent += 1
+        if not any(digits):
+            exponent = 0
+        coefficient = ''.join(map(str, digits))
+        return (('-' if sign else '') + coefficient[0] + '.'
+                + (coefficient[1:] or '0') + 'e' + str(exponent + len(digits) - 1))
+    if isinstance(value, list):
+        return '[' + ','.join(canonical_json(item) for item in value) + ']'
+    if isinstance(value, dict):
+        return '{' + ','.join(json.dumps(key) + ':' + canonical_json(value[key])
+                              for key in sorted(value)) + '}'
+    return json.dumps(value, separators=(',', ':'), allow_nan=False)
+
+
 def git(repo, *args):
     # Forbid transport (including lazy fetch in partial clones) and ignore
     # replacement refs so the results describe the named commits themselves.
@@ -56,17 +81,16 @@ def read_allowlist(repo, sha, side):
         return None, f"absent {side}"
     try:
         document = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object,
-                              parse_constant=reject_constant)
+                              parse_constant=reject_constant, parse_float=Decimal)
         if not isinstance(document, dict):
             return None, f"bad-json {side}"
         entries = document.get("allowlist")
         if not isinstance(entries, list):
             return None, f"not-list {side}"
-        return Counter(json.dumps(entry, sort_keys=True, separators=(",", ":"),
-                                  allow_nan=False) for entry in entries), None
+        return Counter(canonical_json(entry) for entry in entries), None
     except DuplicateKey:
         return None, f"duplicate-key {side}"
-    except (ValueError, RecursionError):
+    except (ValueError, InvalidOperation, RecursionError):
         return None, f"bad-json {side}"
 
 

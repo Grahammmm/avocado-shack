@@ -103,6 +103,26 @@ class InstallAllowlistDiffTests(unittest.TestCase):
                 new = self.commit(document(*entries))
                 self.check_diff(old, new, f"old_count {counts}", *changes, reasons=("changed",))
 
+    def test_distinct_large_decimal_values_are_changes(self):
+        old = self.commit(document(b'{"value":9007199254740992.0}'))
+        new = self.commit(document(b'{"value":9007199254740993.0}'))
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = DIFF.main(self.args(old, new))
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertEqual(result, 1)
+        lines = stdout.getvalue().splitlines()
+        self.assertEqual(lines[0], "old_count 1 new_count 1 added 1 removed 1")
+        self.assertRegex(lines[1], r"^added [0-9a-f]{12}$")
+        self.assertRegex(lines[2], r"^removed [0-9a-f]{12}$")
+        self.assertNotEqual(lines[1].split()[1], lines[2].split()[1])
+        self.assertEqual(lines[3:], ["FAIL changed", "FAIL install_allowlist_diff"])
+
+    def test_equivalent_decimal_spellings_and_nested_values(self):
+        old = self.commit(document(b'{"values":[1.00,9.007199254740993e15,1e400,0.00]}'))
+        new = self.commit(document(b'{"values":[1e0,9007199254740993.0,10e399,0e-12]}'))
+        self.check_diff(old, new, "old_count 1 new_count 1 added 0 removed 0")
+
     def test_refuses_bad_sources_and_labels_both_sides(self):
         # Lenient JSON parsing or defaulting missing fields to [] could pass bad inputs.
         good = self.commit(EMPTY)
@@ -114,6 +134,7 @@ class InstallAllowlistDiffTests(unittest.TestCase):
             (document(b'NaN'), "bad-json"),
             (document(b'Infinity'), "bad-json"),
             (document(b'-Infinity'), "bad-json"),
+            (document(b'1e99999999999999999999999999999'), "bad-json"),
             (rb'{"allowlist":[{"synthetic-private-marker":0,"synthetic-private-mark\u0065r":1}]}',
              "duplicate-key"),
             (b'{"allowlist":[],"allowlist":[]}', "duplicate-key"),
