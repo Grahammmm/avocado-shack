@@ -104,22 +104,27 @@ class AllowlistRuleParityTests(unittest.TestCase):
         self.assertEqual(lines.count("FAIL live-entry-unfolded"), 1)
 
     def test_c2_3_check_error(self):
-        # Neither an exception nor its text should escape the check or become a URL mismatch.
+        # Even repeated exceptions produce one text-free finding without skipping
+        # later cases or counting an incomplete comparison as a disagreement.
         for module, method in ((self.parity.stages.ProductionStages, "_research"),
                                (self.parity.research, "research")):
-            with self.subTest(method=method):
-                original = getattr(module, method)
+            original = getattr(module, method)
+            for failing_calls in (1, 2, 8):
+                with self.subTest(method=method, failing_calls=failing_calls):
+                    def raise_on_prefix(*args, **kwargs):
+                        if recorder.call_count <= failing_calls:
+                            raise RuntimeError("fixture exception detail")
+                        return original(*args, **kwargs)
 
-                def raise_once(*args, **kwargs):
-                    if recorder.call_count == 1:
-                        raise RuntimeError("fixture exception detail")
-                    return original(*args, **kwargs)
-
-                with patch.object(module, method, autospec=True, side_effect=raise_once) as recorder, self.with_live_entries():
-                    lines = self.run_main(1, FAIL)
-                self.assertEqual(lines, ["allowlist live_entries=0", "FAIL check-error",
-                                         "FAIL rule-disagree 3", "allowlist cases=8 disagree=1", FAIL])
-                self.assertEqual(recorder.call_count, 8)
+                    with patch.object(module, method, autospec=True, side_effect=raise_on_prefix) as recorder, self.with_live_entries():
+                        lines = self.run_main(1, FAIL)
+                    expected = ["allowlist live_entries=0", "FAIL check-error"]
+                    if failing_calls == 8:
+                        expected.append("allowlist cases=8 disagree=0")
+                    else:
+                        expected.extend(["FAIL rule-disagree 3", "allowlist cases=8 disagree=1"])
+                    self.assertEqual(lines, [*expected, FAIL])
+                    self.assertEqual(recorder.call_count, 8)
 
     def test_c3_usage_exit_2(self):
         # Reject positionals, unknown flags and argparse's otherwise implicit help flag.

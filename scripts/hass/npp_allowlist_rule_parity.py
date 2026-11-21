@@ -97,7 +97,8 @@ def main(argv=None):
                     stage_url = _stage_url(pinned, entries)
                     research_url = _research_url(pinned, sources, entries)
                 except Exception:
-                    findings.append("check-error")
+                    if "check-error" not in findings:
+                        findings.append("check-error")
                     continue
                 if stage_url != research_url:
                     disagree += 1
