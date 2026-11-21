@@ -7,8 +7,9 @@ never a wait for an outstanding future. Work.request is private (finance include
 pass only eligible projections to remote readers. Stages do not write job state or send messages.
 """
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 import hashlib
 import json
 import re
@@ -30,6 +31,9 @@ CREATE INDEX IF NOT EXISTS npp_segment_turns ON npp_turns(segment_id);
 CREATE TABLE IF NOT EXISTS npp_questions(
  job_id TEXT NOT NULL, qid TEXT NOT NULL, asked_outbox_id INTEGER NOT NULL, asked_at TEXT NOT NULL,
  answered_by TEXT, answered_at TEXT, state TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS npp_answers(
+ job_id TEXT NOT NULL, qid TEXT NOT NULL, provider_id TEXT NOT NULL UNIQUE,
+ answer INTEGER NOT NULL, accepted_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS npp_segments(
  segment_id INTEGER PRIMARY KEY, job_id TEXT NOT NULL, started_by TEXT NOT NULL, accepted_at TEXT NOT NULL,
  deadline_at TEXT NOT NULL, ended_at TEXT, outcome TEXT, revision INTEGER NOT NULL DEFAULT 0);
@@ -49,6 +53,12 @@ ACTIVE = "'working','asking','card_out','editing','retake'"
 YES = re.compile(r"yes ([0-9a-f]{4,12})(?:-([1-9][0-9]{0,8}))?", re.I)
 NO = re.compile(r"(?:no|cancel)(?: ([0-9a-f]{4,12})(?:-[1-9][0-9]{0,8})?)?", re.I)
 EXPIRED = "That question expired. Please send the photo again to start over."
+ITEM_IDENTITY = re.compile(r"\s*(?:it(?: is|[’']s)|(?:the )?(?:item|product)(?: is|:))\s+([^;\n]+)", re.I)
+
+
+def owner_item(text):
+    match = ITEM_IDENTITY.fullmatch(text)
+    return match[1] if match else None
 
 
 def dump(value):
@@ -91,12 +101,13 @@ class Plan:
 
 @dataclass(frozen=True)
 class Card:
-    draft: dict  # exact prepared Editor draft; publish is never a second lookup of the latest draft
+    draft: dict  # exact checked editor draft; publish is never a second lookup of the latest draft
     png: bytes
     variant: str
     image_path: str
     image_sha256: str
     note: str = ""  # text inside the single bounded fallback bracket
+    candidate: bool = False  # older injected fixture stages supply a draft they already prepared
 
 
 @dataclass(frozen=True)
@@ -105,6 +116,9 @@ class Work:
     request: dict
     parent: dict | None
     deadline: object
+    answers: dict[str, bool] = field(default_factory=dict)
+    ask_counts: dict[str, int] = field(default_factory=dict)
+    answered: tuple[str, ...] = ()
 
 
 class Jobs:
@@ -162,7 +176,7 @@ class Jobs:
             self.c.requests.mark(job["open_request_id"], "closed", now)
         self.dirty.add(jid)
 
-    def input(self, msg, sender, accepted, now, text, finance, photos=()):
+    def input(self, msg, sender, accepted, now, finance, photos=(), *, replace_price=False):
         """Save accepted input and fold before freeze, or supersede a frozen card atomically."""
         job = self.active(msg.chat, sender)
         req = self.request(job, accepted) if job else None
@@ -180,20 +194,65 @@ class Jobs:
             return None  # never replace an unrelated waiting request
         jid = job["job_id"] if job else self.c._code(hashlib.sha256(msg.provider_id.encode()).hexdigest())
         req = req or {"request_id": None, "texts": [], "slots": {}, "attachments": []}
-        private = {**req["slots"].get("intake", {}), **finance}
+        old = req["slots"].get("intake", {})
+        price, sold_by, span = None, None, None
+        if replace_price and finance.price_span:
+            price, _, unit = finance.selling_price.partition(" ")
+            sold_by, span = {"each": "item", "per lb": "pound"}.get(unit), finance.price_span
+        elif not replace_price and old.get("price_span"):
+            price, sold_by, span = (old.get(key) for key in ("price", "sold_by", "price_span"))
+        private = {
+            "price": price, "sold_by": sold_by, "price_span": span,
+            # Keep the accumulated private screen across edits; an edit never declassifies earlier costs/counts.
+            "private": sorted(set(old.get("private", ())) | {format(Decimal(n).normalize(), "f") for n in finance.private}),
+            "has_cost": bool(old.get("has_cost") or finance.has_cost),
+            "has_qty": bool(old.get("has_qty") or finance.has_qty),
+        }
         req_id = self.c.requests.put(msg.chat, msg.provider_id, accepted, skill="npp", request_id=req["request_id"],
-                                     texts=[*req["texts"], text], slots={"intake": private}, turns=8,
+                                     texts=[*req["texts"], finance.public_words], slots={"intake": private}, turns=8,
                                      attachments=photos or req["attachments"])
         if job is None:
             self.db.execute("INSERT INTO npp_jobs(job_id,chat,sender,photo_sha,open_request_id,state,created_at) "
                             "VALUES (?,?,?,?,?,'working',?)", (jid, msg.chat, sender, photos[0], req_id, accepted.isoformat()))
         elif photos and photos[0] != job["photo_sha"]:
             self.db.execute("UPDATE npp_jobs SET photo_sha=?,polish_started_at=NULL,polish_eligible=0 WHERE job_id=?", (photos[0], jid))
+        if job and (photos or owner_item(finance.public_words)):
+            # A new identification invalidates both an outstanding duplicate ask
+            # and an earlier confirmation; neither belongs to the new item.
+            self.db.execute("UPDATE npp_questions SET state='expired' WHERE job_id=? AND qid='duplicate' "
+                            "AND state IN ('open','answered')", (jid,))
         if job and job["state"] == "asking" and not photos:
             # The next plan can leave these open (an unrelated/insufficient answer) or mark the resolved ids.
             kind = "answer"
         else:
             kind = "photo" if photos and job else "start" if not job else "edit"
+        self._resume(jid, job, msg, kind, accepted, now)
+        return "npp-working"
+
+    def answer(self, job, msg, polarity, accepted, now):
+        """Bind an exact owner answer inside the caller's conversation transaction."""
+        jid = job["job_id"]
+        questions = self.db.execute("SELECT * FROM npp_questions WHERE job_id=? AND state='open'", (jid,)).fetchall()
+        if len(questions) != 1 or accepted is None:
+            return None
+        q = questions[0]
+        asked_at = instant(q["asked_at"])
+        if (q["qid"] not in ("duplicate", "near_maker") or asked_at is None or accepted < asked_at
+                or not self.one("SELECT 1 FROM outbox WHERE id=? AND chat=?", q["asked_outbox_id"], job["chat"])
+                or not self.request(job, accepted) or not self.request(job, now)):
+            return None
+        self.db.execute("INSERT INTO npp_answers VALUES (?,?,?,?,?)", (jid, q["qid"], msg.provider_id, int(polarity), accepted.isoformat()))
+        self.db.execute("UPDATE npp_questions SET state='answered',answered_by=?,answered_at=? "
+                        "WHERE job_id=? AND qid=? AND state='open'", (msg.provider_id, now.isoformat(), jid, q["qid"]))
+        if q["qid"] == "duplicate" and not polarity:
+            self.turn(jid, msg, "answer", accepted)
+            self.close(job, "cancelled", now)
+            self.reply(job, "Okay, I've cancelled that. Nothing changed.", msg.provider_id)
+            return "cancelled"
+        self._resume(jid, job, msg, "answer", accepted, now)
+        return "npp-working"
+
+    def _resume(self, jid, job, msg, kind, accepted, now):
         seg = self.one("SELECT * FROM npp_segments WHERE job_id=? AND ended_at IS NULL", jid)
         frozen = seg and self.one("SELECT 1 FROM npp_versions WHERE segment_id=?", seg["segment_id"])
         if frozen:
@@ -212,7 +271,6 @@ class Jobs:
                             ("editing" if job["current_version"] else "working", jid))
         self.turn(jid, msg, kind, accepted, sid)
         self.dirty.add(jid)
-        return "npp-working"
 
     def end(self, segment, now, outcome):
         self.db.execute("UPDATE npp_segments SET ended_at=?,outcome=? WHERE segment_id=?",
@@ -245,6 +303,12 @@ class Jobs:
                     card_path, card_sha = self.artifacts.write_card(jid, result.png)
                 except (OSError, ValueError):
                     pass
+                if card_path is not None and result.candidate:
+                    try:
+                        if self.stages.persist(draft).get("result") != "ok":
+                            card_path = None
+                    except Exception:  # no stage details (including owner words) in logs
+                        card_path = None
             if card_path is not None:
                 text = self.replies["prompts"]["ready"].format(code=jid, n=version["n"])
                 if result.note and len(result.note) + 2 <= self.replies["caps"]["bracket_max_chars"]:
@@ -260,7 +324,7 @@ class Jobs:
         if isinstance(result, Plan):
             for qid, sentence in result.questions[:self.replies["caps"]["max_questions_per_reply"]]:
                 if not self.one("SELECT 1 FROM npp_questions WHERE job_id=? AND qid=? AND state='answered'", jid, qid) and self.one(
-                        "SELECT COUNT(*) FROM npp_questions WHERE job_id=? AND qid=?", jid, qid)[0] < 2:
+                        "SELECT COUNT(*) FROM npp_questions WHERE job_id=? AND qid=? AND state!='expired'", jid, qid)[0] < 2:
                     questions.append((qid, sentence))
         if questions and len(text := " ".join(sentence for _, sentence in questions)) <= self.replies["caps"]["question_max_chars"]:
             outcome, state = "question", "asking"
@@ -279,7 +343,7 @@ class Jobs:
 
     def answer_questions(self, jid, pid, now, still_open):
         for row in self.db.execute("SELECT DISTINCT qid FROM npp_questions WHERE job_id=? AND state='open'", (jid,)).fetchall():
-            if row[0] not in still_open:
+            if row[0] not in still_open and row[0] not in ("duplicate", "near_maker"):
                 self.db.execute("UPDATE npp_questions SET state='answered',answered_by=?,answered_at=? WHERE job_id=? AND qid=? AND state='open'",
                                 (pid, now.isoformat(), jid, row[0]))
 
@@ -327,7 +391,15 @@ class Jobs:
                 continue
             version = self.one("SELECT * FROM npp_versions WHERE segment_id=?", seg["segment_id"])
             parent = self.version(jid, version["parent_n"] if version else job["current_version"])
-            work = Work(jid, req, dict(parent) if parent else None, instant(seg["deadline_at"]))
+            answers = {qid: bool(answer) for qid, answer in self.db.execute(
+                "SELECT a.qid,a.answer FROM npp_answers a JOIN npp_questions q "
+                "ON q.job_id=a.job_id AND q.qid=a.qid AND q.answered_by=a.provider_id WHERE a.job_id=? AND q.state='answered'", (jid,))}
+            questions = self.db.execute("SELECT qid,state FROM npp_questions WHERE job_id=? AND state!='expired'", (jid,)).fetchall()
+            counts = {}
+            for qid, _ in questions:
+                counts[qid] = counts.get(qid, 0) + 1
+            work = Work(jid, req, dict(parent) if parent else None, instant(seg["deadline_at"]), answers,
+                        counts, tuple(qid for qid, state in questions if state == 'answered'))
             listing = json.loads(version["listing_json"]) if version else None
             ticket = seg["segment_id"], seg["revision"], version["n"] if version else None
             if now >= work.deadline:

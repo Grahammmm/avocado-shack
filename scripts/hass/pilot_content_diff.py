@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""Report public catalog changes between two local writer commits."""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+
+
+CATALOG = "hass/content/products.json"
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        # argparse's messages can echo arbitrary argument values, including paths.
+        super().error("invalid arguments; see --help")
+
+
+def git(repo, *args):
+    # Never fetch missing objects from a partial clone or honor replace refs.
+    env = dict(os.environ, GIT_ALLOW_PROTOCOL="", GIT_NO_LAZY_FETCH="1",
+               GIT_NO_REPLACE_OBJECTS="1", GIT_OPTIONAL_LOCKS="0")
+    return subprocess.run(["git", "-C", repo, *args], stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, env=env)
+
+
+def is_checkout(repo):
+    try:
+        result = git(repo, "rev-parse", "--is-inside-work-tree")
+    except OSError:
+        return False
+    return result.returncode == 0 and result.stdout == b"true\n"
+
+
+def is_commit(repo, sha):
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return False
+    result = git(repo, "cat-file", "-t", sha)
+    return result.returncode == 0 and result.stdout == b"commit\n"
+
+
+def reject_constant(_token):
+    raise ValueError("non-JSON number")
+
+
+def read_products(repo, sha):
+    spec = f"{sha}:{CATALOG}"
+    result = git(repo, "cat-file", "blob", spec)
+    if result.returncode:
+        exists = git(repo, "cat-file", "-t", spec).returncode == 0
+        return None, "bad-content" if exists else "no-content"
+
+    try:
+        document = json.loads(result.stdout, parse_constant=reject_constant)
+        rows = document.get("products") if isinstance(document, dict) else None
+        if not isinstance(rows, list):
+            return None, "bad-content"
+        products = {}
+        for row in rows:
+            key = row.get("id") if isinstance(row, dict) else None
+            if not isinstance(key, str) or key in products:
+                return None, "bad-content"
+            # Compare JSON values, ignoring object order but not boolean/number type.
+            products[key] = {name: json.dumps(value, sort_keys=True) for name, value in row.items()}
+    except (ValueError, RecursionError):
+        return None, "bad-content"
+    return products, None
+
+
+def label(value):
+    # Even an unusual JSON key must not introduce a new report line.
+    return "".join(char if char.isprintable() else ascii(char)[1:-1] for char in value)
+
+
+def report(before, after):
+    added = sorted(after.keys() - before.keys())
+    for key in added:
+        print(f"added {label(key)}")
+    for key in sorted(before.keys() - after.keys()):
+        print(f"removed {label(key)}")
+    for key in sorted(before.keys() & after.keys()):
+        old, new = before[key], after[key]
+        fields = [label(name) for name in sorted(old.keys() | new.keys())
+                  if old.get(name) != new.get(name)]
+        if fields:
+            print(f"changed {label(key)} {' '.join(fields)}")
+    print(f"added-total {len(added)}")
+    return len(added)
+
+
+def failures(*reasons):
+    for reason in reasons:
+        print(f"FAIL {reason}")
+    print("FAIL pilot_content_diff")
+    return 1
+
+
+def main(argv=None):
+    parser = Parser(description=__doc__, allow_abbrev=False)
+    parser.add_argument("--repo", required=True, help="local Git checkout")
+    parser.add_argument("--from", dest="from_sha", required=True, metavar="SHA")
+    parser.add_argument("--to", dest="to_sha", required=True, metavar="SHA")
+    parser.add_argument("--expect-added", type=int, metavar="N")
+    args = parser.parse_args(argv)
+
+    if not is_checkout(args.repo):
+        return failures("not-git")
+    endpoints = (("from", args.from_sha), ("to", args.to_sha))
+    errors = [f"bad-commit {side}" for side, sha in endpoints if not is_commit(args.repo, sha)]
+    if errors:
+        return failures(*errors)
+    if git(args.repo, "merge-base", "--is-ancestor", args.from_sha, args.to_sha).returncode:
+        return failures("not-ancestor")
+
+    catalogs = []
+    for side, sha in endpoints:
+        products, reason = read_products(args.repo, sha)
+        catalogs.append(products)
+        if reason:
+            errors.append(f"{reason} {side}")
+    if errors:
+        return failures(*errors)
+
+    added = report(*catalogs)
+    if args.expect_added is not None and args.expect_added != added:
+        return failures(f"added-count {added}")
+    print("PASS pilot_content_diff")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
