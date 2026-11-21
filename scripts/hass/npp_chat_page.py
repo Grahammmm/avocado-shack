@@ -18,9 +18,6 @@ ROOT = str(Path(__file__).resolve().parents[2])
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from hass.npp import evidence  # noqa: E402  (pure schema validator, HRM-03)
-
-
 SHA = re.compile(r"[0-9a-f]{64}")
 # Receipt folders and bounds as hass/npp/receipt.py writes them; states are npp_versions.state values.
 JOB = re.compile(r"[0-9a-f]{4,12}")
@@ -133,6 +130,10 @@ def evidence_items(record):
     doc = record.get("evidence")
     if doc is None:  # Receipts written before HRM-03 carry no evidence.
         return ["no evidence recorded"], False
+    try:
+        from hass.npp import evidence  # HRM-03; needed only for recorded evidence.
+    except ImportError:
+        raise PageError("evidence validator unavailable") from None
     try:
         problems = evidence.validate(doc)
     except (TypeError, ValueError, AttributeError, RecursionError):

@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -380,6 +381,28 @@ class NppChatPageTests(unittest.TestCase):
         ])
         for unvalidated in ("fixture-hidden", "chg-9", "fixture-unvalidated", "pending"):
             self.assertNotIn(unvalidated, page)
+
+    def test_c11_without_evidence_module(self):
+        # Isolate the CLI from the upstream module as on main before HRM-03.
+        root = self.root / "isolated"
+        script = root / "scripts/hass/npp_chat_page.py"
+        script.parent.mkdir(parents=True)
+        shutil.copyfile(SCRIPT, script)
+        package = root / "hass/npp"
+        package.mkdir(parents=True)
+        (root / "hass/__init__.py").touch()
+        (package / "__init__.py").touch()
+        command = [sys.executable, "-I", str(script), "--export", str(self.export),
+                   "--attachments", str(self.copy), "--out", str(self.out)]
+        result = subprocess.run(command, cwd=self.root, capture_output=True, text=True, timeout=10)
+        self.assert_pass(result)
+        self.out.unlink()
+        self.receipts = self.root / "receipts"
+        self.receipt("abcd", [], evidence={"private": "not validated"})
+        result = subprocess.run([*command, "--receipts", str(self.receipts)], cwd=self.root,
+                                capture_output=True, text=True, timeout=10)
+        self.assert_fail(result, "evidence validator unavailable")
+        self.assertFalse(self.out.exists())
 
     def test_c10_no_receipts_unchanged(self):
         # Pinned to HRM-01's own bytes for this fixture, so any leak of receipt markup or CSS fails.
