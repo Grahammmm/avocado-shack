@@ -143,9 +143,11 @@ class NppMediaUsageTests(unittest.TestCase):
         self.assert_finding(self.invoke("--media", plain_file), "unsafe-npp-dir")
 
     def test_c2_3_bad_artifact(self):
-        # Count every invalid named artifact, not only the first or just the regular ones.
-        (self.folder() / "receipt.json").write_bytes(b"[]")
-        (self.folder(FOLDER_ONLY) / "receipt.json").write_bytes(b" " * (RECEIPT_MAX + 1))
+        # Named receipts count even when invalid; only regular files contribute bytes.
+        malformed = b"[]"
+        oversized = b" " * (RECEIPT_MAX + 1)
+        (self.folder() / "receipt.json").write_bytes(malformed)
+        (self.folder(FOLDER_ONLY) / "receipt.json").write_bytes(oversized)
         (self.folder(ROW_ONLY) / "receipt.json").mkdir()
         folder = self.folder("faac0004")
         target = self.root / "valid-receipt"
@@ -153,7 +155,8 @@ class NppMediaUsageTests(unittest.TestCase):
         (folder / "receipt.json").symlink_to(target)
         lines = self.assert_finding(self.report(), "bad-artifact 4")
         self.assertIn("note no-receipt 0", lines)
-        self.assertIn("bytes 0", lines)
+        self.assertIn("receipts 4", lines)
+        self.assertIn(f"bytes {len(malformed) + len(oversized)}", lines)
 
     def test_c2_4_not_sqlite(self):
         # Do not create a missing store, accept a broken schema, or follow a store/sidecar link.
@@ -247,12 +250,12 @@ class NppMediaUsageTests(unittest.TestCase):
                 self.assertNotIn(canary, streams)
 
     def test_c6_bad_card_counted(self):
-        # A PNG signature alone doesn't validate its content-addressed name.
+        # A wrong hash fails validation but still takes up media space.
         self.card(self.folder(), digest=hashlib.sha256(PNG + b"different").hexdigest())
         lines = self.assert_finding(self.report(), "bad-artifact 1")
         self.assertIn("jobs 1", lines)
-        self.assertIn("cards 0", lines)
-        self.assertIn("bytes 0", lines)
+        self.assertIn("cards 1", lines)
+        self.assertIn(f"bytes {len(PNG)}", lines)
 
     def test_c7_wal_rows_counted(self):
         # Copy the committed frames while the writer is still open; don't copy its SHM.

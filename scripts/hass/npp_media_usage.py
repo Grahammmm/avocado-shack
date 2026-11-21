@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Count validated NPP artifacts on an offline media copy without deleting anything."""
+"""Measure and validate NPP artifacts on an offline media copy without deleting anything."""
 
 import argparse
 from contextlib import closing
@@ -82,7 +82,7 @@ def _snapshot_jobs(state, media):
 
 
 def _scan_media(media):
-    """Measure validated artifacts; a rejected receipt still exists by name."""
+    """Count artifact names and regular-file bytes regardless of validity."""
     npp = media / "npp"
     try:
         for directory in (media, npp):
@@ -112,13 +112,15 @@ def _scan_media(media):
                             other += 1
                             continue
                         has_receipt |= receipt
-                        try:
-                            size += len(read_artifact(Path(artifact.path)))
-                        except (OSError, ValueError, RecursionError):
-                            bad += 1
-                            continue
                         receipts += receipt
                         cards += not receipt
+                        try:
+                            info = artifact.stat(follow_symlinks=False)
+                            if stat.S_ISREG(info.st_mode):
+                                size += info.st_size
+                            read_artifact(Path(artifact.path))
+                        except (OSError, ValueError, RecursionError):
+                            bad += 1
                 no_receipt += not has_receipt
     except OSError:
         return None, "unsafe-npp-dir"
