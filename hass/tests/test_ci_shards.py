@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from hass.tests import ci_shards as cs
 
@@ -125,7 +126,7 @@ class GraphTest(unittest.TestCase):
                      "hass/templates/page.html", "package-lock.json",
                      "hass/lonely.py",  # a hass module no test reaches
                      "hass/new_file.txt",  # an unmapped hass path
-                     "toplevel.cfg", "newarea/thing.py"):  # unmapped paths outside hass
+                     "toplevel.cfg", "newarea/thing.py", "scripts/hass/unreferenced.py"):
             with self.subTest(path=path):
                 selected, why = self.sel("hass/leaf.py", path)
                 self.assertIsNone(selected)
@@ -140,6 +141,57 @@ class GraphTest(unittest.TestCase):
         selected, why = cs.select(["hass/mid.py"], modules, texts, edges)
         self.assertIsNone(selected)
         self.assertIn("shared library", why)
+
+
+class ScriptPlanTest(unittest.TestCase):
+    PATH = "scripts/hass/install_probe.py"
+    TEST = "test_install_probe"
+    MODULES = [cs.SMOKE, cs.PRIVACY_GUARD, TEST, "test_other", "test_qa"]
+
+    def plan(self, consumer, additional_consumers=False):
+        # The shared helper deliberately mentions the directory, a glob in a *different*
+        # directory, and a longer filename: none is a dependency on install_probe.py.
+        files = {self.PATH: "VALUE = 1\n", "hass/qa_helpers.py":
+                 "SCRIPTS = 'scripts'\nPATTERN = 'hass/ops/*.py'\nNAME = 'other_install_probe.py'\n"}
+        for module in self.MODULES:
+            files[cs.test_path(module)] = "from hass import qa_helpers\n"
+        files[cs.test_path(self.TEST)] += consumer
+        if additional_consumers:
+            files[cs.test_path("test_other")] += "import scripts.hass.install_probe\n"
+            files[cs.test_path("test_qa")] += "from install_probe import VALUE\n"
+        texts, edges = graph(files)
+        with mock.patch.object(cs, "changed_paths", return_value=[self.PATH]), \
+                mock.patch.object(cs, "build_graph", return_value=(texts, edges)), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return cs.make_plan("pull_request", "base", 4, {}, self.MODULES)
+
+    def test_script_selects_its_consumer_not_users_of_shared_qa_helpers(self):
+        # Catches both broad token fan-out and dropping an import-only or literal-only consumer.
+        for consumer in ("from scripts.hass import install_probe\n", "import install_probe\n",
+                         "PATH = 'scripts/hass/install_probe.py'\n", "NAME = 'install_probe'\n"):
+            with self.subTest(consumer=consumer):
+                plan = self.plan(consumer)
+                self.assertEqual(plan["tier"], "affected", plan["reason"])
+                self.assertEqual(plan["shards"], [sorted([cs.SMOKE, cs.PRIVACY_GUARD, self.TEST])])
+
+    def test_script_selects_matching_directory_glob_not_unrelated_glob(self):
+        files = {
+            self.PATH: "VALUE = 1\n",
+            cs.test_path(self.TEST): "import scripts.hass.install_probe\n",
+            cs.test_path("test_other"): "PATTERN = 'scripts/hass/*.py'\n",
+            cs.test_path("test_qa"): "PATTERN = 'hass/ops/*.py'\n",
+        }
+        texts, edges = graph(files)
+        selected, reason = cs.select([self.PATH], self.MODULES, texts, edges)
+        self.assertIsNone(reason)
+        self.assertEqual(selected, {self.TEST, "test_other"})
+
+    def test_script_used_by_majority_is_full_even_below_budget(self):
+        # Catches treating widely imported scripts like local scripts just because they are cheap.
+        plan = self.plan("from scripts.hass import install_probe\n", additional_consumers=True)
+        self.assertEqual(plan["tier"], "full")
+        self.assertIn("shared library, reached by 3 of 5", plan["reason"])
+        self.assertTrue(cs.union_proof(self.MODULES, plan["shards"])[0])
 
 
 def record(key, modules, tests, ok=True):
@@ -272,7 +324,6 @@ class VerifyTest(unittest.TestCase):
         self.assertIn("job hass result success, expected skipped", problems)
 
     def test_affected_plan_always_runs_the_private_file_guard(self):
-        from unittest import mock
         modules = sorted(set(MODULES) | {cs.SMOKE, cs.PRIVACY_GUARD})
         texts, edges = graph(TREE)
         with mock.patch.object(cs, "changed_paths", return_value=["branding/customer-export.db"]), \
@@ -282,7 +333,6 @@ class VerifyTest(unittest.TestCase):
         self.assertIn(cs.PRIVACY_GUARD, plan["shards"][0])
 
     def test_affected_cost_budget_boundary(self):
-        from unittest import mock
         modules = [cs.SMOKE, cs.PRIVACY_GUARD, "test_leaf", "test_other"]
         for cost, tier in ((240, "affected"), (241, "affected"),
                            (480, "affected"), (481, "full")):
@@ -297,7 +347,6 @@ class VerifyTest(unittest.TestCase):
                 self.assertTrue(cs.union_proof(expected, plan["shards"])[0])
 
     def test_non_pr_events_ignore_affected_budget(self):
-        from unittest import mock
         modules = [cs.SMOKE, cs.PRIVACY_GUARD, "test_leaf"]
         for event in ("push", "schedule", "workflow_dispatch"):
             with self.subTest(event=event), mock.patch.object(cs, "changed_paths") as changed:
