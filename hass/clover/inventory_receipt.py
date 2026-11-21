@@ -1,4 +1,5 @@
 """Build and store finance-local inventory receipts. No till or chat I/O."""
+import fcntl
 import hashlib
 import json
 import os
@@ -161,7 +162,7 @@ def _guard_path(folder):
 
 
 def write(state, receipt):
-    """Atomically publish the JSON from build under its recorded inventory day."""
+    """Use the recorded day on first write; atomically replace by code thereafter."""
     day, code = receipt["times"]["day"], receipt["code"]
     if date.fromisoformat(day).isoformat() != day or not re.fullmatch(r"[0-9a-f]{8}", code):
         raise ValueError("receipt name")
@@ -172,11 +173,27 @@ def write(state, receipt):
     _guard_path(folder)
     for private in (state, folder.parent, folder):
         _private_dir(private, create=True)
-    path = folder / f"{day}-{code}.json"
+    # Serialize path selection and replacement, including first writes on
+    # different dates. Lock the directory so no extra receipt file is needed.
+    fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        year, pair = "[0-9]" * 4, "[0-9]" * 2
+        existing = list(folder.glob(f"{year}-{pair}-{pair}-{code}.json"))
+        if len(existing) > 1:
+            raise CacheUnsafe("duplicate receipt code")
+        path = existing[0] if existing else folder / f"{day}-{code}.json"
+        _replace_receipt(path, receipt)
+        return path
+    finally:
+        os.close(fd)
+
+
+def _replace_receipt(path, receipt):
     if os.path.lexists(path) and not stat.S_ISREG(path.lstat().st_mode):
         raise CacheUnsafe("receipt file")
     _private_file(path, create=False)
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=folder, delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as tmp:
         pending = Path(tmp.name)
         try:
             _private_file(pending, create=False)
@@ -188,7 +205,6 @@ def write(state, receipt):
             os.replace(pending, path)
         finally:
             pending.unlink(missing_ok=True)
-    return path
 
 
 def summary(receipts):

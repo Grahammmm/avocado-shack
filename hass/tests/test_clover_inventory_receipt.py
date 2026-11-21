@@ -5,6 +5,7 @@ import sqlite3
 import stat
 import tempfile
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -148,6 +149,37 @@ class InventoryReceiptTests(NoNetwork):
                 write(state, {**receipt, "code": "deadbeef"})
             self.assertTrue(link.is_symlink())
             self.assertEqual(json.loads(path.read_text()), updated)
+
+    def test_c2_private_write_across_pacific_midnight(self):
+        # C2: an expiry-derived draft day can differ from the apply day.
+        # Naming the replacement from the new day double-counts the change.
+        bundle, rows, links = inputs()
+        expires = datetime.fromisoformat("2026-01-03T08:05:00+00:00").timestamp()
+        bundle.update(expires=expires, state="proposed", till="draft")
+        draft = build(bundle, [], PREVIEW, None, None, "mike", {})
+        bundle.update(state="done", till="applied")
+        rows[0].update(expires=expires, day="2026-01-02")
+        links["yes"]["utc"] = "2026-01-03T07:59:00+00:00"
+        applied = build(bundle, rows, PREVIEW, None, None, "mike", links)
+        self.assertEqual(draft["times"]["day"], "2026-01-03")
+        self.assertEqual(applied["times"]["day"], "2026-01-02")
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp).resolve() / "state"
+            path = write(state, draft)
+            self.assertEqual(path.name, f"2026-01-03-{CODE}.json")
+            with path.open() as old:
+                self.assertEqual(write(state, applied), path)
+                self.assertEqual(json.load(old), draft)
+            self.assertEqual(list(path.parent.iterdir()), [path])
+            self.assertEqual(json.loads(path.read_text()), applied)
+
+            other = write(state, {**applied, "code": "deadbeef"})
+            foreign = path.with_name("2026-01-03-01234567.json")
+            foreign.symlink_to(other)
+            with self.assertRaises(CacheUnsafe):
+                write(state, {**applied, "code": "01234567"})
+            self.assertTrue(foreign.is_symlink())
+            self.assertEqual(json.loads(other.read_text())["code"], "deadbeef")
 
     def test_c3_no_secrets(self):
         # C3: catch dumping raw journal/transcript data, or only masking an
