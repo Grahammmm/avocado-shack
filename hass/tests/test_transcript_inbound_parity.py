@@ -2,6 +2,7 @@
 
 from contextlib import closing
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -133,15 +134,60 @@ class TranscriptInboundParityTests(unittest.TestCase):
         self.make_inbox()
         self.make_transcript(wal=True)
 
-        def snapshot():
-            return {p.relative_to(self.root): (p.read_bytes(), p.stat().st_mtime_ns, p.stat().st_mode)
-                    if p.is_file() else None for p in self.root.rglob("*")}
-
-        before = snapshot()
+        before = self.snapshot_inputs()
         self.assertEqual(set(before), {Path(self.inbox.name), Path(self.transcript.name)})
-        self.assert_result(self.invoke(), 0, "inbound-done 0", "matched 0",
-                           "note transcript-only 0", "unparsed 0", PASS)
-        self.assertEqual(snapshot(), before)
+        self.assert_unchanged_report(0, "inbound-done 0", "matched 0",
+                                     "note transcript-only 0", "unparsed 0", PASS)
+
+    def snapshot_inputs(self):
+        return {p.relative_to(self.root): (p.read_bytes(), p.stat().st_mtime_ns, p.stat().st_mode)
+                if p.is_file() else None for p in self.root.rglob("*")}
+
+    def assert_unchanged_report(self, code, *lines):
+        before = self.snapshot_inputs()
+        dir_mtime = self.root.stat().st_mtime_ns
+        self.assert_result(self.invoke(), code, *lines)
+        self.assertEqual(self.snapshot_inputs(), before)
+        self.assertEqual(self.root.stat().st_mtime_ns, dir_mtime)
+
+    def test_a1_uncheckpointed_wal(self):
+        # Ignoring the WAL would hide an unmatched handled row and yield a false PASS.
+        self.make_transcript([("matched", "in", MID)])
+        with TemporaryDirectory() as source, closing(sqlite3.connect(
+                writer_path := Path(source) / self.inbox.name)) as writer:
+            self.assertEqual(writer.execute("PRAGMA journal_mode=WAL").fetchone()[0], "wal")
+            writer.execute("PRAGMA wal_autocheckpoint=0")
+            writer.execute("CREATE TABLE inbound(provider_id TEXT PRIMARY KEY, state TEXT, received_at TEXT)")
+            writer.execute("INSERT INTO inbound VALUES (?, ?, ?)", ("matched", "done", MID))
+            writer.commit()
+            self.assertEqual(writer.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone(), (0, 0, 0))
+            writer.execute("INSERT INTO inbound VALUES (?, ?, ?)", ("wal-only", "done", MID))
+            writer.commit()
+            shutil.copyfile(writer_path, self.inbox)
+            shutil.copyfile(writer_path.with_suffix(".sqlite3-wal"),
+                            self.inbox.with_suffix(".sqlite3-wal"))
+
+        self.assertFalse(self.inbox.with_suffix(".sqlite3-shm").exists())
+        self.assert_unchanged_report(1, "inbound-done 2", "matched 1",
+                                     "note transcript-only 0", "unparsed 0",
+                                     "FAIL inbound-not-in-transcript 1", FAIL)
+
+    def test_a1_harmless_journal(self):
+        # A zero-byte journal needs no recovery and must not trigger a sidecar refusal.
+        self.make_inbox()
+        self.make_transcript()
+        self.transcript.with_suffix(".sqlite3-journal").write_bytes(b"")
+        self.assert_unchanged_report(0, "inbound-done 0", "matched 0",
+                                     "note transcript-only 0", "unparsed 0", PASS)
+
+    def test_a1_symlinked_sidecar(self):
+        # Following or ignoring a symlinked WAL could incorrectly accept this store.
+        self.make_inbox()
+        self.make_transcript(wal=True)
+        target = self.root / "synthetic-sidecar"
+        target.touch()
+        self.transcript.with_suffix(".sqlite3-wal").symlink_to(target.name)
+        self.assert_result(self.invoke(), 1, "FAIL not-sqlite transcript.sqlite3", FAIL)
 
     def test_c5_no_private_values(self):
         # Check both result and error paths for ID, row, argv, path, or exception leakage.

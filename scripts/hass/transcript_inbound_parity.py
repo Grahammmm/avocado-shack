@@ -3,12 +3,14 @@
 
 import argparse
 from collections import Counter
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import stat
+import tempfile
 
 
 NAME = "transcript_inbound_parity"
@@ -28,6 +30,34 @@ def parse_time(value):
     return stamp if stamp.tzinfo is not None else None
 
 
+@contextmanager
+def _open_snapshot(path):
+    # Offline inputs must already be stable. Never copy the source shared-memory sidecar.
+    files = [path]
+    for suffix in ("-wal", "-journal"):
+        sidecar = path.with_name(path.name + suffix)
+        try:
+            mode = sidecar.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISREG(mode):
+            raise OSError("unsafe SQLite sidecar")
+        files.append(sidecar)
+
+    # Choose the temp parent without a tempfile probe that could itself write inside --state.
+    temp_setting = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+    temp_root = Path(os.path.realpath(temp_setting, strict=True))
+    if temp_root.is_relative_to(path.parent.resolve()):
+        raise OSError("temporary directory is inside the input directory")
+
+    with tempfile.TemporaryDirectory(dir=temp_root) as scratch:
+        for source in files:
+            shutil.copyfile(source, Path(scratch) / source.name)
+        with closing(sqlite3.connect(Path(scratch) / path.name)) as db:
+            db.execute("PRAGMA query_only=ON")
+            yield db
+
+
 def read_window(path, query, selection, since, until):
     try:
         mode = os.lstat(path).st_mode
@@ -41,9 +71,7 @@ def read_window(path, query, selection, since, until):
     counts = Counter()
     unparsed = 0
     try:
-        # For stable offline snapshots only: avoid SQLite creating WAL sidecars.
-        uri = path.absolute().as_uri() + "?mode=ro&immutable=1"
-        with closing(sqlite3.connect(uri, uri=True)) as db:
+        with _open_snapshot(path) as db:
             for provider_id, category, raw_time in db.execute(query):
                 stamp = parse_time(raw_time)
                 if stamp is None:
