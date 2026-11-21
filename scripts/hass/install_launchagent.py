@@ -87,7 +87,7 @@ def main(argv=None):
     matches = []
     if not PurePosixPath(args.forwarder).is_absolute():
         findings.append("not-absolute")
-    elif after is not None:
+    if after is not None:
         arguments = after.get("ProgramArguments")
         matches = ([i for i, value in enumerate(arguments) if value == args.forwarder]
                    if isinstance(arguments, list) else [])

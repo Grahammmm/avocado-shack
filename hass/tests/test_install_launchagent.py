@@ -157,6 +157,15 @@ class InstallLaunchAgentTests(unittest.TestCase):
         self.write_pair(self.document, self.document)
         self.assert_failed("not-absolute", forwarder=relative)
 
+    def test_relative_forwarder_reports_load_findings_independently(self):
+        relative = "fixture/mac/hass_forwarder.py"
+        for count, extra in ((0, "forwarder-not-loaded"), (2, "forwarder-ambiguous")):
+            with self.subTest(count=count):
+                doc = deepcopy(self.document)
+                doc["ProgramArguments"] = [relative] * count
+                self.write_pair(doc, doc)
+                self.assert_failed("not-absolute", extra, forwarder=relative)
+
     def test_args_usage_exit_two(self):
         # Missing required CLI options remain argparse errors, not plist findings.
         output, errors = StringIO(), StringIO()
