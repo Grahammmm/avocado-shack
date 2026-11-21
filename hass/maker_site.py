@@ -599,6 +599,8 @@ class _Blocks(HTMLParser):
             self._skip += 1
         elif tag in BLOCK_TAGS and not self._skip:
             self._open = []
+        elif tag == "br":
+            self.handle_data(" ")
 
     def handle_endtag(self, tag):
         if tag in SKIP_TAGS:
