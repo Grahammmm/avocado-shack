@@ -458,7 +458,11 @@ class NppChatPageTests(unittest.TestCase):
         # Check the entire artifact, not just visible text: identities can leak via metadata,
         # echoed text, filtered-out senders, and escaped attributes or receipt fields.
         inbound, outbound = 'Fixture<Sender>&One', "Fixture-Hass-Sender"
-        other_chat, other_sender = "fixture-other-thread", "Ｆixture-Other-Actor"
+        other_chat, other_sender = "fixture-other-strasse", "Ｆixture-Other-Actor"
+        # re.I misses multi-character case folds in either direction; a folded
+        # offset applied directly to the original text would corrupt the cue.
+        unicode_sender = "Fixture-Straße-Sender"
+        legacy_echo = outbound.replace("i", "ı")  # Keep the previous re.I coverage too.
         email, url, address = ("canary@example.invalid", "https://example.invalid/private-canary",
                                "42 Imaginary Street")
         phone, amount, count = "202-555-0148", "73.38", "2193"
@@ -467,12 +471,15 @@ class NppChatPageTests(unittest.TestCase):
         public_png = self.attachment(PNG, "card-{sha}.png")
         self.export_events(
             event(2, direction="out", sender=outbound, utc=at, attachments=[public_png], text=(
-                f"Public reply cue\nEcho {inbound} {outbound} {CHAT.upper()} {other_chat} fixture-other-actor\n"
+                f"Public reply cue\nEcho {inbound} {outbound} {legacy_echo} {CHAT.upper()} "
+                f"{other_chat} fixture-other-actor\n"
+                f"Maß! {unicode_sender.upper()} / Fixture-Other-Straße! Keep Case\n"
                 f"Mailbox: {email}\nPosted: {url}\nShip to: {address}\nCall: {phone}")),
             event(1, sender=inbound, utc=at, text=f"Public caption cue\nCost ${amount}\nCount {count}",
                   provider_id="fixture-canary-provider", reply_to="fixture-canary-reply",
                   draft_code="fixture-canary-draft", disposition="fixture-canary-disposition"),
-            event(3, chat=other_chat, sender=other_sender, text="unselected fixture cue"))
+            event(3, chat=other_chat, sender=other_sender, text="unselected fixture cue"),
+            event(4, sender=unicode_sender, text="Another public cue"))
         self.receipts = self.root / "receipts"
         evidence = Evidence()
         evidence.fallback("fixture-other-actor")
@@ -482,7 +489,7 @@ class NppChatPageTests(unittest.TestCase):
             with self.subTest(show_all=show_all):
                 args = () if show_all else ("--chat", CHAT, "--force")
                 result = self.run_cli("--redact", "--receipts", str(self.receipts), *args)
-                page = self.assert_pass(result, count=3 if show_all else 2)
+                page = self.assert_pass(result, count=4 if show_all else 3)
                 self.assertLess(page.index("Public caption cue"), page.index("Public reply cue"))
                 self.assertEqual("unselected fixture cue" in page, show_all)
                 self.assertIn("fallbacks: &lt;id&gt;", page)
@@ -490,10 +497,12 @@ class NppChatPageTests(unittest.TestCase):
                 self.assertIn("Redacted Hass conversation", page)
                 self.assertFalse(PageTags(page).attrs("a"))
                 surface = (unescape(page) + result.stdout + result.stderr).casefold()
-                for canary in (CHAT, inbound, outbound, other_chat, other_sender, "fixture-other-actor",
+                for canary in (unicode_sender, other_chat, CHAT, inbound, outbound, legacy_echo,
+                               other_sender, "fixture-other-actor",
                                email, url, "private-canary", address, phone, amount, count, at, job,
                                "fixture-canary-", str(self.root)):
                     self.assertNotIn(canary.casefold(), surface)
+                self.assertIn("Maß! &lt;id&gt; / &lt;id&gt;! Keep Case", page)
 
 
 if __name__ == "__main__":

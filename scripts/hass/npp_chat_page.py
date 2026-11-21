@@ -222,19 +222,36 @@ def review_redactor(events):
     # transcript identities. Use the whole export, including filtered-out rows.
     known = {unicodedata.normalize("NFKC", event[key]) for event in events
              for key in ("chat", "sender") if event[key]}
+    if not known:
+        return redact
     longest_first = sorted(known, key=lambda value: (-len(value), value))
-    identities = re.compile("|".join(map(re.escape, longest_first)), re.I) if known else None
+    identities = re.compile("|".join(map(re.escape, longest_first)), re.I)
+    folded = sorted({value.casefold() for value in known}, key=lambda value: (-len(value), value))
+    folded_identities = re.compile("|".join(map(re.escape, folded)))
 
     def clean(text):
-        if identities is None:
-            return redact(text)
         text = unicodedata.normalize("NFKC", text)
+        # Match on fully folded text, but replace in the original normalized
+        # text. A character such as ß occupies two positions after folding.
+        folded_text = [char.casefold() for char in text]
+        offsets = [index for index, part in enumerate(folded_text) for _ in part]
+        spans = [(offsets[match.start()], offsets[match.end() - 1] + 1)
+                 for match in folded_identities.finditer("".join(folded_text))]
+        # Keep the previous re.I matches too (e.g. dotless i vs ASCII i).
+        spans.extend(match.span() for match in identities.finditer(text))
         # A word marker can be consumed by the contact scrubber if the identity
         # occurred inside a URL or email. Angle brackets would split that match.
         marker = "nppidentityplaceholder"
         while marker in text.lower():
             marker += "x"
-        return redact(identities.sub(lambda _: marker, text)).replace(marker, "<id>")
+        pieces, cursor = [], 0
+        # Overlapping spans from the two matchers need just one marker.
+        for start, end in sorted(spans):
+            if start >= cursor:
+                pieces.extend((text[cursor:start], marker))
+            cursor = max(cursor, end)
+        pieces.append(text[cursor:])
+        return redact("".join(pieces)).replace(marker, "<id>")
 
     return clean
 
