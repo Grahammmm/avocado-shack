@@ -69,6 +69,7 @@ def _record(phrases, grammar, step, transport):
         nonlocal model
         status, raw = transport(url, body, headers, timeout)
         if status == 200:
+            # Only response metadata counts; never infer the ID from the pin.
             try:
                 returned = json.loads(raw).get("model")
             except (ValueError, AttributeError, TypeError):
@@ -141,27 +142,8 @@ def main(argv=None, *, transport_factory=None):
 
 if __name__ == "__main__":
     def attended_transport(step):
-        # The production transport strips runner metadata from its chat reply.
-        # Capture the returned ID, not the model requested in the pin.
-        call = edits.CodexTransport(step["effort"])
-        run = call.runner
-        model = None
-
-        def observe_runner(request):
-            nonlocal model
-            result = run(request)
-            model = result.get("model") if isinstance(result, dict) else None
-            return result
-
-        def transport(url, body, headers, timeout):
-            nonlocal model
-            model = None
-            status, raw = call(url, body, headers, timeout)
-            reply = json.loads(raw)
-            reply["model"] = model
-            return status, json.dumps(reply).encode()
-
-        call.runner = observe_runner
-        return transport
+        # The Hermes runner echoes the requested pin in its 'model' field.
+        # CodexTransport exposes no service model ID, so _record leaves it null.
+        return edits.CodexTransport(step["effort"])
 
     sys.exit(main(transport_factory=attended_transport))

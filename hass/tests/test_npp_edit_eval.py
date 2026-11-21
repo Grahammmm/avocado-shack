@@ -3,11 +3,13 @@ from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
 from pathlib import Path
+import runpy
+import sys
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import Mock, patch
 
-from hass import cloud_codex
+from hass import cloud_codex, cloud_codex_hermes
 from hass.npp import assets, edits
 from scripts.hass import npp_edit_eval as eval_cli
 
@@ -164,6 +166,34 @@ class EditEvalTests(unittest.TestCase):
             request = json.loads(call.args[1])
             self.assertIn(phrase["phrase"], request["messages"][1]["content"])
             self.assertNotEqual(request["model"], first["model"])
+
+    def test_c4_attended_record_does_not_label_request_as_response(self):
+        # Run the real CLI, adapter and Hermes response parser. The legacy
+        # runner echoes the requested pin and drops the actual service ID.
+        answer = mapping(("name", "Wildflower Honey"))
+        events = [
+            {"type": "response.output_text.delta", "delta": json.dumps(answer)},
+            {"type": "response.completed", "response": {"model": "synthetic-service-id"}},
+        ]
+        post = Mock(return_value=(200, ["data: " + json.dumps(event) for event in events]))
+
+        def fixture_runner(request):
+            return cloud_codex_hermes.run(json.dumps(request), lambda: ("fixture", "https://example.invalid"), post)
+
+        with TemporaryDirectory() as tmp:
+            output = Path(tmp) / "private.json"
+            script = eval_cli.__file__
+            argv = [script, "--record", "--yes-record", "--max-calls", "1", "--out", str(output)]
+            with patch.object(edits, "CodexTransport", cloud_codex.CodexTransport), \
+                 patch.object(cloud_codex, "Runner", return_value=fixture_runner), \
+                 patch.object(sys, "argv", argv), patch.object(sys, "path", sys.path.copy()), \
+                 redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as ctx:
+                runpy.run_path(script, run_name="__main__")
+            self.assertEqual(ctx.exception.code, 0)
+            post.assert_called_once()
+            self.assertEqual(json.loads(output.read_bytes()), [
+                {"id": self.phrases[0]["id"], "output": answer, "model": None},
+            ])
 
 
 if __name__ == "__main__":
