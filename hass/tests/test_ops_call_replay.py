@@ -8,10 +8,13 @@ import sys
 import tempfile
 import unittest
 
+from hass.ops import check_args, load_registry
+
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/hass/ops_call_replay.py"
 OP = "product.set_availability"
 OK = {"id": "photo-product-001", "available": "yes"}
+IMAGE = "assets/products/replay-example.webp"
 PASS = "PASS ops_call_replay"
 FAIL = "FAIL ops_call_replay"
 
@@ -180,3 +183,19 @@ class OpsCallReplayTests(unittest.TestCase):
         self.assert_report(self.replay(raw), 1, FAIL, "line 1 ok", "line 2 problems 1 missing 0",
                            "line 3 problems 0 missing 1", "line 4 problems 2 missing 0",
                            "line 5 problems 1 missing 0", "calls 5", "ok 1", "refused 4", "FAIL refused 4")
+
+    def test_offline_image_arguments_check_syntax_without_site_files(self):
+        # Valid syntax used to raise Path(None); skipping the whole image check would let row 2 pass.
+        raw = "".join(self.call({"id": OK["id"], "image": image}, op="product.edit")
+                      for image in (IMAGE, "assets/other/replay-example.webp"))
+        self.assert_report(self.replay(raw), 1, FAIL, "line 1 ok", "line 2 problems 1 missing 0",
+                           "calls 2", "ok 1", "refused 1", "FAIL refused 1")
+
+    def test_check_args_still_refuses_missing_image_with_site_dir(self):
+        # The same real op still requires the file when given a site directory.
+        site = self.root / "site"
+        site.mkdir()
+        op = load_registry()["product.edit"]
+        args = {"id": OK["id"], "image": IMAGE}
+        self.assertEqual(check_args(op, args, {}, site),
+                         (["product.edit.image: image file does not exist"], []))
