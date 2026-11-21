@@ -164,8 +164,30 @@ class PilotPhotoReceiptsTests(unittest.TestCase):
     def test_refusal_has_no_digest(self):
         # The receipt index can exist without a photo. Don't print the refusal code.
         self.seed([(GUID, 0, 1, None, REFUSAL, 10)])
+        self.assertEqual(self.invoke(), (1, ["0/1 - 10", "INCOMPLETE DIGEST-MISSING"], ""))
         self.assertEqual(self.invoke("--expect-sha256", FIRST),
-                         (1, ["0/1 - 10", "COMPLETE", "EXPECTED-DIGEST-NOT-FOUND"], ""))
+                         (1, ["0/1 - 10", "INCOMPLETE DIGEST-MISSING",
+                              "EXPECTED-DIGEST-NOT-FOUND"], ""))
+
+    def test_every_indexed_receipt_needs_a_valid_digest(self):
+        # Complete indexes and a matching sibling digest must not hide a bad receipt,
+        # even when another message in the same job is complete.
+        self.seed([(GUID, 0, 2, FIRST, None, 10), (GUID, 1, 2, SECOND, None, 11),
+                   (RETAKE, 0, 1, SECOND, None, 12)])
+        self.seed_turns((GUID, CODE), (RETAKE, CODE))
+        for digest, reason in ((None, "DIGEST-MISSING"), ("", "DIGEST-MISSING"),
+                               ("xyz", "DIGEST-INVALID"), (FIRST.upper(), "DIGEST-INVALID")):
+            with closing(sqlite3.connect(self.path)) as db, db:
+                db.execute("UPDATE photo_receipt SET sha256 = ? WHERE guid = ? AND idx = 1",
+                           (digest, GUID))
+            incomplete = f"INCOMPLETE {reason}"
+            rows = [f"0/2 {FIRST[:12]} 10", "1/2 - 11"]
+            for extra in ((), ("--expect-sha256", FIRST)):
+                with self.subTest(digest=digest, extra=extra):
+                    self.assertEqual(self.invoke(*extra), (1, [*rows, incomplete], ""))
+                    self.assertEqual(self.invoke(*extra, code=CODE),
+                                     (1, [f"Message 1: {incomplete}", *rows, "Message 2: COMPLETE",
+                                          f"0/1 {SECOND[:12]} 12", incomplete], ""))
 
     def test_missing_store_stays_missing(self):
         # A default sqlite3 connection could create a store or report its private path.

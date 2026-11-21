@@ -10,6 +10,7 @@ import sys
 
 
 HEX = re.compile(r"[0-9a-fA-F]{64}")
+STORED_HEX = re.compile(r"[0-9a-f]{64}")
 
 
 def expected_digest(value):
@@ -22,9 +23,21 @@ def read_only(path):
     return closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True))
 
 
+def digest_reason(digest):
+    if digest is None or digest == "":
+        return "DIGEST-MISSING"
+    if not isinstance(digest, str) or not STORED_HEX.fullmatch(digest):
+        return "DIGEST-INVALID"
+    return None
+
+
 def incomplete_reason(rows):
     if not rows:
         return "no-rows"
+    for _, _, digest, _ in rows:
+        reason = digest_reason(digest)
+        if reason is not None:
+            return reason
     if len({row[1] for row in rows}) != 1:
         return "count-disagrees"
     if len(rows) != rows[0][1] or any(row[0] != idx for idx, row in enumerate(rows)):
@@ -91,8 +104,8 @@ def main(argv=None):
             print(f"Message {ordinal}: {status_line(group_reason)}")
         for idx, count, digest, received_at in rows:
             shown = "-"
-            if isinstance(digest, str) and HEX.fullmatch(digest):
-                digests.add(digest.lower())
+            if digest_reason(digest) is None:
+                digests.add(digest)
                 shown = digest[:width]
             print(f"{number(idx)}/{number(count)} {shown} {number(received_at)}")
 
