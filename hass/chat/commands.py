@@ -39,6 +39,13 @@ SHELF_NOT_A_NAME = frozenset("report specials special check chek checked done fi
 # example). `help` replies a short grouped index of the names; `help <name>` replies that entry's lines. Every line is
 # at most 70 plain characters (test_help). The examples parse back to the entry's own verb (test_help).
 HELP_GROUPS = ("Drafts", "Look up", "Notes", "Control")
+# HRM-13 (M5): `help listing` first tells how to list a new product by photo, in the owner guide's words
+# (docs/hass/NPP-OWNER-GUIDE.md). The example tag is prompts.ready's `yes {code}-{n}` with the guide's 4ed1. These lines
+# carry no marked example: the photo flow has no command verb of its own (test_help's one-entry-per-verb rule).
+LISTING_PHOTO_LINES = ("New product: send a photo with the selling price, each or per lb",
+                       "I reply with the website card and a code; change it in your own words",
+                       "yes 4ed1-2 (the code on the latest card) posts it; undo takes it down")
+HELP_LISTING = "To list a new product by photo: " + q("help listing")  # HRM-13: the index line that points to it
 HELP_ENTRIES = (
     ("yes", "Drafts", ("approve", "approved"), (q("yes") + " - go ahead with the change waiting for you",
                                                  q("yes a1b2") + " - go ahead with the one with that code")),
@@ -47,7 +54,7 @@ HELP_ENTRIES = (
     ("show", "Drafts", (), (q("show a1b2") + " - repeat a waiting change (its code or a word from it)",)),
     ("again", "Drafts", (), (q("again a1b2") + " - re-draft an expired or undone change (within 7 days)",)),  # AV2152-03
     ("find", "Look up", (), (q("find lion's mane") + " - look something up",)),
-    ("listing", "Look up", (), (q("listing Etto") + " - what's shown for one thing",
+    ("listing", "Look up", (), (*LISTING_PHOTO_LINES, q("listing Etto") + " - what's shown for one thing",
                                 q("listing store") + " - the hours and home page words")),  # AV1052-06
     ("shelf", "Look up", (), (q("shelf vegetables") + " - read a shelf",)),  # AV1052-05
     ("hidden", "Look up", (), (q("hidden") + " - lists what's hidden",)),
@@ -96,14 +103,14 @@ def _help_names() -> list:
 
 
 HELP_TEXT = "\n".join(("Tell me what to change, e.g. " + q('"Stop showing the eggs as sold out"'),  # AV1537-03, test_help
-                       *_help_names(), "Send " + q("help <command>") + " for an example: " + q("help undo")))
+                       *_help_names(), HELP_LISTING, "Send " + q("help <command>") + " for an example: " + q("help undo")))
 
 
 def help_detail(name: str) -> str:
-    """The full lines of one command (any of its words), or the unknown-name reply with the same grouped names. The
-    unknown word is never echoed."""
+    """The full lines of one command (any of its words), or the unknown-name reply with the same grouped names and the
+    `help listing` line (HRM-13). The unknown word is never echoed."""
     entry = next((e for e in HELP_ENTRIES if e[0] == HELP_WORDS.get(name)), None)
-    return "\n".join(entry[3]) if entry else "\n".join(("Unknown command. Send help with one of:", *_help_names()))
+    return "\n".join(entry[3]) if entry else "\n".join(("Unknown command. Send help with one of:", *_help_names(), HELP_LISTING))
 
 
 def _help_word(norm: str):
