@@ -44,7 +44,7 @@ def mode(path):
         return 0
 
 
-def root_entries(raw):
+def root_entries(raw, skills, fail):
     if not isinstance(raw, str) or "\x00" in raw:
         return None, "bad-roots"
     root = Path(raw)
@@ -55,9 +55,16 @@ def root_entries(raw):
         if stat.S_ISLNK(root_mode):
             return None, "symlink"
         if stat.S_ISDIR(root_mode):
-            # Category directories are real, immediate children, not aliases.
-            return [root, *(entry for entry in root.iterdir()
-                            if stat.S_ISDIR(mode(entry)))], None
+            entries = [root]
+            for entry in root.iterdir():
+                entry_mode = mode(entry)
+                if stat.S_ISDIR(entry_mode):
+                    entries.append(entry)
+                elif stat.S_ISLNK(entry_mode) and entry.name not in skills:
+                    # Only real directories are scanned as categories. A link
+                    # named for a requested skill is already flagged by scan().
+                    fail("symlink")
+            return entries, None
     except (OSError, ValueError):
         pass
     return None, "bad-roots"
@@ -160,7 +167,7 @@ def main(argv=None):
             continue
         roots = []
         for raw in raw_roots:
-            entries, reason = root_entries(raw)
+            entries, reason = root_entries(raw, skills, fail)
             if reason:
                 fail(reason)
             roots.append(entries)

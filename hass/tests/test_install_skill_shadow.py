@@ -137,6 +137,20 @@ class InstallSkillShadowTests(unittest.TestCase):
         target.unlink()
         self.assert_failed(self.run_check({"pilot": [str(root)]}), "FAIL symlink")
 
+    def test_symlinked_category_dir(self):
+        # Skipping a category alias gives a false PASS; following it can report a shadow instead.
+        first = self.root("first")
+        self.copy(first / "maintain")
+        for has_skill in (True, False):
+            with self.subTest(has_skill=has_skill):
+                second = self.root(f"second-{has_skill}")
+                target = self.root(f"target-{has_skill}")
+                if has_skill:
+                    self.copy(target / "maintain", b"older bytes")
+                (second / "cat").symlink_to(target, target_is_directory=True)
+                self.assert_failed(self.run_check({"pilot": [str(first), str(second)]}),
+                                   "FAIL symlink", self.winner())
+
     def test_relative_root_is_not_resolved_against_cwd(self):
         self.assert_failed(self.run_check({"pilot": [f"{MARKER}/root"]}), "FAIL not-absolute")
 
