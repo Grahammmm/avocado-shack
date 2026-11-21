@@ -894,7 +894,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                     if not listing:
                         tail = "\n" + PREVIEW_RETRY_LINE
                         self._queue_preview_retry(row)
-        text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._named(row) or row["reason"] == SHELF_CODE_REASON, head=head, undo=_is_undo(row),
+        undo = _is_undo(row)
+        coded = self._named(row) or row["reason"] == SHELF_CODE_REASON or (undo and self.settings.get("approvalNeedsCode", False))
+        text = prefix + proposal_text(row["code"], draft, row["expires_at"], coded, head=head, undo=undo,
                                       live_site=self.settings.get("liveSite") if draft.get("environment", {}).get("env") != "sandbox" else None,
                                       now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
         if listing:
