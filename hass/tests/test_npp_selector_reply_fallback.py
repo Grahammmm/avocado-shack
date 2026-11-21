@@ -100,6 +100,17 @@ class SelectorReplyFallbackTests(unittest.TestCase):
                 with patch.object(writer, 'write', regress):
                     self.assert_findings(self.invoke(), 'FAIL bad-reply-used list')
 
+    def test_c2_1_bad_reply_used_scalar(self):
+        # A scalar accepted by the real selector must not crash reply-kind reporting,
+        # even when the real writer still falls back to defaults.
+        replies = tuple(
+            (name, group, self.tool.wrap('false') if name == 'not-json' else reply)
+            for name, group, reply in self.tool._replies()
+        )
+        with patch.object(self.tool, '_replies', return_value=replies):
+            lines = self.assert_findings(self.invoke(), 'FAIL bad-reply-used not-json')
+        self.assertFalse(any(line.startswith('reply not-json ') for line in lines))
+
     def test_c2_2_good_reply_dropped(self):
         # A basic flag or a different ID in any required field drops the good reply.
         writer = self.tool.copy.Writer

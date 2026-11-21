@@ -78,8 +78,10 @@ def _findings():
                 yield f'write-none {name}'
                 continue
 
-            raw_kind = {type(None): 'none', dict: 'dict', list: 'list'}[type(raw)]
-            print(f"reply {name} raw={raw_kind} basic={'yes' if result.basic else 'no'}")
+            raw_kind = {type(None): 'none', dict: 'dict', list: 'list'}.get(type(raw))
+            # Scalars have no allowed info-row kind, but still need the checks below.
+            if raw_kind is not None:
+                print(f"reply {name} raw={raw_kind} basic={'yes' if result.basic else 'no'}")
             if group == 'good':
                 if result.basic or any(
                     result.selections.get(field, {}).get('template_id') != choice['template_id']
