@@ -79,6 +79,7 @@ class ReferenceScan(ast.NodeVisitor):
         self.filename = filename
         self.templates = templates
         self.bindings = {}
+        self.exception_edges = []
         self.sections = self.references = self.dynamic = 0
         self.findings = []
 
@@ -196,15 +197,23 @@ class ReferenceScan(ast.NodeVisitor):
         # Resolve all RHS expressions before overwriting any aliases on the LHS.
         for target, path, is_table in list(self.assignments(targets, value)):
             if isinstance(target, ast.Name):
-                self.bindings[target.id] = path
+                self.set_binding(target.id, path)
             else:
                 if is_table:
                     self.unresolved(target)
                 self.clear_target(target)
 
+    def set_binding(self, name, path):
+        self.bindings[name] = path
+        # Each write in a protected suite may be the last one before an
+        # exception, including writes inside branches or unpacking targets.
+        for edge in self.exception_edges:
+            if edge.get(name, () if name == "replies" else None) != path:
+                edge[name] = AMBIGUOUS
+
     def clear_target(self, target):
         if isinstance(target, ast.Name):
-            self.bindings[target.id] = None
+            self.set_binding(target.id, None)
         elif isinstance(target, (ast.Tuple, ast.List)):
             for elt in target.elts:
                 self.clear_target(elt)
@@ -239,6 +248,14 @@ class ReferenceScan(ast.NodeVisitor):
         for statement in statements:
             self.visit(statement)
 
+    @staticmethod
+    def join_bindings(*outcomes):
+        joined = {}
+        for name in set().union(*outcomes):
+            values = {env.get(name, () if name == "replies" else None) for env in outcomes}
+            joined[name] = values.pop() if len(values) == 1 else AMBIGUOUS
+        return joined
+
     def alternatives(self, *suites):
         initial = self.bindings
         outcomes = []
@@ -246,10 +263,7 @@ class ReferenceScan(ast.NodeVisitor):
             self.bindings = initial.copy()
             suite()
             outcomes.append(self.bindings)
-        self.bindings = initial
-        for name in set().union(*outcomes):
-            values = {env.get(name, () if name == "replies" else None) for env in outcomes}
-            self.bindings[name] = values.pop() if len(values) == 1 else AMBIGUOUS
+        self.bindings = self.join_bindings(*outcomes)
 
     def visit_If(self, node):
         self.use(node.test)
@@ -272,6 +286,46 @@ class ReferenceScan(ast.NodeVisitor):
 
     visit_AsyncFor = visit_For
 
+    def visit_Try(self, node: ast.Try | ast.TryStar):
+        # The RHS of an assignment can raise before it overwrites the old
+        # alias. Join the entry state and all writes, not just suite exits.
+        edge = self.bindings.copy()
+        self.exception_edges.append(edge)
+        self.suite(node.body)
+        normal = self.bindings
+        handler_entry = edge.copy()
+        handled = []
+        for handler in node.handlers:
+            # Unlike except, multiple except* handlers can run in sequence.
+            self.bindings = (edge if isinstance(node, ast.TryStar) else handler_entry).copy()
+            self.visit(handler)
+            handled.append(self.bindings)
+        self.bindings = normal
+        self.suite(node.orelse)
+        self.exception_edges.pop()
+        self.bindings = self.join_bindings(self.bindings, *handled)
+        if node.finalbody:
+            # Finally can also run after an unhandled exception in any suite.
+            self.bindings = self.join_bindings(self.bindings, edge)
+            self.suite(node.finalbody)
+
+    visit_TryStar = visit_Try
+
+    def visit_ExceptHandler(self, node):
+        if node.type is not None:
+            self.use(node.type)
+        if node.name is not None:
+            self.set_binding(node.name, None)
+        self.suite(node.body)
+        if node.name is not None:
+            self.set_binding(node.name, None)
+
+    def scoped(self, bindings, scan):
+        outer, edges = self.bindings, self.exception_edges
+        self.bindings, self.exception_edges = bindings, []
+        scan()
+        self.bindings, self.exception_edges = outer, edges
+
     def function_scope(self, args, body, scan):
         outer = self.bindings
         params = [*args.posonlyargs, *args.args, *args.kwonlyargs]
@@ -280,16 +334,14 @@ class ReferenceScan(ast.NodeVisitor):
         locals_ = dict.fromkeys(LocalNames(body).names | {p.arg for p in params})
         if any(p.arg == "replies" for p in params):
             locals_["replies"] = ()
-        self.bindings = outer | locals_
-        scan()
-        self.bindings = outer
+        self.scoped(outer | locals_, scan)
 
     def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
         for expr in (*node.decorator_list, node.returns):
             if expr is not None:
                 self.use(expr)
         self.function_scope(node.args, node.body, lambda: self.suite(node.body))
-        self.bindings[node.name] = None
+        self.set_binding(node.name, None)
 
     visit_AsyncFunctionDef = visit_FunctionDef
 
@@ -299,23 +351,20 @@ class ReferenceScan(ast.NodeVisitor):
     def visit_ClassDef(self, node):
         for expr in (*node.decorator_list, *node.bases, *node.keywords):
             self.use(expr)
-        outer = self.bindings
-        self.bindings = outer.copy()
-        self.suite(node.body)
-        self.bindings = outer
-        self.bindings[node.name] = None
+        self.scoped(self.bindings.copy(), lambda: self.suite(node.body))
+        self.set_binding(node.name, None)
 
     def comprehension(self, node, *results):
-        outer = self.bindings
-        self.bindings = outer.copy()
-        for gen in node.generators:
-            self.use(gen.iter)
-            self.clear_target(gen.target)
-            for expr in gen.ifs:
-                self.use(expr)
-        for result in results:
-            self.use(result)
-        self.bindings = outer
+        def scan():
+            for gen in node.generators:
+                self.use(gen.iter)
+                self.clear_target(gen.target)
+                for expr in gen.ifs:
+                    self.use(expr)
+            for result in results:
+                self.use(result)
+
+        self.scoped(self.bindings.copy(), scan)
 
     def visit_ListComp(self, node: ast.ListComp | ast.SetComp | ast.GeneratorExp):
         self.comprehension(node, node.elt)

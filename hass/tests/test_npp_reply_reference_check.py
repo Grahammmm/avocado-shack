@@ -155,6 +155,43 @@ class ReplyReferenceCheckTests(unittest.TestCase):
         self.assertEqual(self.assert_result(self.fixture_run(), 1, "FAIL reply-key-unresolved x.py 3"),
                          "refs files=1 sections=1 references=2 dynamic=1 asks=5")
 
+    def test_c2_6_exception_paths_preserve_possible_aliases(self):
+        # A failed RHS leaves the old alias intact; an exception later in the
+        # suite can also expose an alias introduced and then cleared there.
+        for source, line in (
+            ("table = replies['guards']\ntry:\n    table = may_raise()\n"
+             "except Exception:\n    pass\ntable['nope']", 6),
+            ("try:\n    if condition:\n        table = replies['guards']\n"
+             "        may_raise()\n        table = {}\nexcept Exception:\n    table[key]", 7),
+            ("table = replies['guards']\ntry:\n    table = may_raise()\n"
+             "finally:\n    table[key]", 5),
+            ("table = replies['guards']\ntry:\n    table = may_raise()\n"
+             "except* Exception:\n    pass\ntable[key]", 6),
+            ("try:\n    may_raise()\nexcept* ValueError:\n    table = replies['guards']\n"
+             "    may_raise()\n    table = {}\nexcept* TypeError:\n    table[key]", 8),
+            ("try:\n    may_raise()\nexcept Exception:\n    table = replies['guards']\n"
+             "else:\n    table = {}\ntable[key]", 7),
+        ):
+            with self.subTest(source=source):
+                self.source(source)
+                self.assert_result(self.fixture_run(), 1, f"FAIL reply-key-unresolved x.py {line}")
+        # Stable aliases stay checkable, and inner locals must not taint an
+        # outer binding just because their function is defined inside the try.
+        self.source('''
+            table = replies['guards']
+            try:
+                def unrelated():
+                    table = {}
+                may_raise()
+            except Exception:
+                table['not_ready']
+            finally:
+                table['not_ready']
+            table['not_ready']
+        ''')
+        self.assertEqual(self.assert_result(self.fixture_run(), 0),
+                         "refs files=1 sections=1 references=3 dynamic=0 asks=5")
+
     def test_c3_usage_exit_2(self):
         # Unsupported options must not accidentally run the scan.
         for arg in ("fixture.py", "--unknown", "--help", "--"):
