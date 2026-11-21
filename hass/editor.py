@@ -59,19 +59,21 @@ def _read(path: Path):
     return json.loads(path.read_text("utf-8"))
 
 def _write_json(path: Path, obj) -> None:
-    path.parent.mkdir(mode=0o700, exist_ok=True)
     data = json.dumps(obj, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    path.parent.mkdir(mode=0o700, exist_ok=True)
     sitegen.write_files({path.name: data}, path.parent)
     os.chmod(path, 0o600)
 
 def _common_dir(wt: Path) -> Path:
     return (wt / _out(wt, "rev-parse", "--git-common-dir")).resolve()
 
-def open_state(state=None, worktree=None) -> Path:
+def open_state(state=None, worktree=None, *, create=True) -> Path:
     raw = state or os.environ.get("HASS_STATE_DIR")
     if not raw: raise UnsafeState("a state dir is required (--state DIR or HASS_STATE_DIR)")
     path = Path(raw).resolve()
-    if not path.exists(): path.mkdir(mode=0o700, parents=True)
+    if not path.exists():
+        if not create: raise UnsafeState("state dir is not initialised; run init first")
+        path.mkdir(mode=0o700, parents=True)
     st = path.stat()
     if not path.is_dir() or st.st_uid != os.getuid(): raise UnsafeState("state dir must be owned by the current user")
     if st.st_mode & 0o077: raise UnsafeState("state dir must not be group/other accessible (use mode 0700)")
@@ -102,10 +104,10 @@ def _read_config(path: Path) -> dict:
     if not isinstance(cfg, dict) or not isinstance(cfg.get("worktree"), str) or not cfg["worktree"]: raise bad
     return cfg
 
-def _load(state):
-    sdir = open_state(state)
+def _load(state, *, create=True):
+    sdir = open_state(state, create=create)
     cfg = _read_config(sdir / "config.json")
-    open_state(str(sdir), cfg["worktree"])
+    open_state(str(sdir), cfg["worktree"], create=create)
     return sdir, cfg, Path(cfg["worktree"])
 
 def worktree_problems(wt: Path, recovering=False) -> list[str]:
@@ -261,14 +263,44 @@ def _design_compute(call, wt: Path, sdir: Path) -> dict:
     return {"result": "ok", "base": content_revision(wt), "records": [], "generated": [], "assets": {}, "warnings": [],
             "summary": [f"{call['op']}: {land[0]} {land[1]}"], "land": land, "paths": sorted(paths)}
 
-def prepare(request, *, state=None, registry=None, now=None, environment=None) -> dict:
-    sdir, cfg, wt = _load(state)
+def _draft_hash(draft):
+    seed = {k: draft[k] for k in ('base', 'ops')}
+    for key in ('environment', 'assets'):
+        if key in draft: seed[key] = draft[key]
+    if 'hash_attempt' in draft: seed['attempt'] = draft['hash_attempt']
+    core = json.dumps(seed, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+    return 'sha256:' + hashlib.sha256(core.encode('utf-8')).hexdigest()
+
+def _draft_hash_matches(draft):
+    try:
+        return _draft_hash(draft) == draft['draft_hash']
+    except (KeyError, TypeError, ValueError, RecursionError):
+        return False
+
+def _matching_draft(path, draft):
+    if path.is_symlink() or not path.is_file(): return None
+    try:
+        stored = _read(path)
+    except ValueError:
+        return None
+    if (not isinstance(stored, dict) or stored.get('change_id') != draft['change_id']
+            or stored.get('draft_hash') != draft['draft_hash']):
+        return None
+    if 'hash_attempt' in draft and 'hash_attempt' not in stored and 'environment' not in stored:
+        # Legacy unbound retries omitted the attempt. Check their seed with the
+        # candidate's attempt, but leave the existing file and return shape intact.
+        return stored if _draft_hash_matches(dict(stored, hash_attempt=draft['hash_attempt'])) else None
+    return stored if _draft_hash_matches(stored) else None
+
+def candidate(request, *, state=None, registry=None, now=None, environment=None) -> dict:
+    """Build a draft in memory. No state/worktree writes; private media caching is allowed."""
+    sdir, cfg, wt = _load(state, create=False)
     ops, problems = _parse_request(request)
     if problems: return {"result": "invalid", "problems": problems}
     try:
         design = _design_call(sdir, ops)
         if design:  # a design draft is checked against a clean writer HEAD under the writer lock, as apply will (a dirty writer is refused up front)
-            with _writer_lock(sdir) as held:
+            with _writer_lock(sdir, create=False) as held:
                 if not held: return {"result": "busy"}
                 if problems := worktree_problems(wt): return {"result": "refused", "problems": problems}
                 out = _design_compute(design, wt, sdir)
@@ -276,29 +308,79 @@ def prepare(request, *, state=None, registry=None, now=None, environment=None) -
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
     if out["result"] != "ok": return out
-    seed, attempt, change_id, draft_hash = {"base": out["base"], "ops": ops}, 0, "", ""
-    if environment is not None: seed["environment"] = copy.deepcopy(environment)
-    if out["assets"]: seed["assets"] = out["assets"]  # the picture bytes are part of what is approved (same ops, other bytes = new hash)
-    while not change_id or (sdir / "changes" / f"{change_id}.json").is_file():  # a recorded change id is never reused
-        core = json.dumps(dict(seed, attempt=attempt) if attempt else seed, sort_keys=True, separators=(",", ":"),
-                          ensure_ascii=False)
-        draft_hash = "sha256:" + hashlib.sha256(core.encode("utf-8")).hexdigest()
-        change_id, attempt = "chg-" + draft_hash[7:19], attempt + 1
-    path = sdir / "drafts" / f"{change_id}.json"
-    if path.is_file() and _read(path).get("draft_hash") == draft_hash: return {"result": "ok", "draft": _read(path)}
-    draft = {"change_id": change_id, "draft_hash": draft_hash, "base": out["base"], "ops": ops,
+    draft = {"base": out["base"], "ops": ops,
              "records": out["records"], "generated": out["generated"], "warnings": out["warnings"],
              "created_at": _now(now), **({"assets": out["assets"]} if out["assets"] else {})}
     if environment is not None: draft["environment"] = copy.deepcopy(environment)
-    if environment is not None and attempt > 1: draft['hash_attempt'] = attempt - 1
-    _write_json(path, draft)
+    while True:  # a recorded change id is never reused
+        draft_hash = _draft_hash(draft)
+        change_id = 'chg-' + draft_hash[7:19]
+        if not os.path.lexists(sdir / 'changes' / f'{change_id}.json'): break
+        draft['hash_attempt'] = draft.get('hash_attempt', 0) + 1
+    draft.update(change_id=change_id, draft_hash=draft_hash)
+    path = sdir / 'drafts' / f'{change_id}.json'
+    if stored := _matching_draft(path, draft):
+        draft = dict(stored, hash_attempt=draft['hash_attempt']) if 'hash_attempt' in draft else stored
     return {"result": "ok", "draft": draft}
 
+def persist_candidate(draft, *, state=None, guard=None) -> dict:
+    """Persist the validated candidate without recomputing; apply checks asset freshness."""
+    stale = {'result': 'stale'}
+    if not isinstance(draft, dict) or not _draft_hash_matches(draft): return stale
+    cid = 'chg-' + draft['draft_hash'][7:19]
+    if draft.get('change_id') != cid: return stale
+    sdir, _cfg, wt = _load(state, create=False)
+    with _writer_lock(sdir, create=False) as held:
+        if not held: return {'result': 'busy'}
+        drafts, changes = sdir / 'drafts', sdir / 'changes'
+        if any(folder.is_symlink() or (folder.exists() and not folder.is_dir()) for folder in (drafts, changes)):
+            return stale
+        if os.path.lexists(changes / f'{cid}.json'): return stale
+        try:
+            if content_revision(wt) != draft['base']: return stale
+        except FileNotFoundError:
+            return stale
+        if guard is not None: guard()
+        path = drafts / f'{cid}.json'
+        if os.path.lexists(path):
+            stored = _matching_draft(path, draft)
+            return {'result': 'ok', 'draft': stored} if stored is not None else stale
+        try:
+            _write_json(path, draft)
+        except (TypeError, ValueError, RecursionError):
+            return stale
+    return {'result': 'ok', 'draft': draft}
+
+def prepare(request, *, state=None, registry=None, now=None, environment=None) -> dict:
+    out = candidate(request, state=state, registry=registry, now=now, environment=environment)
+    return persist_candidate(out['draft'], state=state) if out['result'] == 'ok' else out
+
 @contextlib.contextmanager
-def _writer_lock(sdir: Path):
+def _writer_lock(sdir: Path, *, create=True):
+    # Share exclusion even before writer.lock exists, without creating a state
+    # entry when persisting (or refusing) a draft.
+    fd = os.open(sdir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        with _file_writer_lock(sdir, create) as held:
+            yield held
+    finally:
+        os.close(fd)
+
+@contextlib.contextmanager
+def _file_writer_lock(sdir: Path, create):
     bad = UnsafeState("writer lock is not a regular file")  # H20: never a lock created or held through a link
     try:
-        fd = os.open(sdir / "writer.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, 0o600)
+        flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+        fd = os.open(sdir / "writer.lock", flags | (os.O_CREAT if create else 0), 0o600)
+    except FileNotFoundError:
+        if create: raise
+        yield True
+        return
     except OSError as exc:
         if exc.errno in (errno.ELOOP, errno.EISDIR, errno.ENXIO): raise bad from None  # link, folder, FIFO/socket
         raise
@@ -410,12 +492,7 @@ def apply(change_id, draft_hash, *, state=None, registry=None, now=None, guard=N
         return _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now, guard)
 
 def bound_hash_valid(draft):
-    if 'environment' not in draft: return False
-    seed = {k: draft[k] for k in ('base', 'ops', 'environment')}
-    if draft.get('assets'): seed['assets'] = draft['assets']
-    if draft.get('hash_attempt'): seed['attempt'] = draft['hash_attempt']
-    core = json.dumps(seed, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-    return draft.get('draft_hash') == 'sha256:' + hashlib.sha256(core.encode('utf-8')).hexdigest()
+    return isinstance(draft, dict) and 'environment' in draft and _draft_hash_matches(draft)
 
 def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now, guard=None) -> dict:
     draft_path, rec_path = sdir / "drafts" / f"{change_id}.json", sdir / "changes" / f"{change_id}.json"
@@ -476,12 +553,20 @@ def _mark_reverted(sdir: Path, draft: dict, change_id: str) -> None:
             _write_json(orig, {**_read(orig), "revertedBy": change_id})
 
 def render_draft(change_id, *, state=None, registry=None, now=None) -> dict:
-    """Re-run a stored draft's ops on the current worktree content; return the rendered site files. Writes nothing."""
-    sdir, cfg, wt = _load(state)
+    """Render a stored draft without writing state or worktree files."""
+    sdir, cfg, wt = _load(state, create=False)
     path = sdir / "drafts" / f"{change_id}.json"
     if not CHANGE_ID_RE.fullmatch(str(change_id)) or not path.is_file(): return {"result": "not-found", "key": change_id}
+    return _render_candidate(_read(path), sdir, cfg, wt, registry, now)
+
+def render_candidate(draft, *, state=None, registry=None, now=None) -> dict:
+    """Render in-memory ops. No state/worktree writes; private media caching is allowed."""
+    sdir, cfg, wt = _load(state, create=False)
+    return _render_candidate(draft, sdir, cfg, wt, registry, now)
+
+def _render_candidate(draft, sdir, cfg, wt, registry, now):
     try:
-        out = _compute(_read(path)["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
+        out = _compute(draft["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
     return {"result": "ok", "files": out["files"], "records": out["records"], "store": out["store"],

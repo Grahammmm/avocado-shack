@@ -148,10 +148,10 @@ class Stages:
 
 
 def build_stages(conversation, pinned):
-    """The production stage port, or None (job.py then answers with the render_failed guard and nothing is drafted).
+    """Construct the full port or fail closed; never route a partial pipeline to prepare."""
+    try:
+        from hass.npp.stages import build
 
-    The start segment (S2 identify, S3 missing info, S4 research) and the card render (S6 picture, S5/S7 copy and
-    checks, S8 capture) are composed from NPP-C/D/E/F. C, D and F are not merged on this branch, so there is nothing
-    reviewed to compose yet: fail closed rather than run a partial pipeline."""
-    del conversation, pinned
-    return None
+        return build(conversation, pinned)
+    except (ImportError, KeyError, ValueError, TypeError):
+        return None
