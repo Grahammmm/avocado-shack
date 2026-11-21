@@ -347,7 +347,7 @@ class Previewer:
             self.last_server = {"pid": server.pid, "port": port}
             unshown = False
             runs = []  # (viewport, admitted screenshot bytes, checks or None when the run failed, failure text); phone first
-            card_text = None
+            card_text, card_evidence = None, None
             try:
                 deadline = time.monotonic() + START_TIMEOUT
                 while not _get_ok(port):
@@ -367,9 +367,11 @@ class Previewer:
                         bad_png = ran and not data.startswith(PNG_SIGNATURE)
                         checks = _checks(proc.stdout) if ran and not bad_png else None
                         if name == "phone" and checks is not None:
-                            text = json.loads(proc.stdout.strip().splitlines()[-1]).get("cardText")
+                            output = json.loads(proc.stdout.strip().splitlines()[-1])
+                            text = output.get("cardText")
                             if isinstance(text, str) and len(text) <= 10000:
                                 card_text = text
+                            card_evidence = output.get("cardEvidence")
                         unshown = unshown or (name == "phone" and ran and not bad_png and _unshown(proc.stdout))
                         failure = None if checks is not None else (
                             "bad screenshot PNG" if bad_png else "bad checks output" if ran
@@ -404,4 +406,5 @@ class Previewer:
         error = error or (("check failed: " + ", ".join(failed)) if failed else None)
         return {"ok": error is None, "png": str(out_png), "checks": checks, "error": error, **extra,
                 **({"cardText": card_text} if card_text is not None else {}),
+                **({"cardEvidence": card_evidence} if card_evidence is not None else {}),
                 **({"unshown": True} if unshown and error is None else {})}

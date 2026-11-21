@@ -202,8 +202,15 @@ class StagesTests(unittest.TestCase):
         self.assertFalse(stages.takes_turn("make it $4", "published"))
 
     def test_build_stages_fails_closed_without_the_stage_modules(self):
-        # Contract 2.1 fallback: until C/D/F are composed there is no production stage port, so NPP never runs partially.
-        self.assertIsNone(npp.stages_for(None, PINNED))
+        # Contract 2.1: a missing component cannot trigger a partial stage chain.
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        stub = SimpleNamespace(candidate=lambda _: None, render_candidate=lambda _: None, persist_candidate=lambda _: None)
+        conv = SimpleNamespace(editor=stub, previewer=object(), labels=None)
+        self.assertIsNotNone(npp.stages_for(conv, PINNED))
+        with patch.dict(sys.modules, {'hass.npp.stages': None}):
+            self.assertIsNone(npp.stages_for(conv, PINNED))
 
 
 @dataclasses.dataclass(frozen=True)

@@ -119,11 +119,16 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
                 if n := _older(rows, now - timedelta(hours=unverified_hours), newer=True):
                     problems.append(_problem("unverified", str(n)))
             if "control" in tables and (row := db.execute(PAUSED_SQL).fetchone()):
-                info.append(_problem("paused", str(row[0])))
-                if _older([row], limit := now - timedelta(hours=paused_hours)):  # RF1650-12; only an unreadable
-                    unreadable = _older([row], limit, newer=True)  # time counts as both older and newer
-                    detail = "unreadable time" if unreadable else f"over {paused_hours} h"
-                    problems.append(_problem("paused-long", detail))
+                try:
+                    paused_at = datetime.fromisoformat(row[0])
+                    if paused_at.utcoffset() is None: raise ValueError("zone-less time")
+                except (TypeError, ValueError):
+                    info.append(_problem("paused", "unreadable time"))
+                    problems.append(_problem("paused-long", "unreadable time"))
+                else:
+                    info.append(_problem("paused", paused_at.isoformat()))
+                    if paused_at < now - timedelta(hours=paused_hours):  # RF1650-12: strictly older
+                        problems.append(_problem("paused-long", f"over {paused_hours} h"))
             if "memory" in tables:  # RF1710-5: hass/memory.py rules, count only (no key, value or source)
                 try:
                     db.create_function("hass_memory_at_or_after", 2, _at_or_after)

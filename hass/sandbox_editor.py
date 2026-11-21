@@ -54,6 +54,12 @@ class SiteEditor(conversation.Editor):
             settings.pop('liveSite', None)
 
     def prepare(self, ops, *, skills=(), members=None):
+        return self._build(editor.prepare, ops, skills, members)
+
+    def candidate(self, ops, *, skills=(), members=None):
+        return self._build(editor.candidate, ops, skills, members)
+
+    def _build(self, build, ops, skills, members):
         try:
             members = members or self._members(ops, skills)
             undos = [c['args']['changeId'] for c in ops if c['op'] == 'history.revert']
@@ -66,11 +72,33 @@ class SiteEditor(conversation.Editor):
                 binding['undo_of'] = undos[0]
             else:
                 binding = self.gate.resolve(members)
-            return editor.prepare({'ops': ops}, state=self.state, registry=self.registry, environment=binding, now=self.clock())
-        except sandbox.ModeError as exc:
-            return {'result': 'env-gone' if exc.code == 'env-gone' else 'refused', 'reason': 'sandbox target unavailable or switched off'}
-        except (OSError, ValueError, KeyError):
-            return {'result': 'refused', 'reason': 'sandbox target unavailable or switched off'}
+            return build({'ops': ops}, state=self.state, registry=self.registry, environment=binding, now=self.clock())
+        except (OSError, ValueError, KeyError) as exc:
+            return self._unavailable(exc)
+
+    @staticmethod
+    def _unavailable(exc):
+        return {'result': 'env-gone' if isinstance(exc, sandbox.ModeError) and exc.code == 'env-gone' else 'refused',
+                'reason': 'sandbox target unavailable or switched off'}
+
+    def _check_candidate(self, draft):
+        if not editor.bound_hash_valid(draft):
+            raise sandbox.ModeError('env-changed')
+        self.gate.check(draft['environment'])
+
+    def render_candidate(self, draft):
+        try:
+            self._check_candidate(draft)
+            return editor.render_candidate(draft, state=self.state, registry=self.registry, now=self.clock())
+        except (OSError, ValueError, KeyError) as exc:
+            return self._unavailable(exc)
+
+    def persist_candidate(self, draft):
+        try:
+            self._check_candidate(draft)
+            return editor.persist_candidate(draft, state=self.state, guard=lambda: self._check_candidate(draft))
+        except (OSError, ValueError, KeyError) as exc:
+            return self._unavailable(exc)
 
     def check_environment(self, cid, *, recorded=False):
         try:
