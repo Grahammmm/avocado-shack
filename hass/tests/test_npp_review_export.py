@@ -74,8 +74,12 @@ class NppReviewExportTests(unittest.TestCase):
     def test_c2_redaction(self):
         # C2: replacing digits only leaves whole spoken amounts, contacts and street names in the review.
         reserved_phone = "(" + "202" + ") " + "555" + "-" + "0147"
+        # A fixed TLD list misses bare URLs; a digit-only suffix is still a number, not a host.
+        urls = ("listing.example.shop/path", "shop.example.boutique", "http://a.b.museum/x?y=1",
+                "sub.domain.co.uk", "shop.example.museum:8443?mode=preview#section")
         cases = [
             ("83471", "<n>"), ("12,345.67", "<n>"), ("３９８", "<n>"), ("A892Z", "A<n>Z"),
+            ("3.50", "<n>"),
             ("twenty five", "<n>"), ("three fifty", "<n>"), ("NINETY-NINE", "<n>"),
             ("half a dozen", "<n>"), ("two hundred", "<n> <n>"),
             ("3 bucks", "<n> <money>"), ("$75.41", "<money><n>"), ("USD twenty", "<money> <n>"),
@@ -83,6 +87,7 @@ class NppReviewExportTests(unittest.TestCase):
             (reserved_phone, "<phone>"), ("+1 " + reserved_phone + " ext. 89", "<phone>"),
             ("https://listing.example.invalid/p/77?secret=sample", "<url>"),
             ("www.listing.example.invalid/p", "<url>"), ("listing.example.invalid/p", "<url>"),
+            *((url, "<url>") for url in urls),
             ("814 Quorble Wisp Street Apt B", "<address>"), ("Quorble Wisp Street", "<address>"),
             ("Use the softer title", "Use the softer title"),
         ]
@@ -93,20 +98,32 @@ class NppReviewExportTests(unittest.TestCase):
         cost, qty = "$75.41", "twenty five"
         email, street = "fake+listing@example.invalid", "814 Quorble Wisp Street Apt B"
         chat, sender = "synthetic-chat-key", "synthetic-sender-key"
+        longer_sender = sender + "-extended"
+        path_url = f"listing.example.shop/{chat}/{sender}"
         self.events(dict(chat=chat, sender=sender, text=f"cost {cost}; qty {qty}; call {reserved_phone}; "
                          f"email {email}; {street}", cost=cost, quantity=qty),
-                    dict(chat=chat, sender="sample-bot", direction="out", text=f"Review {chat}; note from {sender}."))
+                    dict(chat=chat, sender="sample-bot", direction="out", text=f"Review {chat}; note from {sender}."),
+                    # Token-boundary checks miss identity echoes in surrounding text and metadata.
+                    dict(chat=chat, sender=longer_sender, kind=f"pre{chat.upper()}post",
+                         disposition=f"{sender}post pre{chat}",
+                         text=f"pre{sender.upper()}post {longer_sender}'s path/{chat} {chat}@example.invalid {path_url}"))
         self.receipt(cost=cost, quantity=qty, chat=chat, sender=sender,
                      segments=[dict(contact=email, address=street)])
         result = self.run_cli()
-        self.assert_pass(result, 2, 1)
-        rendered = self.out.read_text()
-        for canary in (cost, "75.41", qty, reserved_phone, email, street, "Quorble Wisp", chat, sender):
+        self.assert_pass(result, 3, 1)
+        rendered = self.out.read_bytes()
+        output_bytes = (rendered + result.stdout.encode() + result.stderr.encode()).lower()
+        for canary in (cost, "75.41", qty, reserved_phone, email, street, "Quorble Wisp", chat, sender,
+                       longer_sender, path_url, *urls):
             with self.subTest(canary=canary):
-                self.assertNotIn(canary, rendered + result.stdout + result.stderr)
-        one, two, _ = map(json.loads, rendered.splitlines())
+                self.assertNotIn(canary.encode().lower(), output_bytes)
+        one, two, three, _ = map(json.loads, rendered.splitlines())
         self.assertEqual(one["text_redacted"], "cost <money><n>; qty <n>; call <phone>; email <email>; <address>")
         self.assertEqual(two["text_redacted"], "Review <id>; note from <id>.")
+        self.assertEqual(three["chat"], "chat-1")
+        self.assertEqual(three["kind"], "pre<id>post")
+        self.assertEqual(three["disposition"], "<id>post pre<id>")
+        self.assertEqual(three["text_redacted"], "pre<id>post <id>'s path/<id> <email> <url>")
 
     def test_c3_private_output(self):
         # C3: catch stale/wide modes, silent clobber, and a worktree reached through an alias.

@@ -20,8 +20,9 @@ from hass.npp.receipt import JOB_RE, read_artifact
 
 URL = re.compile(r"\b(?:[a-z][a-z0-9+.-]*://|www\.)[^\s<>\"']+", re.I)
 EMAIL = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@(?:[\w-]+\.)+[\w-]+")
-BARE_URL = re.compile(r"\b(?:[\w-]+\.)+(?:com|org|net|edu|gov|io|co|test|invalid|example)\b"
-                      r"(?::\d+)?(?:[/?#][^\s<>\"']*)?", re.I)
+# Require an alphabetic final label: a decimal such as 3.50 is not a host.
+BARE_URL = re.compile(r"(?<![\w-])(?<![\w-]\.)(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}"
+                      r"(?![\w-]|\.[\w-])(?::[0-9]+)?(?:[/?#][^\s<>\"']*)?")
 PHONE = re.compile(
     r"(?<!\w)(?:\+\d(?:[ .()\t-]*\d){6,14}|"
     r"(?:1[ .\t-]?)?(?:\(\d{3}\)|\d{3})[ .\t-]*\d{3}[ .\t-]*\d{4}|"
@@ -89,9 +90,10 @@ def events(path, since):
             private.update(unicodedata.normalize("NFKC", row[key]) for key in ("chat", "sender") if row[key])
             if timestamp.date() >= since:
                 raw.append((timestamp.date().isoformat(), row))
-    # An outgoing response can echo a sender or chat from a different row.
-    identities = (re.compile(r"(?<![\w<])(?:" + "|".join(map(re.escape, sorted(private, key=lambda s: (-len(s), s))))
-                             + r")(?![\w>])", re.I) if private else None)
+    # Responses can echo another row's identity inside a larger token. Prefer
+    # the longest literal when identities share a prefix.
+    identities = (re.compile("|".join(re.escape(value) for value in sorted(private, key=lambda s: (-len(s), s))),
+                             re.I) if private else None)
     chats = {}
     return [dict(day=day, chat=chats.setdefault(row["chat"], f"chat-{len(chats) + 1}"),
                  dir=row["direction"], kind=_redact(row["kind"], identities),
