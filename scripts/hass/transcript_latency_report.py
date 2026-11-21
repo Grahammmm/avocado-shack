@@ -77,8 +77,29 @@ def report(db, since, until):
     return f"bad-latency {bad_latency}" if bad_latency else None
 
 
+def _temp_candidates():
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        value = os.environ.get(name)
+        if value:
+            yield value
+    yield from ("/tmp", "/var/tmp", "/usr/tmp")
+    yield os.getcwd()
+
+
+def _private_temp_parent(input_roots):
+    roots = {os.path.realpath(root) for root in input_roots}
+    for candidate in _temp_candidates():
+        parent = os.path.realpath(candidate)
+        # Never let tempfile probe or create anything under an input root.
+        if any(os.path.commonpath((root, parent)) == root for root in roots):
+            continue
+        if os.path.isdir(parent) and os.access(parent, os.W_OK | os.X_OK):
+            return parent
+    return None
+
+
 @contextmanager
-def _open_snapshot(path):
+def _open_snapshot(path, temp_parent):
     sources = [path]
     for suffix in ("-wal", "-journal"):
         sidecar = path.with_name(path.name + suffix)
@@ -91,7 +112,7 @@ def _open_snapshot(path):
         sources.append(sidecar)
 
     # SQLite can rebuild shared memory and recover the database on the copy only.
-    with tempfile.TemporaryDirectory() as directory:
+    with tempfile.TemporaryDirectory(dir=temp_parent) as directory:
         snapshot = Path(directory)
         for source in sources:
             shutil.copyfile(source, snapshot / source.name)
@@ -101,7 +122,7 @@ def _open_snapshot(path):
             yield db
 
 
-def check_store(path, since, until):
+def check_store(path, since, until, state):
     try:
         mode = os.lstat(path).st_mode
     except FileNotFoundError:
@@ -113,7 +134,10 @@ def check_store(path, since, until):
     if since is None or until is None:
         return None
     try:
-        with _open_snapshot(path) as db:
+        temp_parent = _private_temp_parent((state, path.parent))
+        if temp_parent is None:
+            return "temp-unavailable"
+        with _open_snapshot(path, temp_parent) as db:
             return report(db, since, until)
     except (OSError, ValueError, sqlite3.Error):
         return f"not-sqlite {DB_NAME}"
@@ -131,7 +155,7 @@ def main(argv=None):
     if since is None or until is None or since >= until:
         findings.append("bad-window")
         since = until = None
-    finding = check_store(args.state / DB_NAME, since, until)
+    finding = check_store(args.state / DB_NAME, since, until, args.state)
     if finding:
         findings.append(finding)
     for finding in findings:

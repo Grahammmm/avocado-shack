@@ -3,6 +3,7 @@
 from contextlib import closing, redirect_stderr, redirect_stdout
 import importlib.util
 from io import StringIO
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -149,6 +150,49 @@ class TranscriptLatencyReportTests(unittest.TestCase):
         return {p.relative_to(self.state): (p.read_bytes() if p.is_file() else None,
                                             p.stat().st_mtime_ns, p.stat().st_mode)
                 for p in (self.state, *self.state.rglob("*"))}
+
+    def assert_a2_report_unchanged(self, **temp_env):
+        self.create([(SINCE, "in", "text", 1)])
+        before = self.snapshot()
+        with patch.dict(os.environ, temp_env):
+            result = self.invoke()
+        self.assertEqual(self.assert_outcome(result, 0, PASS), [
+            "count 1", "unparsed 0", "null-latency 0", "p50_ms 1", "p90_ms 1", "max_ms 1",
+            "kind text p50_ms 1 p90_ms 1 max_ms 1", PASS,
+        ])
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a2_tmpdir_is_input(self):
+        # A2/C4: default tempfile selection changes the input directory mtime even after cleanup.
+        state = str(self.state)
+        self.assert_a2_report_unchanged(TMPDIR=state, TEMP=state, TMP=state)
+
+    def test_a2_tmpdir_below_input(self):
+        # A2/C4: rejecting only equality still changes a descendant's directory mtime.
+        nested = self.state / "nested"
+        nested.mkdir()
+        self.assert_a2_report_unchanged(TMPDIR=str(nested), TEMP=str(nested), TMP=str(nested))
+
+    def test_a2_tmpdir_missing(self):
+        # A2: taking the first environment setting blindly fails instead of using the next candidate.
+        self.assert_a2_report_unchanged(TMPDIR=str(self.root / "absent"), TEMP=str(self.root), TMP="")
+
+    def test_a2_no_usable_temp(self):
+        # A2/C4: exhausting candidates must not fall back inside the input or report not-sqlite.
+        self.create()
+        before = self.snapshot()
+        spec = importlib.util.spec_from_file_location("transcript_latency_report", SCRIPT)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        stdout, stderr = StringIO(), StringIO()
+        args = ["--state", str(self.state), "--since", SINCE, "--until", UNTIL]
+        with (patch.object(module, "_temp_candidates", return_value=[self.state, self.root / "absent"]),
+              redirect_stdout(stdout), redirect_stderr(stderr)):
+            code = module.main(args)
+        result = subprocess.CompletedProcess(args, code, stdout.getvalue(), stderr.getvalue())
+        self.assertEqual(self.assert_findings(result, "temp-unavailable"), ["FAIL temp-unavailable", FAIL])
+        self.assertEqual(self.snapshot(), before)
 
     def test_c4_read_only(self):
         # Even a checkpointed WAL-mode store must not acquire a journal or SHM.
