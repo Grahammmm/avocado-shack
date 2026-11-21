@@ -192,29 +192,51 @@ class NppChatPageTests(unittest.TestCase):
         self.assert_fail(self.run_cli(), "export unavailable")
         self.assertFalse(self.out.exists())
         good = json.dumps(event()) + "\n"
-        for bad, reason in ((TEXT, "invalid export JSON"), ('{"id":2}', "invalid event"),
+        for bad, reason in ((TEXT, "invalid export JSON"), ('{"id":2}', "missing-field utc line 2"),
+                            ("[]", "invalid event"),
                             (json.dumps(event(2, attachments=["../not-a-hash"])), "invalid event")):
             with self.subTest(reason=reason):
                 self.export.write_text(good + bad + "\n", encoding="utf-8")
                 self.assert_fail(self.run_cli(), reason)
                 self.assertFalse(self.out.exists())
+        # A renderer that checks only fields it displays can miss disposition.
+        for field in ("id", "utc", "chat", "sender", "direction", "kind", "text",
+                      "attachments", "disposition"):
+            with self.subTest(missing=field):
+                incomplete = event(2)
+                del incomplete[field]
+                self.export_events(event(), incomplete)
+                self.assert_fail(self.run_cli(), f"missing-field {field} line 2")
+                self.assertFalse(self.out.exists())
 
     def test_c6_read_only(self):
         # Neither rendering nor a forced output pointed back into a copy may mutate it.
+        self.copy = self.copy.rename(self.root / "pictures")  # Check each input root independently.
         png = self.attachment(PNG, "{sha}.png")
         self.export_events(event(kind="photo", attachments=[png]))
 
         def snapshot():
-            return {path.relative_to(self.inputs): (path.stat().st_mtime_ns,
+            return {path.relative_to(self.root): (path.stat().st_mtime_ns,
                      path.read_bytes() if path.is_file() else None)
-                    for path in (self.inputs, *self.inputs.rglob("*"))}
+                    for root in (self.inputs, self.copy) for path in (root, *root.rglob("*"))}
 
         before = snapshot()
         self.assert_pass(self.run_cli())
         self.assertEqual(snapshot(), before)
         for dest in (self.export, self.copy / "new.html", self.copy / f"{png}.png"):
-            self.assert_fail(self.run_cli("--force", out=dest), "output overlaps inputs")
-        self.assertEqual(snapshot(), before)
+            with self.subTest(forced=dest.relative_to(self.root)):
+                self.assert_fail(self.run_cli("--force", out=dest), "out-inside-input")
+                self.assertEqual(snapshot(), before)
+
+        # An exact-file check misses sibling output, and a lexical check misses aliases.
+        alias = self.root / "input-alias"
+        alias.symlink_to(self.inputs, target_is_directory=True)
+        for dest in (self.inputs / "page.html", self.copy / "page.html",
+                     self.copy / ".." / "input" / "dotdot.html", alias / "aliased.html"):
+            with self.subTest(destination=dest.relative_to(self.root)):
+                self.assert_fail(self.run_cli(out=dest), "out-inside-input")
+                self.assertFalse(dest.exists())
+                self.assertEqual(snapshot(), before)
 
     def test_c7_usage(self):
         # Usage failures must not be mistaken for input failures or echo private values.

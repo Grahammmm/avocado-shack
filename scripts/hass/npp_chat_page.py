@@ -17,6 +17,9 @@ import tempfile
 SHA = re.compile(r"[0-9a-f]{64}")
 YES = re.compile(r"\byes\s+[0-9a-f]{4,12}-[1-9][0-9]{0,8}\b", re.I | re.ASCII)
 TEXT_FIELDS = ("utc", "chat", "sender", "direction", "kind", "text")
+# Transcript export primary key and NOT NULL columns:
+# (id, utc, chat, sender, direction, kind, text, attachments, disposition)
+REQUIRED_FIELDS = ("id", *TEXT_FIELDS, "attachments", "disposition")
 HEAD = """<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -56,12 +59,17 @@ def read_events(path, chat):
     events = []
     try:
         with path.open(encoding="utf-8") as source:
-            for line in source:
+            for number, line in enumerate(source, start=1):
                 event = json.loads(line)
-                if (not isinstance(event, dict) or type(event.get("id")) is not int
-                        or any(not isinstance(event.get(key), str) for key in TEXT_FIELDS)
+                if not isinstance(event, dict):
+                    raise PageError("invalid event")
+                for field in REQUIRED_FIELDS:
+                    if field not in event:
+                        raise PageError(f"missing-field {field} line {number}")
+                if (type(event["id"]) is not int
+                        or any(not isinstance(event[key], str) for key in TEXT_FIELDS)
                         or event["direction"] not in ("in", "out")
-                        or not isinstance(event.get("attachments"), list)
+                        or not isinstance(event["attachments"], list)
                         or any(not isinstance(sha, str) or not SHA.fullmatch(sha)
                                for sha in event["attachments"])):
                     raise PageError("invalid event")
@@ -135,8 +143,10 @@ def output_path(path, source, directory, force):
             if os.path.lexists(ancestor / ".git"):
                 raise PageError("output inside git worktree")
     destination = parent / path.name
-    if destination == source.resolve() or destination.is_relative_to(directory):
-        raise PageError("output overlaps inputs")
+    input_roots = (source.parent.resolve(), directory)
+    if (destination == source.resolve()
+            or any(os.path.commonpath((destination, root)) == os.fspath(root) for root in input_roots)):
+        raise PageError("out-inside-input")
     if os.path.lexists(destination):
         if not force:
             raise PageError("output exists (use --force)")
