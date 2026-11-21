@@ -132,7 +132,7 @@ class PostedLinkTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         for index in positions:
             attrs, position = page.scripts[index]
-            self.assertFalse({'async', 'defer'} & attrs.keys(), attrs)
+            self.assertFalse({'async', 'defer', 'nomodule'} & attrs.keys(), attrs)
             self.assertIn(attrs.get('type', '').lower(), ('', 'text/javascript', 'application/javascript'))
             self.assertGreater(position, max([*all_buttons, close[0], policy[0],
                                               *(i for i, (_, a, _) in enumerate(page.elements)
