@@ -30,8 +30,26 @@ def parse_time(value):
     return stamp if stamp.tzinfo is not None else None
 
 
+def _temp_candidates():
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        if value := os.environ.get(name):
+            yield value
+    yield from ("/tmp", "/var/tmp", "/usr/tmp")
+    yield os.getcwd()
+
+
+def _private_temp_parent(input_roots):
+    # Do not probe by writing: even a transient file could modify an input directory.
+    for candidate in _temp_candidates():
+        path = os.path.realpath(candidate)
+        if os.path.isdir(path) and os.access(path, os.W_OK | os.X_OK) and not any(
+                os.path.commonpath((path, root)) == root for root in input_roots):
+            return path
+    return None
+
+
 @contextmanager
-def _open_snapshot(path):
+def _open_snapshot(path, temp_parent):
     # Offline inputs must already be stable. Never copy the source shared-memory sidecar.
     files = [path]
     for suffix in ("-wal", "-journal"):
@@ -44,13 +62,7 @@ def _open_snapshot(path):
             raise OSError("unsafe SQLite sidecar")
         files.append(sidecar)
 
-    # Choose the temp parent without a tempfile probe that could itself write inside --state.
-    temp_setting = os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
-    temp_root = Path(os.path.realpath(temp_setting, strict=True))
-    if temp_root.is_relative_to(path.parent.resolve()):
-        raise OSError("temporary directory is inside the input directory")
-
-    with tempfile.TemporaryDirectory(dir=temp_root) as scratch:
+    with tempfile.TemporaryDirectory(dir=temp_parent) as scratch:
         for source in files:
             shutil.copyfile(source, Path(scratch) / source.name)
         with closing(sqlite3.connect(Path(scratch) / path.name)) as db:
@@ -58,7 +70,7 @@ def _open_snapshot(path):
             yield db
 
 
-def read_window(path, query, selection, since, until):
+def read_window(path, query, selection, since, until, temp_parent):
     try:
         mode = os.lstat(path).st_mode
     except (FileNotFoundError, NotADirectoryError):
@@ -71,7 +83,7 @@ def read_window(path, query, selection, since, until):
     counts = Counter()
     unparsed = 0
     try:
-        with _open_snapshot(path) as db:
+        with _open_snapshot(path, temp_parent) as db:
             for provider_id, category, raw_time in db.execute(query):
                 stamp = parse_time(raw_time)
                 if stamp is None:
@@ -95,16 +107,25 @@ def main(argv=None):
         print(f"FAIL {NAME}")
         return 1
 
+    stores = (
+        (args.state / "inbox.sqlite3", "SELECT provider_id, state, received_at FROM inbound", "done"),
+        (args.state / "transcript.sqlite3", "SELECT provider_id, direction, utc FROM events", "in"),
+    )
+    input_roots = {os.path.realpath(args.state),
+                   *(os.path.realpath(path.parent) for path, _, _ in stores)}
+    temp_parent = _private_temp_parent(input_roots)
+    if temp_parent is None:
+        print("FAIL temp-unavailable")
+        print(f"FAIL {NAME}")
+        return 1
+
     findings = []
     windows = []
     unparsed = 0
-    for name, query, selection in (
-        ("inbox.sqlite3", "SELECT provider_id, state, received_at FROM inbound", "done"),
-        ("transcript.sqlite3", "SELECT provider_id, direction, utc FROM events", "in"),
-    ):
-        error, counts, invalid = read_window(args.state / name, query, selection, since, until)
+    for path, query, selection in stores:
+        error, counts, invalid = read_window(path, query, selection, since, until, temp_parent)
         if error is not None:
-            findings.append(f"{error} {name}")
+            findings.append(f"{error} {path.name}")
         windows.append(counts)
         unparsed += invalid
 

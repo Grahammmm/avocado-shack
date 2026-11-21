@@ -1,6 +1,8 @@
 """Offline CLI contract for the count-only inbound/transcript comparison."""
 
-from contextlib import closing
+from contextlib import closing, redirect_stderr, redirect_stdout
+import io
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -8,6 +10,9 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
+
+from scripts.hass import transcript_inbound_parity
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/hass/transcript_inbound_parity.py"
@@ -141,7 +146,8 @@ class TranscriptInboundParityTests(unittest.TestCase):
 
     def snapshot_inputs(self):
         return {p.relative_to(self.root): (p.read_bytes(), p.stat().st_mtime_ns, p.stat().st_mode)
-                if p.is_file() else None for p in self.root.rglob("*")}
+                if p.is_file() else (p.stat().st_mtime_ns, p.stat().st_mode)
+                for p in self.root.rglob("*")}
 
     def assert_unchanged_report(self, code, *lines):
         before = self.snapshot_inputs()
@@ -188,6 +194,49 @@ class TranscriptInboundParityTests(unittest.TestCase):
         target.touch()
         self.transcript.with_suffix(".sqlite3-wal").symlink_to(target.name)
         self.assert_result(self.invoke(), 1, "FAIL not-sqlite transcript.sqlite3", FAIL)
+
+    def assert_a2_temp_fallback(self, settings):
+        self.make_inbox([("matched", "done", MID)])
+        self.make_transcript([("matched", "in", MID)], wal=True)
+        with patch.dict(os.environ, settings):
+            self.assert_unchanged_report(0, "inbound-done 1", "matched 1",
+                                         "note transcript-only 0", "unparsed 0", PASS)
+
+    def test_a2_tmpdir_is_input(self):
+        # Unsafe environment hints must not cause not-sqlite or even transient input writes.
+        self.assert_a2_temp_fallback(dict.fromkeys(("TMPDIR", "TEMP", "TMP"), str(self.root)))
+
+    def test_a2_tmpdir_below_input(self):
+        # An equality-only check would allow scratch writes in this descendant.
+        nested = self.root / "nested"
+        nested.mkdir()
+        self.assert_a2_temp_fallback(dict.fromkeys(("TMPDIR", "TEMP", "TMP"), str(nested)))
+
+    def test_a2_tmpdir_missing(self):
+        # An invalid first hint must not prevent selection of the next usable parent.
+        self.assert_a2_temp_fallback({"TMPDIR": str(self.root / "absent"),
+                                      "TEMP": str(self.root.parent), "TMP": ""})
+
+    def test_a2_no_usable_temp(self):
+        # Exhaustion is a report-level failure, not a per-database SQLite error.
+        self.make_inbox()
+        self.make_transcript()
+        before = self.snapshot_inputs()
+        dir_mtime = self.root.stat().st_mtime_ns
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with (
+            patch.object(transcript_inbound_parity, "_temp_candidates",
+                         return_value=[str(self.root), str(self.root / "absent")]),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = transcript_inbound_parity.main(
+                ["--state", str(self.root), "--since", SINCE, "--until", UNTIL])
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout.getvalue(), f"FAIL temp-unavailable\n{FAIL}\n")
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertEqual(self.snapshot_inputs(), before)
+        self.assertEqual(self.root.stat().st_mtime_ns, dir_mtime)
 
     def test_c5_no_private_values(self):
         # Check both result and error paths for ID, row, argv, path, or exception leakage.
