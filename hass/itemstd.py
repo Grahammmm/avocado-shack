@@ -194,10 +194,19 @@ def _has_surrogate(data) -> bool:
     return False
 
 
+def _unique_object(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("duplicate JSON object key")
+        obj[key] = value
+    return obj
+
+
 def _load(path: Path, key: str, kind: type):
     try:
         raw = path.read_bytes()
-        data = json.loads(raw.decode("utf-8"))
+        data = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
     except RecursionError:
         raise ReportError(f"cannot read {path}: JSON nesting is too deep") from None
     except (OSError, UnicodeDecodeError, ValueError) as exc:
