@@ -340,7 +340,7 @@ def verify(backup) -> dict:
     if doc is None: return {"result": "corrupt", "problems": [f"{MANIFEST} missing or invalid"]}
     files, seen, problems = doc["files"], set(), []
     walkable = set(DIRS) | {"clover"} | ({"media", ORIG[:-1], NPP[:-1]} if "media" in doc else set())
-    if bdir.stat().st_mode & 0o777 != 0o700: problems.append("mode: backup dir")
+    if stat.S_IMODE(bdir.stat().st_mode) != 0o700: problems.append("mode: backup dir")
     def walk(path: Path, prefix: str) -> None:
         for entry in sorted(os.scandir(path), key=lambda e: e.name):
             rel, mode = prefix + entry.name, entry.stat(follow_symlinks=False).st_mode
@@ -348,12 +348,12 @@ def verify(backup) -> dict:
             elif stat.S_ISDIR(mode) and (rel in walkable
                                          or prefix == ORIG and re.fullmatch("[0-9a-f]{2}", entry.name)
                                          or prefix == NPP and "media" in doc and re.fullmatch(JOB_RE, entry.name)):
-                if mode & 0o777 != 0o700: problems.append(f"mode: {rel}")
+                if stat.S_IMODE(mode) != 0o700: problems.append(f"mode: {rel}")
                 walk(Path(entry.path), rel + "/")
             elif not stat.S_ISREG(mode) or (rel not in files and rel != MANIFEST): problems.append(f"unlisted: {rel}")
             else:
                 seen.add(rel)
-                if mode & 0o777 != 0o600: problems.append(f"mode: {rel}")
+                if stat.S_IMODE(mode) != 0o600: problems.append(f"mode: {rel}")
     walk(bdir, "")
     for rel, digest in sorted(files.items()):
         if rel not in seen: problems.append(f"missing: {rel}")

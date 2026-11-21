@@ -566,7 +566,8 @@ def words(framed, scale=2):
         try:
             if len(cols) != 12:
                 return None
-            conf, box = float(cols[10]), tuple(int(v) // scale for v in cols[6:10])
+            conf = float(cols[10])
+            left, top, width, height = map(int, cols[6:10])
             for value in cols[:6]:
                 int(value)
         except ValueError:
@@ -575,7 +576,9 @@ def words(framed, scale=2):
             return None
         token = "".join(TEXT_TOKEN.findall(cols[11].upper()))
         if conf >= TEXT_CONF and len(token) >= 3:
-            out.append((token, box))
+            if left < 0 or top < 0 or width <= 0 or height <= 0:
+                return None
+            out.append((token, tuple(v // scale for v in (left, top, width, height))))
     return out
 
 
