@@ -45,6 +45,30 @@ def fail(*reasons):
     return 1
 
 
+class _TempUnavailable(Exception):
+    pass
+
+
+def _temp_candidates():
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        value = os.environ.get(name)
+        if value:
+            yield value
+    yield from ("/tmp", "/var/tmp", "/usr/tmp")
+    yield os.getcwd()
+
+
+def _private_temp_parent(input_roots):
+    roots = tuple(os.path.realpath(root) for root in input_roots)
+    for candidate in _temp_candidates():
+        parent = os.path.realpath(candidate)
+        if any(os.path.commonpath((root, parent)) == root for root in roots):
+            continue
+        if os.path.isdir(parent) and os.access(parent, os.W_OK | os.X_OK):
+            return parent
+    return None
+
+
 @contextmanager
 def _open_snapshot(path):
     """Copy the validated store and let SQLite recover only the private copy."""
@@ -59,14 +83,11 @@ def _open_snapshot(path):
             raise ValueError("unsafe audit sidecar")
         sources.append(sidecar)
 
-    # Use an explicit parent so tempfile cannot probe or fall back to the input
-    # directory, even if it is the current directory or configured as TMPDIR.
-    state = path.parent.resolve()
-    temp_parent = Path(os.environ.get("TMPDIR") or "/tmp").resolve()
-    if temp_parent.is_relative_to(state):
-        temp_parent = state.parent
-        if temp_parent == state:
-            raise ValueError("no temporary directory outside the state directory")
+    # The sole store and its sidecars are directly in --state. Select an
+    # explicit parent so tempfile cannot probe or fall back to that input tree.
+    temp_parent = _private_temp_parent((path.parent,))
+    if temp_parent is None:
+        raise _TempUnavailable
     with tempfile.TemporaryDirectory(dir=temp_parent) as directory:
         snapshot = Path(directory)
         for source in sources:
@@ -156,6 +177,8 @@ def main(argv=None):
         return fail(f"unsafe-db {DB_NAME}")
     try:
         unexpected = summarize(path, since, until, set(args.expect_backend or ()))
+    except _TempUnavailable:
+        return fail("temp-unavailable")
     except (sqlite3.Error, OSError, ValueError):
         return fail(f"not-sqlite {DB_NAME}")
     if unexpected:

@@ -1,7 +1,8 @@
 """Offline CLI contract tests using disposable audit stores."""
 
-from contextlib import closing
+from contextlib import closing, redirect_stderr, redirect_stdout
 import importlib.util
+from io import StringIO
 import os
 from pathlib import Path
 import shutil
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/hass/interpreter_audit_report.py"
@@ -63,8 +65,12 @@ class InterpreterAuditReportTests(unittest.TestCase):
 
     def input_state(self):
         return self.root.stat().st_mtime_ns, {
-            path.name: (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
-            for path in self.root.iterdir()
+            path.relative_to(self.root): (
+                None if path.is_dir() else path.read_bytes(),
+                path.stat().st_mtime_ns,
+                path.stat().st_mode,
+            )
+            for path in self.root.rglob("*")
         }
 
     def test_c1_full_pass(self):
@@ -236,6 +242,46 @@ class InterpreterAuditReportTests(unittest.TestCase):
                                  [f"FAIL not-sqlite {DB_NAME}", FAIL])
                 self.assertTrue(sidecar.is_symlink())
                 sidecar.unlink()
+
+    def assert_a2_temp_fallback(self):
+        self.seed([(SINCE, "local", 0, None, None, None)])
+        before = self.input_state()
+        parent_mtime = self.root.parent.stat().st_mtime_ns
+        self.assertEqual(self.assert_result(self.invoke(), 0, PASS), [
+            "calls 1", "backend local 1", "fallback 0", "seconds none", "unparsed 0", PASS,
+        ])
+        self.assertEqual(self.input_state(), before)
+        # Neither the state tree nor its unlisted parent is a valid fallback.
+        self.assertEqual(self.root.parent.stat().st_mtime_ns, parent_mtime)
+
+    def test_a2_tmpdir_is_input(self):
+        # Reject equality rather than allocating in --state or its unlisted parent.
+        with patch.dict(os.environ, dict.fromkeys(("TMPDIR", "TEMP", "TMP"), str(self.root))):
+            self.assert_a2_temp_fallback()
+
+    def test_a2_tmpdir_below_input(self):
+        # Reject descendants as well; the child directory's mtime detects transient writes.
+        nested = self.root / "nested"
+        nested.mkdir()
+        with patch.dict(os.environ, dict.fromkeys(("TMPDIR", "TEMP", "TMP"), str(nested))):
+            self.assert_a2_temp_fallback()
+
+    def test_a2_tmpdir_missing(self):
+        # A missing TMPDIR must not produce not-sqlite for a valid store.
+        with patch.dict(os.environ, {"TMPDIR": str(self.root / "absent"), "TEMP": "", "TMP": ""}):
+            self.assert_a2_temp_fallback()
+
+    def test_a2_no_usable_temp(self):
+        # Exhaustion must fail distinctly without creating anything in the input tree.
+        self.seed()
+        before = self.input_state()
+        stdout, stderr = StringIO(), StringIO()
+        with (patch.object(REPORT, "_temp_candidates", return_value=[self.root, self.root / "absent"]),
+              redirect_stdout(stdout), redirect_stderr(stderr)):
+            code = REPORT.main(["--state", str(self.root), "--since", SINCE, "--until", UNTIL])
+        self.assertEqual((code, stdout.getvalue(), stderr.getvalue()),
+                         (1, f"FAIL temp-unavailable\n{FAIL}\n", ""))
+        self.assertEqual(self.input_state(), before)
 
     def test_c5_no_private_values(self):
         # Check both streams on successful output, unexpected-backend output,
