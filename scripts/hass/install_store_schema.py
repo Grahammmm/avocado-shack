@@ -2,8 +2,10 @@
 """Compare stable, checkpointed store copies with this checkout's schema."""
 
 import argparse
-from contextlib import closing
+from contextlib import closing, contextmanager
+import os
 from pathlib import Path
+import shutil
 import sqlite3
 import stat
 import sys
@@ -22,8 +24,24 @@ def schema(db):
     return result
 
 
-def reference_schema(store):
-    with tempfile.TemporaryDirectory(prefix="hass-schema-") as directory:
+def private_directory(input_dirs, prefix):
+    # Select a root before tempfile can probe it: TMPDIR can be an input directory.
+    roots = [os.environ.get(key) for key in ("TMPDIR", "TEMP", "TMP")]
+    for candidate in (*roots, "/tmp", "/var/tmp", "/usr/tmp", os.curdir):
+        if not candidate:
+            continue
+        root = Path(os.path.realpath(candidate))
+        if any(root.is_relative_to(directory) for directory in input_dirs):
+            continue
+        try:
+            return tempfile.TemporaryDirectory(prefix=prefix, dir=root)
+        except OSError:
+            continue
+    raise OSError("no writable temporary directory outside the inputs")
+
+
+def reference_schema(store, input_dirs):
+    with private_directory(input_dirs, "hass-schema-") as directory:
         root = Path(directory)
         root.chmod(0o700)
         if store == "relay":
@@ -38,31 +56,39 @@ def reference_schema(store):
             return schema(db)
 
 
-def input_schema(path):
+@contextmanager
+def _open_snapshot(path, input_dirs):
     if not stat.S_ISREG(path.lstat().st_mode):  # Do not follow a symlink supplied as the file.
         raise ValueError("not a regular file")
-    # mode=ro alone can create WAL/SHM sidecars; immutable can skip pending
-    # changes or recovery. Refuse copies that may require either sidecar.
+    sources = [path]
     for suffix in ("-wal", "-journal"):
+        sidecar = path.with_name(path.name + suffix)
         try:
-            sidecar = path.with_name(path.name + suffix).lstat()
+            mode = sidecar.lstat().st_mode
         except FileNotFoundError:
             continue
-        if not stat.S_ISREG(sidecar.st_mode) or sidecar.st_size:
-            raise ValueError("not a standalone copy")
-    uri = path.absolute().as_uri() + "?mode=ro&immutable=1"
-    with closing(sqlite3.connect(uri, uri=True)) as db:
-        return schema(db)
+        if not stat.S_ISREG(mode):
+            raise ValueError("not a regular sidecar")
+        sources.append(sidecar)
+    # SQLite can recover the snapshot and rebuild SHM without touching the inputs.
+    with private_directory(input_dirs, "hass-snapshot-") as directory:
+        root = Path(directory)
+        for source in sources:
+            shutil.copyfile(source, root / source.name)
+        with closing(sqlite3.connect(root / path.name)) as db:
+            db.execute("PRAGMA query_only=ON")
+            yield db
 
 
-def check(store, path):
+def check(store, path, input_dirs):
     try:
-        expected = reference_schema(store)
+        expected = reference_schema(store, input_dirs)
     except Exception:
         print(f"FAIL reference-error {store}")
         return False
     try:
-        actual = input_schema(path)
+        with _open_snapshot(path, input_dirs) as db:
+            actual = schema(db)
     except (OSError, ValueError, sqlite3.Error):
         print(f"FAIL not-sqlite {store}")
         return False
@@ -104,7 +130,8 @@ def main(argv=None):
     stores = [(store, path) for store, path in vars(args).items() if path is not None]
     if not stores:
         print("FAIL no-store")
-    outcomes = [check(store, path) for store, path in stores]
+    input_dirs = {Path(os.path.realpath(path.parent)) for _, path in stores}
+    outcomes = [check(store, path, input_dirs) for store, path in stores]
     if outcomes and all(outcomes):
         print("PASS install_store_schema")
         return 0

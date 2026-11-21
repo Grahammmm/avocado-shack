@@ -6,6 +6,7 @@ from io import StringIO
 import json
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import stat
 import subprocess
@@ -22,6 +23,7 @@ SCRIPT = Path(__file__).resolve().parents[2] / "scripts/hass/install_store_schem
 START = "2026-01-01T00:00:00+00:00"
 PASS = "PASS install_store_schema"
 FAIL = "FAIL install_store_schema"
+INBOX_OK = ["ok inbox.inbound", "ok inbox.meta", "ok inbox.nonces"]
 
 
 class InstallStoreSchemaTests(unittest.TestCase):
@@ -42,11 +44,21 @@ class InstallStoreSchemaTests(unittest.TestCase):
         inbox.Inbox(directory, start_at=START).db.close()
         return directory / "inbox.sqlite3"
 
-    def invoke(self, *args):
+    def invoke(self, *args, env=None):
         return subprocess.run(
             [sys.executable, "-B", str(SCRIPT), *map(str, args)],
-            cwd=self.root, capture_output=True, text=True, timeout=10,
+            cwd=self.root, capture_output=True, text=True, timeout=10, env=env,
         )
+
+    def snapshot(self, *directories):
+        # Directory mtime catches transient sidecars as well as persistent ones.
+        return {
+            directory: (directory.stat().st_mtime_ns, {
+                entry.name: (entry.read_bytes(), entry.stat().st_mtime_ns)
+                for entry in directory.iterdir()
+            })
+            for directory in directories
+        }
 
     def assert_verdict(self, result, code, last):
         self.assertEqual(result.returncode, code, result.stderr)
@@ -148,34 +160,57 @@ class InstallStoreSchemaTests(unittest.TestCase):
                 self.assertIn("usage:", result.stderr)
 
     def test_c4_read_only(self):
-        # mode=ro can create transient sidecars on a WAL-mode copy; immutable can miss WAL-only schema.
+        # A checkpointed WAL-mode input must not acquire sidecars or scratch files.
         relay = self.own_relay()
+        path = self.own_inbox()
+        with closing(sqlite3.connect(path)) as db:
+            self.assertEqual(db.execute("PRAGMA journal_mode=WAL").fetchone(), ("wal",))
+        env = dict(os.environ, TMPDIR=str(relay.parent), TEMP=str(self.root))
+        before = self.snapshot(relay.parent, path.parent)
+        lines = self.assert_verdict(self.invoke("--relay", relay, "--inbox", path, env=env), 0, PASS)
+        self.assertEqual(lines, [
+            "ok relay.card_receipt", "ok relay.meta", "ok relay.picture", "ok relay.relay", *INBOX_OK,
+        ])
+        self.assertEqual(self.snapshot(relay.parent, path.parent), before)
+
+    def test_a1_uncheckpointed_wal(self):
+        # Rejecting the WAL or opening the base alone loses the committed column.
         original = self.own_inbox()
         wal_copy_dir = self.root / "offline copy"
         wal_copy_dir.mkdir()
         copy = wal_copy_dir / original.name
-        wal_copy = copy.with_suffix(".sqlite3-wal")
         with closing(sqlite3.connect(original)) as db:
             self.assertEqual(db.execute("PRAGMA journal_mode=WAL").fetchone(), ("wal",))
-            db.execute("ALTER TABLE inbound ADD COLUMN wal_only TEXT")
-            copy.write_bytes(original.read_bytes())
-            wal_copy.write_bytes(original.with_suffix(".sqlite3-wal").read_bytes())
+            db.execute("PRAGMA wal_autocheckpoint=0")
+            db.execute("INSERT INTO meta VALUES ('fixture-key', 'fixture-value')")
+            db.commit()
             db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-            checkpointed = original.parent / "checkpointed.sqlite3"
-            checkpointed.write_bytes(original.read_bytes())
+            db.execute("ALTER TABLE inbound ADD COLUMN wal_only TEXT")
+            db.commit()
+            shutil.copyfile(original, copy)
+            shutil.copyfile(original.with_name(original.name + "-wal"), copy.with_name(copy.name + "-wal"))
 
-        def snapshot():
-            files = (relay, copy, wal_copy, checkpointed)
-            directories = (relay.parent, copy.parent, checkpointed.parent)
-            return ({p: (p.stat().st_mtime_ns, p.read_bytes()) for p in files},
-                    {d: (d.stat().st_mtime_ns, set(d.iterdir())) for d in directories})
+        before = self.snapshot(wal_copy_dir)
+        lines = self.assert_verdict(self.invoke("--inbox", copy), 0, PASS)
+        self.assertEqual(lines, [INBOX_OK[0], "note extra inbox.inbound.wal_only", *INBOX_OK[1:]])
+        self.assertEqual(self.snapshot(wal_copy_dir), before)
 
-        before = snapshot()
-        self.assert_findings(self.invoke("--relay", relay, "--inbox", copy), "FAIL not-sqlite inbox")
-        self.assertEqual(snapshot(), before)
-        lines = self.assert_verdict(self.invoke("--relay", relay, "--inbox", checkpointed), 0, PASS)
-        self.assertIn("note extra inbox.inbound.wal_only", lines)
-        self.assertEqual(snapshot(), before)
+    def test_a1_harmless_journal(self):
+        # The mere presence of a journal is not a reason to refuse the store.
+        path = self.own_inbox()
+        path.with_name(path.name + "-journal").write_bytes(b"")
+        before = self.snapshot(path.parent)
+        self.assertEqual(self.assert_verdict(self.invoke("--inbox", path), 0, PASS), INBOX_OK)
+        self.assertEqual(self.snapshot(path.parent), before)
+
+    def test_a1_symlinked_sidecar(self):
+        # Following a sidecar symlink would accept this empty target as an empty WAL.
+        path = self.own_inbox()
+        target = self.root / "empty"
+        target.write_bytes(b"")
+        path.with_name(path.name + "-wal").symlink_to(target)
+        lines = self.assert_findings(self.invoke("--inbox", path), "FAIL not-sqlite inbox")
+        self.assertEqual(lines, ["FAIL not-sqlite inbox"])
 
     def test_c5_no_private_values(self):
         # Diagnostics must never dump rows, SQLite errors containing a path, or a resolved input URI.
