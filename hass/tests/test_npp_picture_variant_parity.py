@@ -20,6 +20,7 @@ PASS = "PASS npp_picture_variant_parity"
 FAIL = "FAIL npp_picture_variant_parity"
 PHOTOS = "hass/ops/photos.py"
 JOB = "hass/npp/job.py"
+STAGES = "hass/npp/stages.py"
 SELECT = '''\
 def select_variant(cleaned=None, house=False):
     data, ext = b"", "webp"
@@ -38,6 +39,14 @@ class Jobs:
     def finish(self, result):
         return result.variant in ("raw", "house", "polished")
 '''
+RENDER = '''\
+class ProductionStages:
+    def render_listing(self, frozen):
+        parts = {}
+        if frozen.note:
+            parts["picture_own_photo" if frozen.variant == "raw" else "picture_house"] = {}
+        return Card(compose(self.replies, parts))
+'''
 NOTES = {"raw": "fixture raw note", "house": "fixture house note"}
 PARTS = {"picture_own_photo": "fixture raw note", "picture_house": "fixture house note"}
 
@@ -52,11 +61,12 @@ class PictureVariantParityTests(unittest.TestCase):
         self.script = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.script)
 
-    def fixture(self, photos: str | None = SELECT, job: str | None = FINISH, notes=NOTES, parts=PARTS):
+    def fixture(self, photos: str | None = SELECT, job: str | None = FINISH, notes=NOTES, parts=PARTS,
+                *, stages: str | None = RENDER):
         out, err = io.StringIO(), io.StringIO()
         with TemporaryDirectory(dir=self.root) as temporary:
             root = Path(temporary)
-            for name, source in ((PHOTOS, photos), (JOB, job)):
+            for name, source in ((PHOTOS, photos), (JOB, job), (STAGES, stages)):
                 if source is not None:
                     path = root / name
                     path.parent.mkdir(parents=True, exist_ok=True)
@@ -120,6 +130,15 @@ class PictureVariantParityTests(unittest.TestCase):
                                              "FAIL note-words-differ picture_house"))
         self.assertIn("variants note_words=differ", lines)
 
+    def test_c2_3_swapped_renderer_parts(self):
+        # Correct pinned words alone do not prove the renderer uses the right part.
+        swapped = RENDER.replace('"picture_own_photo" if frozen.variant == "raw" else "picture_house"',
+                                 '"picture_house" if frozen.variant == "raw" else "picture_own_photo"')
+        lines = self.assert_report(self.fixture(stages=swapped), 1, FAIL,
+                                   ("FAIL note-words-differ picture_house",
+                                    "FAIL note-words-differ picture_own_photo"))
+        self.assertIn("variants note_words=differ", lines)
+
     def test_c2_4_variants_not_found(self):
         # Refuse missing, ambiguous, or partly nonliteral evidence; never take the first match.
         duplicate_gate = FINISH.replace("        return result.variant in (\"raw\"",
@@ -131,13 +150,18 @@ class PictureVariantParityTests(unittest.TestCase):
             (PHOTOS, {"photos": SELECT.replace('"house", data', 'computed, data')}),
             (JOB, {"job": FINISH.replace('("raw", "house", "polished")', "allowed")}),
             (JOB, {"job": duplicate_gate}),
+            (STAGES, {"stages": RENDER.replace('else "picture_house"', 'else dynamic_part')}),
+            (STAGES, {"stages": RENDER.replace('if frozen.note:', 'if not frozen.note:')}),
+            (STAGES, {"stages": RENDER.replace('else "picture_house"', 'else "picture_own_photo"')}),
+            (STAGES, {"stages": RENDER.replace('        return Card', '        parts = {}\n        return Card')}),
         ):
             with self.subTest(path=path, changes=changes):
                 self.assert_report(self.fixture(**changes), 1, FAIL, (f"FAIL variants-not-found {path}",))
 
     def test_c2_5_parse_error(self):
         # Unreadable and syntactically invalid files share one terse finding, not a traceback.
-        for changes in ({"photos": None}, {"job": "class Jobs:\n"}, {"photos": None, "job": "class Jobs:\n"}):
+        for changes in ({"photos": None}, {"job": "class Jobs:\n"}, {"photos": None, "job": "class Jobs:\n"},
+                        {"stages": None}, {"stages": "class ProductionStages:\n"}):
             with self.subTest(changes=changes):
                 self.assert_report(self.fixture(**changes), 1, FAIL, ("FAIL parse-error",))
 

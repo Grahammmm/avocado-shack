@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 PHOTOS = "hass/ops/photos.py"
 JOB = "hass/npp/job.py"
-# The two fallback parts used by render_listing; polished has no fallback note.
-NOTE_PARTS = (("raw", "picture_own_photo"), ("house", "picture_house"))
+STAGES = "hass/npp/stages.py"
+EXPECTED_NOTE_PARTS = {"raw": "picture_own_photo", "house": "picture_house"}
 
 
 def _unique_definition(body, kind, name):
@@ -81,6 +81,58 @@ def _accepted(tree):
     return words if None not in words else None
 
 
+def _note_parts(tree):
+    stages = _unique_definition(tree.body, ast.ClassDef, "ProductionStages")
+    render = _unique_definition(stages.body, ast.FunctionDef, "render_listing") if stages else None
+    if render is None:
+        return None
+
+    # Recognize the guarded write in the method body, not a matching ternary
+    # elsewhere. The literal arms are evidence; their order is not assumed.
+    note_guards = [node for node in render.body if isinstance(node, ast.If)
+                   and isinstance(node.test, ast.Attribute) and node.test.attr == "note"
+                   and isinstance(node.test.value, ast.Name) and node.test.value.id == "frozen"]
+    if len(note_guards) != 1:
+        return None
+    match note_guards[0]:
+        case ast.If(orelse=[], body=[ast.Assign(
+            targets=[ast.Subscript(value=ast.Name(id="parts") as target, slice=ast.IfExp(
+                test=ast.Compare(left=ast.Attribute(value=ast.Name(id="frozen"), attr="variant"),
+                                 ops=[ast.Eq()], comparators=[ast.Constant(value="raw")]),
+                body=ast.Constant(value=str(raw)), orelse=ast.Constant(value=str(house))))],
+            value=ast.Dict(keys=[]),
+        )]):
+            if ({raw, house} == set(EXPECTED_NOTE_PARTS.values())
+                    and _known_parts_flow(render, note_guards[0], target, {raw, house})):
+                return {"raw": raw, "house": house}
+    return None
+
+
+def _known_parts_flow(render, guard, target, picture_keys):
+    """Refuse a decoy write if the ready prompt uses different or later-mutated parts."""
+    index = render.body.index(guard)
+    if not index or not isinstance(render.body[-1], ast.Return):
+        return False
+    match render.body[index - 1]:
+        case ast.Assign(targets=[ast.Name(id="parts") as initial], value=ast.Dict(keys=[])):
+            allowed = {initial, target}
+        case _:
+            return False
+    match render.body[-1]:
+        case ast.Return(value=ast.Call(func=ast.Name(id="Card"), args=[*_, ast.Call(
+            func=ast.Name(id="compose"), args=[_, ast.Name(id="parts") as output], keywords=[],
+        )])):
+            allowed.add(output)
+        case _:
+            return False
+    for node in ast.walk(render):
+        match node:
+            case ast.Subscript(value=ast.Name(id="parts") as other,
+                               slice=ast.Constant(value=str(key)), ctx=ast.Store()) if key not in picture_keys:
+                allowed.add(other)
+    return all(node in allowed for node in ast.walk(render) if isinstance(node, ast.Name) and node.id == "parts")
+
+
 def _print_variants(label, variants):
     print(f"variants {label}={','.join(sorted(variants))}")
 
@@ -93,8 +145,9 @@ def main(argv=None):
         parser.error("no arguments are accepted")
 
     findings = []
-    variants = {}
-    for label, path, extract in (("chosen", PHOTOS, _chosen), ("accepted", JOB, _accepted)):
+    sources = {}
+    for label, path, extract in (("chosen", PHOTOS, _chosen), ("accepted", JOB, _accepted),
+                                 ("note_parts", STAGES, _note_parts)):
         try:
             found = extract(ast.parse((ROOT / path).read_bytes()))
         except (OSError, SyntaxError, ValueError, RecursionError):
@@ -103,8 +156,9 @@ def main(argv=None):
         if found is None:
             findings.append(f"variants-not-found {path}")
         else:
-            variants[label] = found
-            _print_variants(label, found)
+            sources[label] = found
+            if label != "note_parts":
+                _print_variants(label, found)
 
     notes = parts = None
     try:
@@ -126,13 +180,14 @@ def main(argv=None):
 
     if notes is not None:
         _print_variants("noted", notes)
-    if "chosen" in variants and "accepted" in variants:
-        findings.extend(f"variant-not-accepted {v}" for v in sorted(variants["chosen"] - variants["accepted"]))
-    if "chosen" in variants and notes is not None:
-        findings.extend(f"note-without-variant {v}" for v in sorted(notes.keys() - variants["chosen"]))
-    if notes is not None and parts is not None:
-        differing = [part for v, part in NOTE_PARTS
-                     if v not in notes or part not in parts or notes[v] != parts[part]]
+    if "chosen" in sources and "accepted" in sources:
+        findings.extend(f"variant-not-accepted {v}" for v in sorted(sources["chosen"] - sources["accepted"]))
+    if "chosen" in sources and notes is not None:
+        findings.extend(f"note-without-variant {v}" for v in sorted(notes.keys() - sources["chosen"]))
+    if notes is not None and parts is not None and "note_parts" in sources:
+        differing = [part for v, part in sources["note_parts"].items()
+                     if v not in notes or part not in parts or notes[v] != parts[part]
+                     or part != EXPECTED_NOTE_PARTS[v]]
         print(f"variants note_words={'differ' if differing else 'same'}")
         findings.extend(f"note-words-differ {part}" for part in differing)
 
