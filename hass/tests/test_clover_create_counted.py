@@ -1,10 +1,13 @@
 """Offline contracts for creating a till item with its first count."""
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 from hass import content_model
 from hass.clover import bundle, config, drafts, mapper, sku
-from hass.tests.test_clover_client import NoNetwork
+from hass.clover.apply import ApplyEngine
+from hass.tests.test_clover_client import FAKE_TOKEN, NoNetwork
 
 
 NAME = "Blue mug"
@@ -100,3 +103,73 @@ class CountedCreateTests(NoNetwork):
                                            "json": {**legacy.after, "priceType": "FIXED"}},))
         self.assertEqual(legacy.lines[-3:], ("  Count: not counted yet (say 'received 12 Blue mug' to start counting)",
                                              "  Tax: your till's usual setting; I set none", "Nothing goes on the website."))
+
+
+class CountedTill:
+    def __init__(self, starting_stock, price_readback):
+        self.starting_stock, self.price_readback = starting_stock, price_readback
+        self.writes = []
+        self.item = {}
+
+    def list_items(self):
+        return []
+
+    def get_item(self, item_id):
+        assert item_id == self.item["id"]
+        return {**self.item, **self.price_readback}
+
+    def write(self, method, path, body):
+        self.writes.append((method, path, body))
+        if (method, path) == ("POST", "/items"):
+            self.item = {**body, "id": "FAKEITEM00001", "modifiedTime": 1,
+                         "itemStock": {"quantity": self.starting_stock, "modifiedTime": 1}}
+            return {"id": self.item["id"]}
+        if (method, path) == ("PUT", "/item_stocks/FAKEITEM00001"):
+            self.item["itemStock"] = {**body, "modifiedTime": 2}
+            return {}
+        raise AssertionError((method, path))
+
+
+class CountedApplyTests(NoNetwork):
+    def apply_counted(self, price, quantity, till):
+        with TemporaryDirectory() as root:
+            token_file = Path(root) / "fake-write"
+            token_file.write_text(FAKE_TOKEN)
+            token_file.chmod(0o600)
+            cfg = replace(CFG, writes=True, live_approved=True, write_token_file=str(token_file))
+            owner = {"sender": "fixture-owner", "chat": "fixture-private"}
+            engine = ApplyEngine(root, cfg, lambda _: till, mike=(owner["sender"], owner["chat"]))
+            journal = bundle.BundleJournal(root)
+            site = SimpleNamespace(settings={}, conv=None, stopped=lambda: False)
+            draft = drafts.build_create_counted(NAME, price, None, quantity, [], cfg)
+            code, _ = bundle.propose(site_ops=(), till_draft=draft, link=None, journal=journal,
+                                     engine=engine, site=site, **owner)
+            state, _ = bundle.apply(code, journal=journal, engine=engine, site=site,
+                                    link_writer=None, now=engine.clock(), **owner)
+            return state, journal.get(code)
+
+    def test_c2_apply_verifies_both_price_basis_fields(self):
+        # R1/C2: accepting matching cents alone can approve a fixed price or the wrong weighing unit.
+        for price_readback, expected in (({"priceType": "FIXED"}, "failed"),
+                                        ({"unitName": "kg"}, "failed"),
+                                        ({"unitName": None}, "failed"),
+                                        ({}, "done")):
+            with self.subTest(price_readback=price_readback):
+                till = CountedTill(0, price_readback)
+                state, _ = self.apply_counted("8.00 per lb", 2, till)
+                self.assertEqual(state, expected)
+                self.assertEqual(till.item["price"], 800)
+                expected_writes = ["POST"] if expected == "failed" else ["POST", "PUT"]
+                self.assertEqual([method for method, _, _ in till.writes], expected_writes)
+
+    def test_c1_zero_first_count_needs_no_write_when_already_zero(self):
+        # R1/C1: an already-zero item must not hit the stock builder's no-change refusal.
+        # A nonzero default still needs an actual stock write; don't assume that every new item is zero.
+        for initial, methods in ((0, ["POST"]), (3, ["POST", "PUT"]), (None, ["POST", "PUT"])):
+            with self.subTest(initial=initial):
+                till = CountedTill(initial, {})
+                state, row = self.apply_counted("14.00 each", 0, till)
+                assert row is not None
+                self.assertEqual((state, row["till"]), ("done", "applied"))
+                self.assertEqual(till.item["itemStock"]["quantity"], 0)
+                self.assertEqual([method for method, _, _ in till.writes], methods)

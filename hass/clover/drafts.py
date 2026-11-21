@@ -177,8 +177,9 @@ def build_create_counted(name, price_text, category, quantity, items, config, *,
         raise DraftRefused(str(exc)) from None
     create = build_create_item(name, cents, category, items, config, categories=categories, writes_today=writes_today)
     first, *category_requests = create.requests
-    if unit:
-        first = {**first, "json": {**first["json"], "priceType": "PER_UNIT", "unitName": unit}}
+    price_basis = {"priceType": "PER_UNIT", "unitName": unit} if unit else {}
+    if price_basis:
+        first = {**first, "json": {**first["json"], **price_basis}}
     item = SimpleNamespace(name=create.label, price_type=first["json"]["priceType"], unit_name=unit)
     count = _qty(quantity, item, config)
     stock = format_quantity(count)
@@ -187,7 +188,7 @@ def build_create_counted(name, price_text, category, quantity, items, config, *,
              f"  Count: {stock}", "  On the register: showing")
     # The bundle removes this placeholder from the first step and builds a literal-ID stock draft after creation.
     stock_request = {"method": "PUT", "path": "/item_stocks/{newItemId}", "json": {"quantity": _number(count)}}
-    return replace(create, lines=lines, after={**create.after, "stock": stock},
+    return replace(create, lines=lines, after={**create.after, **price_basis, "stock": stock},
                    requests=(first, *category_requests, stock_request))
 
 
