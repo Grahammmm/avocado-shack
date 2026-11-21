@@ -93,7 +93,11 @@ class CorrLog:
             fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
             try:
                 if not stat.S_ISREG(os.fstat(fd).st_mode): return False
-                os.write(fd, (json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
+                pending = memoryview((json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
+                while pending:
+                    written = os.write(fd, pending)
+                    if written == 0: return False
+                    pending = pending[written:]
             finally: os.close(fd)
             return True
         except Exception:  # noqa: BLE001 - a log row is never worth a lost reply
