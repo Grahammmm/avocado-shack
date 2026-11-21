@@ -14,8 +14,10 @@ The rule, applied per changed path (renames count under both names). The first m
      imports, plus every mention of a file's basename or hass.* dotted name. A test module is selected when its
      closure reaches the path, or reaches code that mentions the path's basename, its stem (4+ chars), its top
      directory, or its suffix pattern ("*.md", ".md").
+     For Python scripts in scripts/hass/, imports, basename/stem references and matching
+     path-qualified globs count; unrelated generic directory and suffix mentions do not.
        a hass/ path that no test reaches            -> FULL (unmapped)
-       a hass/ module reached by >50% of the tests  -> FULL (shared library)
+       a hass/ or scripts/hass/ Python module reached by >50% of the tests -> FULL (shared library)
        an unreached path in a known non-hass area   -> nothing (docs, planning, reports, branding, commerce,
          (KNOWN_AREAS) or any *.md                     storefront-mockup and inventory-intake have their own
                                                        checks, which run on every PR)
@@ -35,6 +37,7 @@ Commands:
 import argparse
 import ast
 import collections
+import fnmatch
 import json
 import os
 import re
@@ -66,6 +69,7 @@ CODE_SUFFIXES = (".py", ".cjs", ".mjs", ".js", ".sh")
 MAX_CODE_BYTES = 2_000_000
 FILE_RE = re.compile(r"[\w.-]+\.(?:py|cjs|mjs|js|sh)\b")
 DOTTED_RE = re.compile(r"\bhass(?:\.\w+)+")
+PATH_GLOB_RE = re.compile(r"[\w./*?\[\]-]+")
 
 
 # ---------------------------------------------------------------- inventory
@@ -143,6 +147,10 @@ def dotted(path):
     return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
 
 
+def hass_script(path):
+    return path.startswith("scripts/hass/") and path.endswith(".py")
+
+
 def resolve(name, mods):
     """Longest dotted prefix of name that is a tracked hass module, or None."""
     parts = name.split(".")
@@ -189,6 +197,12 @@ def build_graph(root=ROOT, files=None):
     for p in code:
         by_base[p.rsplit("/", 1)[-1]].add(p)
     mods = {dotted(p): p for p in code if p.startswith("hass/") and p.endswith(".py")}
+    script_imports = collections.defaultdict(set)
+    for p in code:
+        if hass_script(p):
+            script_imports[dotted(p)].add(p)
+            # Standalone scripts can also be imported after adding their directory to sys.path.
+            script_imports[Path(p).stem].add(p)
     by_stem = collections.defaultdict(set)
     for name, p in mods.items():
         by_stem[name.rsplit(".", 1)[-1]].add(p)
@@ -221,6 +235,7 @@ def build_graph(root=ROOT, files=None):
                         refs.add(hit)
                     # `import conversation` after a sys.path edit: match on the last component too.
                     refs |= by_stem.get(name.rsplit(".", 1)[-1], set())
+                    refs |= script_imports.get(name, set())
         refs.discard(p)
         edges[p] = refs
     return texts, edges
@@ -246,6 +261,8 @@ def tokens(path):
     out = {base}
     if len(stem) >= 4:
         out.add(stem)
+    if hass_script(path):
+        return out | {stem}
     top = path.split("/", 1)[0]
     if "/" in path and top != "hass":
         out.add(top)
@@ -274,13 +291,22 @@ def select(paths, modules, texts, edges, notes=None):
             return None, f"{path}: test infrastructure (not a current test module)"
         hit = set(reached_by.get(path, ()))
         toks = tokens(path)
-        mentions = {f for f, text in texts.items() if any(t in text for t in toks)}
+        is_script = hass_script(path)
+        if is_script:
+            # A longer name such as other_X is not a reference to X. Generic tokens like
+            # "scripts" would otherwise fan out through ordinary shared QA helpers.
+            ref = re.compile(r"(?<!\w)(?:" + "|".join(map(re.escape, sorted(toks))) + r")(?!\w)")
+            mentions = {f for f, text in texts.items() if ref.search(text) or any(
+                "/" in pattern and any(c in pattern for c in "*?[") and fnmatch.fnmatchcase(path, pattern)
+                for pattern in PATH_GLOB_RE.findall(text))}
+        else:
+            mentions = {f for f, text in texts.items() if any(t in text for t in toks)}
         for f in mentions:
             hit |= reached_by.get(f, set())
         if path in files:
             hit.add(files[path])
         in_hass = path.startswith("hass/")
-        if in_hass and path.endswith(".py") and len(hit) > SHARED_FRACTION * len(modules):
+        if (in_hass or is_script) and path.endswith(".py") and len(hit) > SHARED_FRACTION * len(modules):
             return None, f"{path}: shared library, reached by {len(hit)} of {len(modules)} test modules"
         if not hit:
             if in_hass:
