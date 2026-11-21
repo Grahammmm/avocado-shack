@@ -71,9 +71,11 @@ def _findings():
             select = copy.codex_selector(transport=reply)
             raw = select({'model': 'm-1', 'effort': 'low', 'timeout_s': 5}, 'P', {}, {})
             result = writer.write(ctx, select)
-            rejected_raw = group == 'none' and raw is not None
+            # Use the existing bad-reply finding for either adapter mismatch;
+            # an ignored parsed reply must not be silently rejected as None.
+            bad_raw = (group == 'none' and raw is not None) or (group == 'ignored' and raw is None)
             if result is None:
-                if rejected_raw:
+                if bad_raw:
                     yield f'bad-reply-used {name}'
                 yield f'write-none {name}'
                 continue
@@ -88,7 +90,7 @@ def _findings():
                     for field, choice in GOOD.items()
                 ):
                     yield 'good-reply-dropped'
-            elif rejected_raw or result.selections != defaults or not result.basic:
+            elif bad_raw or result.selections != defaults or not result.basic:
                 yield f'bad-reply-used {name}'
         except Exception:
             yield 'check-error'

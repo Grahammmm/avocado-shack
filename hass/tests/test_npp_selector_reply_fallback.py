@@ -100,6 +100,25 @@ class SelectorReplyFallbackTests(unittest.TestCase):
                 with patch.object(writer, 'write', regress):
                     self.assert_findings(self.invoke(), 'FAIL bad-reply-used list')
 
+    def test_c2_1_ignored_reply_rejected_by_adapter(self):
+        # The real selector must expose ignored parsed replies, not reject them.
+        copy = self.tool.copy
+        real_selector = copy.codex_selector
+
+        def regress(transport):
+            select = real_selector(transport=transport)
+
+            def reject_list(*args):
+                raw = select(*args)
+                return None if raw == [1, 2] else raw
+
+            return reject_list
+
+        with patch.object(copy, 'codex_selector', regress):
+            lines = self.assert_findings(self.invoke(), 'FAIL bad-reply-used list')
+        self.assertIn('reply list raw=none basic=yes', lines)
+        self.assertIn('reply unknown-template raw=dict basic=yes', lines)
+
     def test_c2_1_bad_reply_used_scalar(self):
         # A scalar accepted by the real selector must not crash reply-kind reporting,
         # even when the real writer still falls back to defaults.
