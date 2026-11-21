@@ -32,10 +32,15 @@ class FakeClover:
         match = re.fullmatch(rf"/v3/merchants/({ID})(/.*)?", path)
         route = (match[2] or "") if match else ""
         detail = re.fullmatch(rf"/(items|item_stocks)/({ID})", route)
-        template = path
-        if match:
-            suffix = f"/{detail[1]}/{{id}}" if detail else route
-            template = "/v3/merchants/{id}" + suffix
+        # Only keep known route literals in their fixed positions. Unknown
+        # segments could be IDs even when the request won't match a route.
+        parts = path.split("/")
+        template_parts = ["{id}" if part else "" for part in parts]
+        if parts[:3] == ["", "v3", "merchants"]:
+            template_parts[:3] = parts[:3]
+            if len(parts) > 4 and parts[4] in ("items", "item_stocks", "categories", "category_items"):
+                template_parts[4] = parts[4]
+        template = "/".join(template_parts)
         try:
             body = json.loads(request.body) if request.body is not None else None
         except ValueError:

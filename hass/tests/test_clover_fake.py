@@ -101,10 +101,14 @@ class FakeCloverTests(NoNetwork):
         self.reader.get_merchant()
         self.reader.get_item(ITEM)
         self.writer.write("PUT", f"/item_stocks/{ITEM}", {"quantity": 5})
+        # Templating only supported routes would leak the ID of a rejected category request.
+        rejected = Request("GET", f"/v3/merchants/{MERCHANT}/categories/{CATEGORY}", SecretHeaders())
+        self.assertEqual(self.fake(rejected).status, 405)
         self.assertEqual(self.fake.log, [
             ("GET", PREFIX, None),
             ("GET", PREFIX + "/items/{id}", None),
             ("PUT", PREFIX + "/item_stocks/{id}", {"quantity": 5}),
+            ("GET", PREFIX + "/categories/{id}", None),
         ])
         self.assertNotIn(FAKE_TOKEN, repr(self.fake.log))
         self.assertNotIn(FAKE_TOKEN, repr(self.fake))
