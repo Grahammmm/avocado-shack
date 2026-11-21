@@ -2,8 +2,10 @@
 
 from contextlib import closing
 import importlib.util
+import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -32,17 +34,21 @@ class RetentionUncountedTablesTests(unittest.TestCase):
         with closing(sqlite3.connect(self.state / f"{name}.sqlite3")) as db:
             db.executescript(sql)
 
-    def cli(self, *args):
+    def cli(self, *args, env=None):
         return subprocess.run([sys.executable, "-B", str(SCRIPT), *args],
-                              cwd=self.state, capture_output=True, text=True, timeout=10)
+                              cwd=self.state, env=env, capture_output=True, text=True, timeout=10)
 
-    def report(self):
-        return self.cli("--state", str(self.state))
+    def report(self, *, env=None):
+        return self.cli("--state", str(self.state), env=env)
 
     def assert_report(self, result, code, *lines):
         self.assertEqual(result.returncode, code, result.stderr)
         self.assertEqual(result.stdout, "\n".join((*lines, FAIL if code else PASS)) + "\n")
         self.assertEqual(result.stderr, "")
+
+    def snapshot(self):
+        return (self.state.stat().st_mtime_ns,
+                {p.name: (p.read_bytes(), p.stat().st_mtime_ns, p.stat().st_mode) for p in self.state.iterdir()})
 
     def test_c1_full_pass(self):
         # A fixed extras list, a global exclusion set, bad quoting, or counting
@@ -125,24 +131,69 @@ class RetentionUncountedTablesTests(unittest.TestCase):
         self.store("conversation", "PRAGMA journal_mode=WAL; CREATE TABLE usage (x); INSERT INTO usage VALUES (NULL);")
         self.store("inbox", "CREATE TABLE meta (x);")
 
-        def snapshot():
-            return (self.state.stat().st_mtime_ns,
-                    {p.name: (p.read_bytes(), p.stat().st_mtime_ns, p.stat().st_mode) for p in self.state.iterdir()})
+        before = self.snapshot()
+        # A temp directory configured inside --state also must not be used.
+        for env in (None, {**os.environ, "TMPDIR": str(self.state)}):
+            with self.subTest(temp_inside_state=env is not None):
+                self.assert_report(self.report(env=env), 0, "table conversation.usage rows 1", "table inbox.meta rows 0")
+                self.assertEqual(self.snapshot(), before)
 
-        before = snapshot()
-        self.assert_report(self.report(), 0, "table conversation.usage rows 1", "table inbox.meta rows 0")
-        self.assertEqual(snapshot(), before)
-
-        # A stable copy with committed WAL frames must not return stale counts.
-        source = self.state.parent / "wal-source.sqlite3"
+    def test_a1_uncheckpointed_wal(self):
+        # Rejecting the WAL or opening an immutable snapshot loses committed data.
+        self.store("inbox", "CREATE TABLE meta (x);")
+        source = self.state.parent / "conversation.sqlite3"
         with closing(sqlite3.connect(source)) as db:
-            db.executescript("PRAGMA journal_mode=WAL; CREATE TABLE usage (x);"
-                             "PRAGMA wal_checkpoint(TRUNCATE); INSERT INTO usage VALUES (NULL);")
+            db.executescript("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;"
+                             "CREATE TABLE usage (x); INSERT INTO usage VALUES (NULL);")
+            self.assertEqual(db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone(), (0, 0, 0))
+            db.execute("INSERT INTO usage VALUES (NULL)")
+            db.execute("CREATE TABLE retries (x)")
+            db.execute("INSERT INTO retries VALUES (NULL)")
+            db.commit()
             for suffix in ("", "-wal"):
-                (self.state / f"conversation.sqlite3{suffix}").write_bytes(Path(str(source) + suffix).read_bytes())
-        before = snapshot()
+                name = source.name + suffix
+                shutil.copyfile(source.with_name(name), self.state / name)
+        before = self.snapshot()
+        self.assert_report(self.report(), 0, "table conversation.retries rows 1",
+                           "table conversation.usage rows 2", "table inbox.meta rows 0")
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a1_harmless_journal(self):
+        # Sidecar presence alone must not cause a refusal or input cleanup.
+        self.store("conversation", "CREATE TABLE usage (x);")
+        self.store("inbox", "CREATE TABLE meta (x);")
+        (self.state / "conversation.sqlite3-journal").touch()
+        before = self.snapshot()
+        self.assert_report(self.report(), 0, "table conversation.usage rows 0", "table inbox.meta rows 0")
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a1_hot_journal(self):
+        # Ignoring a hot journal can expose uncommitted pages instead of rolling them back.
+        self.store("inbox", "CREATE TABLE meta (x);")
+        source = self.state.parent / "conversation.sqlite3"
+        journal = source.with_name(source.name + "-journal")
+        with closing(sqlite3.connect(source)) as db:
+            db.executescript("PRAGMA journal_mode=DELETE; PRAGMA cache_size=3;"
+                             "CREATE TABLE usage (x); INSERT INTO usage VALUES (NULL);")
+            committed = source.read_bytes()
+            db.execute("BEGIN")
+            db.executemany("INSERT INTO usage VALUES (zeroblob(4096))", [()] * 32)
+            # A tiny pager cache forces uncommitted pages onto disk before copying.
+            self.assertNotEqual(source.read_bytes(), committed)
+            for file in (source, journal):
+                shutil.copyfile(file, self.state / file.name)
+        before = self.snapshot()
+        self.assert_report(self.report(), 0, "table conversation.usage rows 1", "table inbox.meta rows 0")
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a1_symlinked_sidecar(self):
+        # stat()/exists() would follow this link and admit an empty regular file.
+        self.store("conversation", "CREATE TABLE usage (x);")
+        self.store("inbox", "CREATE TABLE meta (x);")
+        target = self.state.parent / "decoy"
+        target.touch()
+        (self.state / "conversation.sqlite3-wal").symlink_to(target)
         self.assert_report(self.report(), 1, "FAIL not-sqlite conversation.sqlite3", "table inbox.meta rows 0")
-        self.assertEqual(snapshot(), before)
 
     def test_c5_no_private_values(self):
         # Catch row dumps, SQLite diagnostics and argument errors echoing paths.

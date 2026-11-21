@@ -2,11 +2,13 @@
 """List row counts for tables omitted by the Hass retention report."""
 
 import argparse
-from contextlib import closing
+from contextlib import closing, contextmanager
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import stat
+import tempfile
 from typing import NoReturn
 
 
@@ -22,18 +24,41 @@ class PrivateArgumentParser(argparse.ArgumentParser):
         super().error("invalid arguments; use --help")
 
 
-def table_counts(path, counted):
-    # Only for offline, stable inputs. A plain mode=ro connection can still
-    # create WAL sidecars; immutable prevents writes but may skip journal data.
+@contextmanager
+def _open_snapshot(path):
+    # Only for offline, stable inputs. SQLite can recover journals and build
+    # WAL shared memory on the copy without touching the input directory.
+    sources = [path]
     for suffix in ("-wal", "-journal"):
+        sidecar = path.with_name(path.name + suffix)
         try:
-            sidecar = os.lstat(path.with_name(path.name + suffix))
+            mode = os.lstat(sidecar).st_mode
         except FileNotFoundError:
             continue
-        if not stat.S_ISREG(sidecar.st_mode) or sidecar.st_size:
-            raise sqlite3.DatabaseError("store must be cleanly closed and checkpointed")
-    uri = f"{path.absolute().as_uri()}?mode=ro&immutable=1"
-    with closing(sqlite3.connect(uri, uri=True)) as db:
+        if not stat.S_ISREG(mode):
+            raise sqlite3.DatabaseError("unsafe SQLite sidecar")
+        sources.append(sidecar)
+
+    # Choose the directory explicitly: tempfile's default discovery can probe
+    # TMPDIR (or the working directory) by creating a file there.
+    state = path.parent.resolve()
+    temp_root = Path(os.environ.get("TMPDIR") or "/tmp").resolve()
+    if temp_root.is_relative_to(state):
+        temp_root = state.parent
+        if temp_root == state:
+            raise sqlite3.DatabaseError("no snapshot location outside the input directory")
+
+    with tempfile.TemporaryDirectory(dir=temp_root) as temp:
+        snapshot = Path(temp)
+        for source in sources:
+            shutil.copyfile(source, snapshot / source.name)
+        with closing(sqlite3.connect(snapshot / path.name)) as db:
+            db.execute("PRAGMA query_only=ON")
+            yield db
+
+
+def table_counts(path, counted):
+    with _open_snapshot(path) as db:
         names = db.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
         counts = []
         for (name,) in names:
@@ -51,9 +76,12 @@ def inspect(state, store, counted):
     try:
         if not stat.S_ISREG(os.lstat(path).st_mode):
             return f"unsafe-db {name}", []
-        return None, table_counts(path, counted)
     except (FileNotFoundError, NotADirectoryError):
         return f"missing-db {name}", []
+    except (OSError, ValueError):
+        return f"not-sqlite {name}", []
+    try:
+        return None, table_counts(path, counted)
     except (OSError, ValueError, sqlite3.Error):
         return f"not-sqlite {name}", []
 
