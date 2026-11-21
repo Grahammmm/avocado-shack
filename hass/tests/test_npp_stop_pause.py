@@ -75,6 +75,11 @@ class ListingReplay:
     def flush(self):
         return self.conv.flush(self.sink)
 
+    def pump(self):
+        jobs = self.conv.npp
+        assert jobs is not None
+        jobs.pump()
+
     def receipt(self):
         version = self.version
         self.now += timedelta(seconds=1)
@@ -124,51 +129,69 @@ class StopPauseTests(unittest.TestCase):
         self.start_render(replay)
         replay.executor.run()
         # Pump independently to leave a real outbox row pending before the next flush.
-        replay.conv.npp.pump()
+        replay.pump()
         version = replay.version
         self.assertEqual(version["state"], "queued")
         self.assertIsNone(version["delivered_at"])
         self.assertIn((version["outbox_id"], None), replay.outbox())
         replay.sink.send_card.assert_not_called()
 
-    @unittest.expectedFailure  # Jobs.pump, dispatch and refresh_receipts still advance work while paused.
     def test_c1_stop_holds_replies(self):
-        # A late worker result, an already queued card, and a late receipt use different paths.
-        observed = {}
-        for window in ("late-question", "queued-card", "late-receipt"):
-            replay = self.replay()
-            if window == "late-question":
-                self.assertEqual(replay.say("Fixture jam", photo=True), "npp-working")
-                self.assertEqual(replay.flush(), 0)  # submit the plan but do not finish it yet
-                self.assertEqual(len(replay.executor.steps), 1)
-            else:
-                self.ready_card(replay)
-                if window == "late-receipt":
-                    self.assertEqual(replay.flush(), 1)
+        # A completed worker, pending text/card, and late receipt must each be held and released once.
+        for window in ("late-question", "queued-question", "queued-card", "late-receipt"):
+            with self.subTest(window=window):
+                replay = self.replay()
+                question = window.endswith("question")
+                pending = None
+                if question:
+                    self.assertEqual(replay.say("Fixture jam", photo=True), "npp-working")
+                    self.assertEqual(replay.flush(), 0)
+                    self.assertEqual(len(replay.executor.steps), 1)
+                    if window == "queued-question":
+                        replay.executor.run()
+                        replay.pump()
+                        [(pending, sent_at)] = replay.outbox()
+                        self.assertIsNone(sent_at)
+                else:
+                    self.ready_card(replay)
+                    pending = replay.version["outbox_id"]
+                    if window == "late-receipt":
+                        self.assertEqual(replay.flush(), 1)
+                        replay.sink.send_card.assert_called_once()
+                self.assertEqual(replay.job["state"], "asking" if window == "queued-question" else "working")
+                before = replay.outbox()
+                ack = self.stop(replay)
+                replay.sink.reset_mock()
+                if window == "late-question":
+                    replay.executor.run()
+                elif window == "late-receipt":
+                    replay.receipt()
+
+                self.assertEqual((replay.flush(), replay.flush()), (1, 0))  # only the stop acknowledgement
+                self.assertTrue(dict(replay.outbox())[ack])
+                self.assertEqual([row for row in replay.outbox() if row[0] != ack], before)
+                replay.sink.send.assert_called_once()
+                replay.sink.send_card.assert_not_called()
+                if not question:
+                    self.assertEqual(replay.version["state"], "queued")
+                    self.assertIsNone(replay.version["delivered_at"])
+
+                replay.sink.reset_mock()
+                self.assertEqual(replay.say("resume changes"), "resume")
+                self.assertEqual((replay.flush(), replay.flush()), (1 if window == "late-receipt" else 2, 0))
+                if pending is not None:
+                    self.assertTrue(dict(replay.outbox())[pending])
+                if question:
+                    sent_questions = [call for call in replay.sink.send.call_args_list if call.args[1] == QUESTION]
+                    self.assertEqual(len(sent_questions), 1)
+                    replay.sink.send_card.assert_not_called()
+                elif window == "queued-card":
                     replay.sink.send_card.assert_called_once()
-            self.assertEqual(replay.job["state"], "working")
-            before = replay.outbox()
-            ack = self.stop(replay)
-            replay.sink.reset_mock()
-            if window == "late-question":
-                replay.executor.run()
-            elif window == "late-receipt":
-                replay.receipt()
-            sent = (replay.flush(), replay.flush())
-            self.assertTrue(dict(replay.outbox())[ack], "stop acknowledgement was not sent")
-            observed[window] = {
-                "flush_counts": sent,
-                "job_outbox_unchanged": [row for row in replay.outbox() if row[0] != ack] == before,
-                "texts_sent": replay.sink.send.call_count,
-                "cards_sent": replay.sink.send_card.call_count,
-                "versions_delivered": replay.conv.db.execute(
-                    "SELECT COUNT(*) FROM npp_versions WHERE delivered_at IS NOT NULL"
-                ).fetchone()[0],
-            }
-        # Only the stop acknowledgement may go out, once. No job row may be queued, sent or delivered.
-        quiet = {"flush_counts": (1, 0), "job_outbox_unchanged": True,
-                 "texts_sent": 1, "cards_sent": 0, "versions_delivered": 0}
-        self.assertEqual(observed, dict.fromkeys(observed, quiet))
+                    self.assertEqual(replay.sink.send_card.call_args.args[0], pending)
+                else:
+                    replay.sink.send_card.assert_not_called()
+                    self.assertEqual(replay.version["state"], "delivered")
+                    self.assertEqual(replay.version["transport_message_id"], "fixture-card-receipt")
 
     def test_c2_no_publish_paused(self):
         # An actually delivered card is otherwise approvable: a queued/unknown code would prove nothing.
@@ -188,8 +211,8 @@ class StopPauseTests(unittest.TestCase):
             self.assertEqual(replay.say(f"yes {code}{suffix}"), "no-target")
             self.assertEqual(replay.flush(), 1)
             replay.sink.send.assert_called_once_with(fixtures.CHAT, expected, [])
-            replay.sink.reset_mock()
             self.assert_unpublished(replay)
+            replay.sink.reset_mock()
             self.assertEqual(replay.job["state"], "card_out")
             self.assertEqual(dict(replay.version), version)
         self.assertEqual(replay.say("resume changes"), "resume")
@@ -236,7 +259,6 @@ class StopPauseTests(unittest.TestCase):
         self.assertEqual([row[0] for row in counts], [1, 1])
         self.image_edit.assert_called_once()
 
-    @unittest.expectedFailure  # Conversation._npp_turn closes the job but sends a cancellation reply while paused.
     def test_c4_cancel_paused(self):
         # A late render must not resurrect the job; cancellation itself must leave the paused outbox quiet.
         replay = self.replay()
@@ -255,3 +277,14 @@ class StopPauseTests(unittest.TestCase):
         self.assertIsNone(replay.version["delivered_at"])
         self.assert_unpublished(replay)
         self.assertEqual((sent, replay.outbox(), replay.sink.mock_calls), ((0, 0), before, []))
+
+        self.assertEqual(replay.say("resume changes"), "resume")
+        self.assertEqual((replay.flush(), replay.flush()), (1, 0))  # no deferred cancellation acknowledgement
+        replay.sink.send_card.assert_not_called()
+
+        # The same coded cancellation still acknowledges when changes are enabled.
+        enabled = self.replay()
+        self.start_render(enabled)
+        self.assertEqual(enabled.say(f"no {enabled.job['job_id']}"), "cancelled")
+        self.assertEqual(enabled.flush(), 1)
+        enabled.sink.send.assert_called_once_with(fixtures.CHAT, "Okay, I've cancelled that. Nothing changed.", [])
