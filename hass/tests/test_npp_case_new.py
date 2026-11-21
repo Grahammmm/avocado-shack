@@ -1,0 +1,107 @@
+"""Offline CLI coverage for the NPP regression-case scaffolder."""
+
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from hass.tests import test_npp_assets as assets
+
+SCRIPT = assets.ROOT / "scripts" / "hass" / "npp_case_new.py"
+DAY = "2040-02-29"
+TITLE = "Synthetic regression case"
+
+
+class NppCaseNewTest(unittest.TestCase):
+    def setUp(self):
+        with_temp = tempfile.TemporaryDirectory()
+        self.addCleanup(with_temp.cleanup)
+        self.cases = Path(with_temp.name) / "cases"
+        self.cases.mkdir()
+        for source in assets.CASES.glob("*.json"):
+            shutil.copyfile(source, self.cases / source.name)
+
+    def cli(self, *, day=DAY, slug="fixture-regression", path="question", cases=None):
+        return self.run_cli("--cases", str(cases or self.cases), "--day", day,
+                            "--slug", slug, "--path", path, "--title", TITLE)
+
+    def run_cli(self, *args):
+        return subprocess.run([sys.executable, "-B", str(SCRIPT), *args], cwd=assets.ROOT,
+                              capture_output=True, text=True, timeout=15)
+
+    def assert_pass(self, result, filename):
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout.splitlines()[-1], f"PASS npp_case_new {filename}")
+
+    def assert_fail(self, result):
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertRegex(result.stdout.splitlines()[-1], r"^FAIL \S")
+
+    def test_c1_next_id_valid(self):
+        # Sparse IDs and serials catch count-based allocation and string sorting;
+        # the larger serial on another day must not affect this day's tag.
+        case = assets.load(next(self.cases.glob("case-18-*.json")))
+        for case_id, slug in [(60, "npp-20400229-11-older"), (81, "npp-20400229-2"),
+                              (98, "npp-20400228-90-other-day")]:
+            existing = dict(case, id=case_id, slug=slug)
+            (self.cases / f"case-{case_id}-{slug}.json").write_text(json.dumps(existing), encoding="utf-8")
+        words = "a" * 40
+        filename = f"case-99-npp-20400229-12-{words}.json"
+        self.assert_pass(self.cli(slug=words, path="listing"), filename)
+        schema = assets.load(self.cases / "case.schema.json")
+        created = assets.load(self.cases / filename)
+        self.assertEqual(assets.validate(schema, created), [])
+        self.assertEqual((created["id"], created["slug"], created["path"], created["title"]),
+                         (99, f"npp-20400229-12-{words}", "listing", TITLE))
+        self.assert_pass(self.cli(day="2040-03-01", path="contract"),
+                         "case-100-npp-20400301-1-fixture-regression.json")
+
+    def test_c2_never_overwrite(self):
+        # A pre-existing filename with stale JSON identity can collide with the
+        # computed name; an ordinary write would destroy that file.
+        highest = max(assets.load(p)["id"] for p in self.cases.glob("case-*.json"))
+        collision = self.cases / f"case-{highest + 1:02d}-npp-20400229-1-fixture-regression.json"
+        shutil.copyfile(next(self.cases.glob("case-18-*.json")), collision)
+        before = {p.name: p.read_bytes() for p in self.cases.iterdir()}
+        self.assert_fail(self.cli())
+        for slug in ("ab", "a" * 41, "Upper", "two words", "../escape", "ok-\n"):
+            with self.subTest(slug=slug):
+                self.assert_fail(self.cli(slug=slug))
+        self.assertEqual({p.name: p.read_bytes() for p in self.cases.iterdir()}, before)
+
+    def test_c3_unfinished_fails(self):
+        # A schema-valid but ready-looking state would let an unfinished case
+        # through the existing expectation check. Exercise that check unchanged.
+        result = self.cli()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        target = next(self.cases.glob("case-*-npp-20400229-1-fixture-regression.json"))
+        check = assets.CaseInputsTest("test_expect_keys_and_checks_are_in_the_documented_vocabulary")
+        with patch.object(assets, "CASES", self.cases):
+            check.setUp()
+            with self.assertRaisesRegex(AssertionError, r"'TODO' != 'asking'"):
+                check.test_expect_keys_and_checks_are_in_the_documented_vocabulary()
+            created = assets.load(target)
+            created["expect"]["state"] = created["terminal"]
+            target.write_text(json.dumps(created), encoding="utf-8")
+            check.setUp()
+            check.test_expect_keys_and_checks_are_in_the_documented_vocabulary()
+
+    def test_c4_exit(self):
+        # Missing target data is an operational failure; missing CLI flags are
+        # usage errors. Scripts must be able to distinguish both from success.
+        highest = max(assets.load(p)["id"] for p in self.cases.glob("case-*.json"))
+        self.assert_pass(self.cli(), f"case-{highest + 1:02d}-npp-20400229-1-fixture-regression.json")
+        self.assert_fail(self.cli(cases=self.cases / "not-found"))
+        self.assert_fail(self.cli(day="2040-02-30"))
+        usage = self.run_cli("--cases", str(self.cases))
+        self.assertEqual(usage.returncode, 2, usage.stdout + usage.stderr)
+        self.assertIn("usage:", usage.stderr)
+        self.assertNotIn("PASS", usage.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()
