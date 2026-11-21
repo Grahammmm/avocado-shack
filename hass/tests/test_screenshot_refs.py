@@ -3,8 +3,11 @@
 from contextlib import closing, redirect_stdout
 import importlib.util
 import io
+import os
 from pathlib import Path
+import shutil
 import sqlite3
+import stat
 import subprocess
 import sys
 import tempfile
@@ -164,11 +167,12 @@ class ScreenshotRefsTests(unittest.TestCase):
                 self.assertTrue(result.stderr.startswith("usage: "))
 
     def snapshot(self):
-        return {
-            path.relative_to(self.root): (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
-            if path.is_file() else None
-            for path in self.root.rglob("*")
-        }
+        snapshot = {}
+        for path in (self.root, *self.root.rglob("*")):
+            metadata = path.lstat()
+            contents = path.read_bytes() if stat.S_ISREG(metadata.st_mode) else None
+            snapshot[path.relative_to(self.root)] = (contents, metadata.st_mtime_ns, metadata.st_mode)
+        return snapshot
 
     def test_c4_read_only(self):
         # A mode=ro reader alone can create WAL shared memory. A store with
@@ -177,7 +181,9 @@ class ScreenshotRefsTests(unittest.TestCase):
         (self.screenshots / "found.png").write_bytes(b"not opened as an image")
         self.make_db([("draft-a", "found.png")])
         before = self.snapshot()
-        result = self.run_state()
+        # Even temporary creation followed by cleanup in the input tree is a write.
+        with patch.dict(os.environ, TMPDIR=str(self.screenshots), TEMP=str(self.root.parent)):
+            result = self.run_state()
         self.assert_status(result, 0, PASS)
         self.assertIn("drafts 1", result.stdout.splitlines())
         self.assertEqual(self.snapshot(), before)
@@ -191,8 +197,11 @@ class ScreenshotRefsTests(unittest.TestCase):
             self.assertFalse(self.db.with_name(DB_NAME + "-shm").exists())
             before = self.snapshot()
             result = self.run_state()
-            self.assert_findings(result, f"not-sqlite {DB_NAME}")
-            self.assertNotIn("drafts ", result.stdout)
+            self.assert_status(result, 0, PASS)
+            self.assertEqual(result.stdout.splitlines(), [
+                "drafts 2", "refs 2", "files 1", "note bad-ref 0",
+                "note proposal-orphans 0", "note other-unreferenced 0", PASS,
+            ])
             self.assertEqual(self.snapshot(), before)
 
         # Closing the fixture writer checkpoints WAL. Inspecting the clean WAL
@@ -201,6 +210,60 @@ class ScreenshotRefsTests(unittest.TestCase):
         result = self.run_state()
         self.assert_status(result, 0, PASS)
         self.assertIn("drafts 2", result.stdout.splitlines())
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a1_uncheckpointed_wal(self):
+        # A frozen store ships without SHM. Ignoring WAL misses the committed
+        # reference and mislabels its proposal screenshot as an orphan.
+        self.screenshots.mkdir()
+        (self.screenshots / "draft-wal-proposal.png").touch()
+        with tempfile.TemporaryDirectory(dir=self.root) as source:
+            store = Path(source) / DB_NAME
+            self.make_db([("draft-base", None)], path=store)
+            with closing(sqlite3.connect(store)) as writer:
+                self.assertEqual(writer.execute("PRAGMA journal_mode=WAL").fetchone(), ("wal",))
+                writer.execute("PRAGMA wal_autocheckpoint=0")
+                with writer:
+                    writer.execute("INSERT INTO drafts(change_id, screenshot) VALUES (?, ?)",
+                                   ("draft-wal", "draft-wal-proposal.png"))
+                wal = store.with_name(DB_NAME + "-wal")
+                self.assertGreater(wal.stat().st_size, 0)
+                shutil.copyfile(store, self.db)
+                shutil.copyfile(wal, self.db.with_name(wal.name))
+
+        self.assertFalse(self.db.with_name(DB_NAME + "-shm").exists())
+        before = self.snapshot()
+        result = self.run_state()
+        self.assert_status(result, 0, PASS)
+        self.assertEqual(result.stdout.splitlines(), [
+            "drafts 2", "refs 1", "files 1", "note bad-ref 0",
+            "note proposal-orphans 0", "note other-unreferenced 0", PASS,
+        ])
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a1_harmless_journal(self):
+        # Presence alone is not corruption, and this sidecar must not be removed.
+        self.screenshots.mkdir()
+        self.make_db([("draft-base", None)])
+        self.db.with_name(DB_NAME + "-journal").touch()
+        before = self.snapshot()
+        result = self.run_state()
+        self.assert_status(result, 0, PASS)
+        self.assertEqual(result.stdout.splitlines(), [
+            "drafts 1", "refs 0", "files 0", "note bad-ref 0",
+            "note proposal-orphans 0", "note other-unreferenced 0", PASS,
+        ])
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a1_symlinked_sidecar(self):
+        # Copying without lstat would follow this link and accept an empty WAL.
+        self.screenshots.mkdir()
+        self.make_db()
+        decoy = self.root / "decoy-wal"
+        decoy.touch()
+        self.db.with_name(DB_NAME + "-wal").symlink_to(decoy)
+        before = self.snapshot()
+        self.assert_findings(self.run_state(), f"not-sqlite {DB_NAME}")
         self.assertEqual(self.snapshot(), before)
 
     def test_c5_no_private_values(self):

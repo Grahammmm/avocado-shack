@@ -2,11 +2,13 @@
 """Count draft screenshot references against a stable offline state directory."""
 
 import argparse
-from contextlib import closing
+from contextlib import closing, contextmanager
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import stat
+import tempfile
 
 
 DB_NAME = "conversation.sqlite3"
@@ -19,6 +21,44 @@ class PrivateArgumentParser(argparse.ArgumentParser):
         super().error("invalid arguments; use --help")
 
 
+def _snapshot_directory(state):
+    # tempfile's default search probes candidate directories by writing files.
+    # Exclude the input tree before letting tempfile write anything at all.
+    for directory in (os.getenv("TMPDIR"), os.getenv("TEMP"), os.getenv("TMP"), "/tmp", "/var/tmp"):
+        if not directory:
+            continue
+        try:
+            base = Path(directory).resolve()
+            if not base.is_relative_to(state):
+                return tempfile.TemporaryDirectory(dir=base)
+        except (OSError, RuntimeError, ValueError):
+            continue
+    raise OSError("no temporary directory outside the inputs")
+
+
+@contextmanager
+def _open_snapshot(path):
+    sources = [path]
+    for suffix in ("-wal", "-journal"):
+        sidecar = path.with_name(path.name + suffix)
+        try:
+            mode = sidecar.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISREG(mode):
+            raise ValueError("unsafe SQLite sidecar")
+        sources.append(sidecar)
+
+    # Let SQLite rebuild SHM and recover WAL/journal data on the copy only.
+    with _snapshot_directory(path.parent.resolve()) as directory:
+        snapshot = Path(directory)
+        for source in sources:
+            shutil.copyfile(source, snapshot / source.name)
+        with closing(sqlite3.connect(snapshot / path.name)) as db:
+            db.execute("PRAGMA query_only=ON")
+            yield db
+
+
 def read_drafts(path):
     try:
         if not stat.S_ISREG(os.lstat(path).st_mode):
@@ -29,17 +69,7 @@ def read_drafts(path):
         return None, f"not-sqlite {DB_NAME}"
 
     try:
-        # Immutable mode prevents SQLite from creating sidecars, but can ignore
-        # pending journal contents. Do not report a possibly stale snapshot.
-        for suffix in ("-wal", "-journal"):
-            try:
-                sidecar = os.lstat(path.with_name(path.name + suffix))
-            except FileNotFoundError:
-                continue
-            if not stat.S_ISREG(sidecar.st_mode) or sidecar.st_size:
-                return None, f"not-sqlite {DB_NAME}"
-        uri = path.absolute().as_uri() + "?mode=ro&immutable=1"
-        with closing(sqlite3.connect(uri, uri=True)) as db:
+        with _open_snapshot(path) as db:
             return db.execute("SELECT drafts.change_id, drafts.screenshot FROM drafts").fetchall(), None
     except (OSError, ValueError, sqlite3.Error):
         return None, f"not-sqlite {DB_NAME}"
