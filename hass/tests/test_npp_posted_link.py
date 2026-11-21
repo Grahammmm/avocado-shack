@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import unittest
+from html.parser import HTMLParser
 
 from hass import editor, npp
 from hass.content_model import SITE_DIR
@@ -74,7 +75,69 @@ console.log(JSON.stringify({cards: articles.map(a => a.dataset.productId), focus
 """
 
 
+class PageWiring(HTMLParser):
+    """Capture the actual generated elements and executable script tags."""
+
+    def __init__(self, page):
+        super().__init__(convert_charrefs=True)
+        self.elements = []
+        self.scripts = []
+        self.market_depth = 0
+        self.feed(page)
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'section' and (self.market_depth or attrs.get('id') == 'market'):
+            self.market_depth += 1
+        self.elements.append((tag, attrs, bool(self.market_depth)))
+        if tag == 'script' and 'src' in attrs:
+            self.scripts.append((attrs, len(self.elements)))
+
+    def handle_endtag(self, tag):
+        if tag == 'section' and self.market_depth:
+            self.market_depth -= 1
+
+
 class PostedLinkTests(unittest.TestCase):
+    def _check_wiring(self, repo):
+        page = PageWiring(repo.read(SITE + 'index.html').decode())
+        required = {
+            'market': 'section', 'catalog-grid': 'div', 'brand-filter': 'select',
+            'product-search': 'input', 'catalog-count': 'p', 'catalog-sentinel': 'div',
+            'more-products': 'button', 'clear-filters': 'button', 'dialog': 'dialog',
+            'dialog-content': 'div',
+        }
+        for element_id, tag in required.items():
+            matches = [(i, t, inside) for i, (t, a, inside) in enumerate(page.elements)
+                       if a.get('id') == element_id]
+            self.assertEqual(len(matches), 1, element_id)
+            self.assertEqual(matches[0][1], tag, element_id)
+            if element_id not in ('dialog', 'dialog-content'):
+                self.assertTrue(matches[0][2], element_id + ' must be in market')
+        filters = [(i, t, a) for i, (t, a, inside) in enumerate(page.elements)
+                   if inside and 'data-filter' in a]
+        all_buttons = [i for i, t, a in filters if t == 'button' and a.get('data-filter') == 'all'
+                       and 'selected' in a.get('class', '').split()]
+        close = [i for i, (_, a, _) in enumerate(page.elements)
+                 if 'close' in a.get('class', '').split()]
+        policy = [i for i, (_, a, _) in enumerate(page.elements) if 'data-policy' in a]
+        self.assertEqual(len(all_buttons), 1)
+        self.assertTrue(close)
+        self.assertTrue(policy)
+        expected = ['catalog-products.js', 'producers.js', 'script.js', 'shop.js']
+        sources = [a['src'] for a, _ in page.scripts]
+        for source in expected:
+            self.assertEqual(sources.count(source), 1, source)
+        positions = [sources.index(source) for source in expected]
+        self.assertEqual(positions, sorted(positions))
+        for index in positions:
+            attrs, position = page.scripts[index]
+            self.assertFalse({'async', 'defer'} & attrs.keys(), attrs)
+            self.assertIn(attrs.get('type', '').lower(), ('', 'text/javascript', 'application/javascript'))
+            self.assertGreater(position, max([*all_buttons, close[0], policy[0],
+                                              *(i for i, (_, a, _) in enumerate(page.elements)
+                                                if a.get('id') in required)]))
+
     def _add_listing(self):
         repo = PhotoRepo()
         self.addCleanup(repo.cleanup)
@@ -108,6 +171,7 @@ class PostedLinkTests(unittest.TestCase):
         return node
 
     def _open(self, node, repo, url):
+        self._check_wiring(repo)
         script = repo.state / 'posted-link.cjs'
         script.write_text(SHOP_RUNNER, encoding='utf-8')
         result = subprocess.run([node, str(script), str(repo.wt / SITE), str(SITE_DIR), url],
@@ -118,6 +182,7 @@ class PostedLinkTests(unittest.TestCase):
     def test_c1_id_in_site(self):
         # An add could succeed while the generated market data omits its id.
         repo, _, key, _ = self._add_listing()
+        self._check_wiring(repo)
         self.assertEqual([(p['name'], p['category']) for p in repo.catalog() if p['id'] == key],
                          [(NAME, 'fruit')])
         page = repo.read(SITE + 'index.html').decode()
