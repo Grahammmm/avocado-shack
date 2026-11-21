@@ -117,11 +117,20 @@ def scenario_failures(receipt):
         if any(reply["kind"] == "question" for reply in first):
             yield "listing-3-initial-question"
         version_numbers = {version["version"] for version in versions}
-        # The scenario uses the receipt's delivery state, not timing or approval ordering.
-        delivered = {reply["version"] for reply in replies
-                     if reply["kind"] == "card" and reply["delivery"]["state"] == "confirmed"}
+        # Bind delivery to the version and card bytes, without checking timing or ordering.
+        confirmed_cards = set()
+        for reply in replies:
+            delivery = reply["delivery"]
+            card_digest = reply["card_png_sha256"]
+            sent_digest = delivery["png_sha256"]
+            if (reply["kind"] == "card" and delivery["state"] == "confirmed"
+                    and card_digest is not None and sent_digest is not None
+                    and card_digest.lower() == sent_digest.lower()):
+                confirmed_cards.add((reply["version"], card_digest.lower()))
+        delivered = {version["version"] for version in versions
+                     if (version["version"], version["card_png_sha256"].lower()) in confirmed_cards}
         for number in (1, 2):
-            if number not in version_numbers or number not in delivered:
+            if number not in delivered:
                 yield f"listing-3-v{number}-delivered-card"
         if {1, 2} <= version_numbers:
             photos = {version["photo_sha256"].lower() for version in versions

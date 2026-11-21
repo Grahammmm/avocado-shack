@@ -155,6 +155,33 @@ class PilotScenarioCheckTests(unittest.TestCase):
                     (card["delivery"] if key == "state" else card)[key] = value
                     self.assert_fails(receipt, reason)
 
+    def test_listing_three_binds_confirmation_to_the_version_card_digest(self):
+        # A confirmed state alone, or two agreeing hashes for another card, proves nothing.
+        cases = (("no-card-hash", None, "expected"),
+                 ("no-delivery-hash", "expected", None),
+                 ("wrong-card-hash", "other", "expected"),
+                 ("wrong-delivery-hash", "expected", "other"),
+                 ("both-null", None, None),
+                 ("both-for-other-version", "other", "other"))
+        for number in (1, 2):
+            for case, card_hash, delivered_hash in cases:
+                with self.subTest(version=number, case=case):
+                    receipt = fixture(3)
+                    hashes = {"expected": receipt["versions"][number - 1]["card_png_sha256"],
+                              "other": receipt["versions"][2 - number]["card_png_sha256"],
+                              None: None}
+                    card = receipt["segments"][number - 1]["replies"][0]
+                    card["card_png_sha256"] = hashes[card_hash]
+                    card["delivery"]["png_sha256"] = hashes[delivered_hash]
+                    self.assert_fails(receipt, f"listing-3-v{number}-delivered-card")
+
+        receipt = fixture(3)
+        receipt["versions"][0]["card_png_sha256"] = "a" * 64
+        card = receipt["segments"][0]["replies"][0]
+        card["card_png_sha256"] = "A" * 64
+        card["delivery"]["png_sha256"] = "a" * 64
+        self.assertEqual(self.invoke(receipt), (0, "PASS\n"))
+
     def test_listing_three_reports_changed_photo_v1_publish_and_wrong_approval(self):
         # Compare the photo (not the card) hash, join publication by change ID, require v2 approval.
         receipt = fixture(3)
