@@ -2,13 +2,15 @@
 """Report inbound transcript latency for a half-open time window, offline."""
 
 import argparse
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime
 import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import stat
+import tempfile
 
 NAME = "transcript_latency_report"
 DB_NAME = "transcript.sqlite3"
@@ -75,22 +77,44 @@ def report(db, since, until):
     return f"bad-latency {bad_latency}" if bad_latency else None
 
 
+@contextmanager
+def _open_snapshot(path):
+    sources = [path]
+    for suffix in ("-wal", "-journal"):
+        sidecar = path.with_name(path.name + suffix)
+        try:
+            mode = os.lstat(sidecar).st_mode
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISREG(mode):
+            raise ValueError("unsafe SQLite sidecar")
+        sources.append(sidecar)
+
+    # SQLite can rebuild shared memory and recover the database on the copy only.
+    with tempfile.TemporaryDirectory() as directory:
+        snapshot = Path(directory)
+        for source in sources:
+            shutil.copyfile(source, snapshot / source.name)
+        with closing(sqlite3.connect(snapshot / path.name)) as db:
+            db.execute("PRAGMA query_only=ON")
+            db.text_factory = lambda data: data.decode("utf-8", errors="surrogateescape")
+            yield db
+
+
 def check_store(path, since, until):
     try:
         mode = os.lstat(path).st_mode
-        if not stat.S_ISREG(mode):
-            return f"unsafe-db {DB_NAME}"
-        if since is None or until is None:
-            return None
-        with closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as db:
-            # Read-only WAL access can still create or update a shared-memory
-            # sidecar. Require private locking state; if SQLite cannot read a
-            # WAL store this way, fail closed rather than ignoring its journal.
-            db.execute("PRAGMA locking_mode = EXCLUSIVE")
-            db.text_factory = lambda data: data.decode("utf-8", errors="surrogateescape")
-            return report(db, since, until)
     except FileNotFoundError:
         return f"missing-db {DB_NAME}"
+    except (OSError, ValueError):
+        return f"not-sqlite {DB_NAME}"
+    if not stat.S_ISREG(mode):
+        return f"unsafe-db {DB_NAME}"
+    if since is None or until is None:
+        return None
+    try:
+        with _open_snapshot(path) as db:
+            return report(db, since, until)
     except (OSError, ValueError, sqlite3.Error):
         return f"not-sqlite {DB_NAME}"
 

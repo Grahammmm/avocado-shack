@@ -4,6 +4,7 @@ from contextlib import closing, redirect_stderr, redirect_stdout
 import importlib.util
 from io import StringIO
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -144,33 +145,64 @@ class TranscriptLatencyReportTests(unittest.TestCase):
                 self.assertEqual(result.stdout, "")  # No last line for usage errors.
                 self.assertIn("usage:", result.stderr)
 
-    def test_c4_read_only(self):
-        # Detect rewrites, chmod, and SQLite-created journal/SHM files.
-        def snapshot():
-            return {p.relative_to(self.state): (p.read_bytes() if p.is_file() else None,
-                                                p.stat().st_mtime_ns, p.stat().st_mode)
-                    for p in self.state.rglob("*")}
+    def snapshot(self):
+        return {p.relative_to(self.state): (p.read_bytes() if p.is_file() else None,
+                                            p.stat().st_mtime_ns, p.stat().st_mode)
+                for p in (self.state, *self.state.rglob("*"))}
 
+    def test_c4_read_only(self):
+        # Even a checkpointed WAL-mode store must not acquire a journal or SHM.
         self.create([(SINCE, "in", "text", 1)])
         (self.state / "nested").mkdir()
         (self.state / "nested" / "decoy").write_bytes(b"untouched")
-        before = snapshot()
-        self.assert_outcome(self.invoke(), 0, PASS)
-        self.assertEqual(snapshot(), before)
+        expected = ["count 1", "unparsed 0", "null-latency 0", "p50_ms 1", "p90_ms 1", "max_ms 1",
+                    "kind text p50_ms 1 p90_ms 1 max_ms 1", PASS]
+        for mode in ("delete", "wal"):
+            with self.subTest(mode=mode):
+                with closing(sqlite3.connect(self.db)) as writer:
+                    self.assertEqual(writer.execute(f"PRAGMA journal_mode = {mode}").fetchone(), (mode,))
+                before = self.snapshot()
+                self.assertEqual(self.assert_outcome(self.invoke(), 0, PASS), expected)
+                self.assertEqual(self.snapshot(), before)
 
-        # A valid WAL with an uncheckpointed commit and no SHM must not
-        # create a sidecar or silently report stale data from the main file.
-        source = self.root / "wal-source.sqlite3"
-        self.create(path=source)
-        with closing(sqlite3.connect(source)) as writer, writer:
-            writer.execute("PRAGMA journal_mode = WAL")
-            writer.execute("INSERT INTO events VALUES (?, 'in', 'text', 9)", (SINCE,))
-            writer.commit()
-            self.db.write_bytes(source.read_bytes())
-            (self.state / (DB_NAME + "-wal")).write_bytes(Path(str(source) + "-wal").read_bytes())
-        before = snapshot()
-        self.assert_findings(self.invoke(), f"not-sqlite {DB_NAME}")
-        self.assertEqual(snapshot(), before)
+    def test_a1_uncheckpointed_wal(self):
+        # Refusing a readable WAL or quietly reporting only the checkpointed row fails A1.
+        with tempfile.TemporaryDirectory(dir=self.root) as source_dir:
+            source = Path(source_dir) / DB_NAME
+            self.create([(SINCE, "in", "text", 2)], path=source)
+            with closing(sqlite3.connect(source)) as writer:
+                self.assertEqual(writer.execute("PRAGMA journal_mode = WAL").fetchone(), ("wal",))
+                writer.execute("PRAGMA wal_autocheckpoint = 0")
+                writer.execute("INSERT INTO events VALUES (?, 'in', 'text', 9)", (SINCE,))
+                writer.commit()
+                shutil.copyfile(source, self.db)
+                shutil.copyfile(source.with_name(DB_NAME + "-wal"), self.state / (DB_NAME + "-wal"))
+
+        before = self.snapshot()
+        self.assertEqual(self.assert_outcome(self.invoke(), 0, PASS), [
+            "count 2", "unparsed 0", "null-latency 0", "p50_ms 2", "p90_ms 9", "max_ms 9",
+            "kind text p50_ms 2 p90_ms 9 max_ms 9", PASS,
+        ])
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a1_harmless_journal(self):
+        # Rejecting sidecars merely because they exist would reject a harmless empty journal.
+        self.create()
+        (self.state / (DB_NAME + "-journal")).touch()
+        before = self.snapshot()
+        self.assertEqual(self.assert_outcome(self.invoke(), 0, PASS), [
+            "count 0", "unparsed 0", "null-latency 0", "p50_ms none", "p90_ms none", "max_ms none", PASS,
+        ])
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a1_symlinked_sidecar(self):
+        # Copying through the regular target instead of rejecting the symlink would pass silently.
+        self.create()
+        target = self.root / "decoy"
+        target.touch()
+        (self.state / (DB_NAME + "-wal")).symlink_to(target)
+        self.assertEqual(self.assert_findings(self.invoke(), f"not-sqlite {DB_NAME}"),
+                         [f"FAIL not-sqlite {DB_NAME}", FAIL])
 
     def test_c5_no_private_values(self):
         # Row dumps, raw malformed kind/time, or exception/usage details could leak canaries.
@@ -191,8 +223,10 @@ class TranscriptLatencyReportTests(unittest.TestCase):
         connect = sqlite3.connect
 
         def projected_connect(database, **kwargs):
-            self.assertEqual(database, self.db.absolute().as_uri() + "?mode=ro")
-            self.assertIs(kwargs.get("uri"), True)
+            copy = Path(database)
+            self.assertEqual(copy.name, DB_NAME)
+            self.assertFalse(copy.resolve().is_relative_to(self.state.resolve()))
+            self.assertEqual(kwargs, {})
             db = connect(database, **kwargs)
 
             def authorize(action, table, column, _database, _source):
