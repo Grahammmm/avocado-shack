@@ -9,13 +9,14 @@ import sqlite3
 from pathlib import Path
 
 
-TABLES = ("npp_jobs", "npp_versions", "npp_segments")
+TABLES = ("npp_jobs", "npp_versions", "npp_segments", "npp_turns")
 OUTCOMES = {
     "published": "posted", "cancelled": "cancelled", "expired": "expired", "retake": "retake",
     "working": "open", "asking": "open", "card_out": "open", "editing": "open",
     "approved": "open", "publish_failed": "open",
 }
-QUERY = """
+OPEN_STATES = tuple(state for state, outcome in OUTCOMES.items() if outcome == "open")
+QUERY = f"""
 WITH versions AS (
     SELECT job_id, count(delivered_at) AS delivered,
            max(julianday(queued_at)) AS queued, max(julianday(delivered_at)) AS sent
@@ -23,19 +24,25 @@ WITH versions AS (
 ), segments AS (
     SELECT job_id, max(julianday(accepted_at)) AS started, max(julianday(ended_at)) AS ended
     FROM npp_segments GROUP BY job_id
+), turns AS (
+    SELECT job_id, max(julianday(accepted_at)) AS accepted
+    FROM npp_turns GROUP BY job_id
 ), jobs AS (
     SELECT j.job_id, j.state, j.current_version, coalesce(v.delivered, 0) AS delivered,
            j.created_at, j.closed_at,
            max(julianday(j.created_at), coalesce(julianday(j.closed_at), 0),
                coalesce(julianday(j.polish_started_at), 0), coalesce(v.queued, 0),
-               coalesce(v.sent, 0), coalesce(s.started, 0), coalesce(s.ended, 0)) AS changed
+               coalesce(v.sent, 0), coalesce(s.started, 0), coalesce(s.ended, 0),
+               coalesce(t.accepted, 0)) AS changed
     FROM npp_jobs AS j
     LEFT JOIN versions AS v USING (job_id)
     LEFT JOIN segments AS s USING (job_id)
+    LEFT JOIN turns AS t USING (job_id)
 )
 SELECT job_id, state, current_version, delivered, strftime('%Y-%m-%dT%H:%MZ', changed)
 FROM jobs
-WHERE :all OR closed_at IS NULL OR changed >= julianday(:since)
+WHERE ? OR closed_at IS NULL OR state IN ({", ".join("?" for _ in OPEN_STATES)})
+    OR changed >= julianday(?)
 ORDER BY julianday(created_at), job_id
 """
 
@@ -58,7 +65,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--state-db", required=True, type=Path, metavar="FILE")
     parser.add_argument("--since", type=since_date, metavar="YYYY-MM-DD",
-                        help="include closed jobs changed from this UTC date (default: last 7 days)")
+                        help="always include open jobs; include other jobs changed from this UTC date "
+                             "(default: last 7 days)")
     parser.add_argument("--all", action="store_true", help="include every job regardless of date")
     args = parser.parse_args(argv)
     since = args.since or datetime.now(timezone.utc) - timedelta(days=7)
@@ -81,7 +89,7 @@ def main(argv=None):
             for table in TABLES:
                 if table not in present:
                     return fail(table)
-            rows = db.execute(QUERY, {"all": args.all, "since": since.isoformat()}).fetchall()
+            rows = db.execute(QUERY, (args.all, *OPEN_STATES, since.isoformat())).fetchall()
     except (OSError, RuntimeError, sqlite3.Error):
         return fail("state-db")
 

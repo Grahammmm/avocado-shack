@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/hass/npp_jobs.py"
 CREATED = "2025-01-01T09:00:04+00:00"
 CANARIES = ("CHAT_CANARY", "SENDER_CANARY", "PHOTO_CANARY", "TEXT_CANARY",
-            "PRICE_CANARY", "RECEIPT_CANARY", "SEGMENT_CANARY")
+            "PRICE_CANARY", "RECEIPT_CANARY", "SEGMENT_CANARY", "TURN_CANARY")
 
 
 def job(db, code, state, created=CREATED, closed=None, version=None):
@@ -50,6 +50,7 @@ class JobsCLI(unittest.TestCase):
 
     def test_c1_lines(self):
         # Catch counting queued versions, dropping superseded deliveries, or using only creation time.
+        # A revision in a live segment must advance the report minute even when segment times don't change.
         with self.fixture() as db:
             job(db, "aaaa", "editing", version=3)
             for n, state, delivered in [(1, "superseded", "2025-01-01T09:06:00Z"),
@@ -67,12 +68,22 @@ class JobsCLI(unittest.TestCase):
             db.execute("""INSERT INTO npp_segments (job_id,started_by,accepted_at,deadline_at,ended_at,outcome)
                           VALUES ('eeee','SEGMENT_CANARY','2025-01-01T09:54:00Z',
                                   '2025-01-01T09:57:00Z','2025-01-01T09:56:39Z','retake')""")
+            job(db, "ffff", "editing", version=1)
+            segment = db.execute("""INSERT INTO npp_segments (job_id,started_by,accepted_at,deadline_at,revision)
+                                    VALUES ('ffff','SEGMENT_CANARY','2025-01-01T09:49:00Z',
+                                            '2025-01-01T09:52:00Z',1)""").lastrowid
+            db.executemany("""INSERT INTO npp_turns (provider_id,job_id,kind,accepted_at,segment_id)
+                               VALUES (?,'ffff','edit',?,?)""", [
+                ("TURN_CANARY-1", "2025-01-01T09:49:00Z", segment),
+                ("TURN_CANARY-2", "2025-01-01T04:51:39-05:00", segment),
+            ])
         self.assert_output(self.cli("--all"), 0,
                            "aaaa\tediting\t3\t2\t2025-01-01T09:15Z\topen\n"
                            "bbbb\tpublished\t1\t0\t2025-01-01T09:26Z\tposted\n"
                            "cccc\tcancelled\t-\t0\t2025-01-01T09:36Z\tcancelled\n"
                            "dddd\texpired\t-\t0\t2025-01-01T09:46Z\texpired\n"
-                           "eeee\tretake\t-\t0\t2025-01-01T09:56Z\tretake\n")
+                           "eeee\tretake\t-\t0\t2025-01-01T09:56Z\tretake\n"
+                           "ffff\tediting\t1\t0\t2025-01-01T09:51Z\topen\n")
 
     def test_c2_ro(self):
         # Catch writable opens, transient WAL sidecars, stale reads, and linked-worktree aliases.
@@ -121,7 +132,7 @@ class JobsCLI(unittest.TestCase):
 
     def test_c3_bad(self):
         # Catch silently treating missing schema as an empty list or hiding the missing table name.
-        for table in ("npp_jobs", "npp_versions", "npp_segments"):
+        for table in ("npp_jobs", "npp_versions", "npp_segments", "npp_turns"):
             with self.subTest(table=table), closing(sqlite3.connect(self.state)) as db:
                 db.executescript(SCHEMA)
                 db.execute(f"DROP TABLE {table}")
@@ -129,6 +140,7 @@ class JobsCLI(unittest.TestCase):
 
     def test_c4_order_privacy(self):
         # Catch date filters that drop stale open jobs, sort by activity, or expose payload columns.
+        # Approval and publish failure set closed_at, but their report outcome is still open.
         now = datetime.now(timezone.utc)
         recent = (now - timedelta(days=6)).isoformat()
         older = (now - timedelta(days=8)).isoformat()
@@ -136,18 +148,26 @@ class JobsCLI(unittest.TestCase):
             job(db, "aaaa", "published", "2025-01-02T09:00:00Z", older)
             job(db, "cccc", "cancelled", CREATED, recent)
             job(db, "bbbb", "card_out", CREATED)
+            job(db, "dddd", "approved", closed=older, version=1)
+            job(db, "eeee", "publish_failed", closed=older, version=1)
             db.execute("""INSERT INTO npp_versions
                 (job_id,n,segment_id,listing_json,listing_sha,patch_json,state,transport_message_id)
                 VALUES ('bbbb',1,1,'TEXT_CANARY','fixture','PRICE_CANARY','queued','RECEIPT_CANARY')""")
             db.execute("""INSERT INTO npp_segments (job_id,started_by,accepted_at,deadline_at)
                           VALUES ('bbbb','SEGMENT_CANARY',?,?)""", (now.isoformat(), now.isoformat()))
-        for args, ids in (((), ["bbbb", "cccc"]), (("--all",), ["bbbb", "cccc", "aaaa"]),
-                          (("--since", older[:10]), ["bbbb", "cccc", "aaaa"]),
-                          (("--since", (now + timedelta(days=1)).date().isoformat()), ["bbbb"])):
+            db.execute("""INSERT INTO npp_turns (provider_id,job_id,kind,accepted_at)
+                          VALUES ('TURN_CANARY','dddd','yes',?)""", (older,))
+        all_ids = ["bbbb", "cccc", "dddd", "eeee", "aaaa"]
+        for args, ids in (((), all_ids[:-1]), (("--all",), all_ids),
+                          (("--since", older[:10]), all_ids),
+                          (("--since", (now + timedelta(days=1)).date().isoformat()), ["bbbb", "dddd", "eeee"])):
             with self.subTest(args=args):
                 result = self.cli(*args)
                 self.assertEqual((result.returncode, result.stderr), (0, ""))
-                self.assertEqual([line.split("\t")[0] for line in result.stdout.splitlines()], ids)
+                rows = [line.split("\t") for line in result.stdout.splitlines()]
+                self.assertEqual([row[0] for row in rows], ids)
+                self.assertEqual([(row[1], row[-1]) for row in rows if row[0] in ("dddd", "eeee")],
+                                 [("approved", "open"), ("publish_failed", "open")])
                 for marker in CANARIES:
                     self.assertNotIn(marker, result.stdout)
         missing = subprocess.run([sys.executable, "-B", str(SCRIPT)], capture_output=True, text=True, timeout=15)
