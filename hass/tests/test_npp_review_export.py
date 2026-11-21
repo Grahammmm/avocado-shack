@@ -88,6 +88,8 @@ class NppReviewExportTests(unittest.TestCase):
             ("https://listing.example.invalid/p/77?secret=sample", "<url>"),
             ("www.listing.example.invalid/p", "<url>"), ("listing.example.invalid/p", "<url>"),
             *((url, "<url>") for url in urls),
+            # ASCII-only matching misses IDNs in the final label or throughout the host.
+            ("shop.example.みんな/path", "<url>"), ("пример.рф/x", "<url>"),
             ("814 Quorble Wisp Street Apt B", "<address>"), ("Quorble Wisp Street", "<address>"),
             ("Use the softer title", "Use the softer title"),
         ]
@@ -124,6 +126,18 @@ class NppReviewExportTests(unittest.TestCase):
         self.assertEqual(three["kind"], "pre<id>post")
         self.assertEqual(three["disposition"], "<id>post pre<id>")
         self.assertEqual(three["text_redacted"], "pre<id>post <id>'s path/<id> <email> <url>")
+
+        # Short identities must redact echoes without breaking contacts or the emitted markers.
+        for field, identity in (("sender", "email"), ("chat", "url"), ("sender", "id"), ("chat", "n")):
+            with self.subTest(field=field, identity=identity):
+                text = (f"{identity.upper()}; {identity}@example.invalid; "
+                        f"listing.example.invalid/{identity} ; shop.example.みんな/{identity} ; "
+                        f"{reserved_phone}; 3.50; five")
+                self.events({field: identity, "text": text})
+                self.assert_pass(self.run_cli("--force"), 1, 1)
+                redacted = json.loads(self.out.read_text().splitlines()[0])["text_redacted"]
+                self.assertNotIn("<<", redacted)
+                self.assertEqual(redacted, "<id>; <email>; <url> ; <url> ; <phone>; <n>; <n>")
 
     def test_c3_private_output(self):
         # C3: catch stale/wide modes, silent clobber, and a worktree reached through an alias.

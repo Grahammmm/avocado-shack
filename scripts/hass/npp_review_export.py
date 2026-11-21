@@ -21,7 +21,7 @@ from hass.npp.receipt import JOB_RE, read_artifact
 URL = re.compile(r"\b(?:[a-z][a-z0-9+.-]*://|www\.)[^\s<>\"']+", re.I)
 EMAIL = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@(?:[\w-]+\.)+[\w-]+")
 # Require an alphabetic final label: a decimal such as 3.50 is not a host.
-BARE_URL = re.compile(r"(?<![\w-])(?<![\w-]\.)(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}"
+BARE_URL = re.compile(r"(?<![\w-])(?<![\w-]\.)(?:(?:[^\W_]|-)+\.)+[^\W\d_]{2,}"
                       r"(?![\w-]|\.[\w-])(?::[0-9]+)?(?:[/?#][^\s<>\"']*)?")
 PHONE = re.compile(
     r"(?<!\w)(?:\+\d(?:[ .()\t-]*\d){6,14}|"
@@ -49,16 +49,29 @@ def redact(text):
 
 def _redact(text, identities=None):
     text = unicodedata.normalize("NFKC", text)
-    for pattern, replacement in ((URL, "<url>"), (EMAIL, "<email>"), (BARE_URL, "<url>"),
-                                 (PHONE, "<phone>"), (ADDRESS, "<address>")):
+    # Match whole contacts before identities that may occur inside them. Keep
+    # the angle delimiters for the later matchers, but protect the markers from
+    # identity matching and do not mistake literal private-use text for a marker.
+    prefix = "<"
+    codes = "\ue000\ue001\ue002\ue003\ue004"
+    while any(prefix + code + ">" in text for code in codes):
+        prefix += "\ue000"
+    url, email, identity, phone, address = (prefix + code + ">" for code in codes)
+    for pattern, replacement in ((URL, url), (EMAIL, email), (BARE_URL, url),
+                                 (PHONE, phone), (ADDRESS, address)):
         text = pattern.sub(replacement, text)
     if identities:
-        text = identities.sub("<id>", text)
+        parts = re.split(f"({re.escape(prefix)}[{codes}]>)", text)
+        parts[::2] = [identities.sub(identity, part) for part in parts[::2]]
+        text = "".join(parts)
     text = MONEY.sub("<money>", text)
     # Apply from the right to keep private_numbers' original offsets intact.
     for number in reversed(values(text)):
         text = text[:number.start] + "<n>" + text[number.end:]
-    return OTHER_NUMBERS.sub("<n>", text)
+    text = OTHER_NUMBERS.sub("<n>", text)
+    for code, name in zip(codes, ("url", "email", "id", "phone", "address")):
+        text = text.replace(prefix + code + ">", f"<{name}>")
+    return re.sub(r"<{2,}", "<", text)
 
 
 def _day(value):
