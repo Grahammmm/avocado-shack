@@ -3,6 +3,7 @@
 
 import argparse
 import base64
+from datetime import datetime
 import hashlib
 from html import escape
 import json
@@ -13,8 +14,25 @@ import stat
 import sys
 import tempfile
 
+ROOT = str(Path(__file__).resolve().parents[2])
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from hass.npp import evidence  # noqa: E402  (pure schema validator, HRM-03)
+
 
 SHA = re.compile(r"[0-9a-f]{64}")
+# Receipt folders and bounds as hass/npp/receipt.py writes them; states are npp_versions.state values.
+JOB = re.compile(r"[0-9a-f]{4,12}")
+RECEIPT_MAX = 256 << 10
+STATES = ("building", "queued", "delivered", "superseded", "approved")
+RECEIPT_CSS = """.version { font-size: .85rem; font-weight: bold; color: #345675; }
+.receipt { margin: .65rem 0; padding: .5rem .85rem; border: .1rem solid #b9c6d2;
+           border-radius: .5rem; background: #fff; }
+.receipt.bad { border-color: #a33a3a; }
+.receipt h2 { margin: 0; font-size: 1rem; }
+.receipt ul { margin: .25rem 0 0; padding-left: 1.1rem; }
+"""
 YES = re.compile(r"\byes\s+[0-9a-f]{4,12}-[1-9][0-9]{0,8}\b", re.I | re.ASCII)
 TEXT_FIELDS = ("utc", "chat", "sender", "direction", "kind", "text")
 # Transcript export primary key and NOT NULL columns:
@@ -103,8 +121,96 @@ def picture(sha, directory):
     return None
 
 
-def render(events, directory):
-    body, pictures, missing = [], {}, set()
+def aware(value):
+    try:
+        return datetime.fromisoformat(value).utcoffset() is not None
+    except (TypeError, ValueError):
+        return False
+
+
+def evidence_items(record):
+    """Summary lines from validated evidence only, and whether the evidence failed validation."""
+    doc = record.get("evidence")
+    if doc is None:  # Receipts written before HRM-03 carry no evidence.
+        return ["no evidence recorded"], False
+    try:
+        problems = evidence.validate(doc)
+    except (TypeError, ValueError, AttributeError, RecursionError):
+        problems = ["evidence: unreadable"]
+    if problems:
+        return ["bad evidence: failed validation"], True
+    approval, publish = doc["approval"], doc["publish"]
+    return [f"fallbacks: {', '.join(doc['fallbacks']) or 'none'}",
+            f"approval role: {approval['role'] if approval else 'none'}",
+            f"publish change id: {publish['change_id'] if publish else 'none'}",
+            f"live_verify: {(publish or {}).get('live_verify') or 'none'}"], False
+
+
+def read_receipt(folder):
+    """Check one <job>/receipt.json copy; raise ValueError or OSError if any check fails."""
+    if not stat.S_ISDIR(folder.lstat().st_mode):
+        raise ValueError("not a job folder")
+    fd = os.open(folder / "receipt.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as file:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("not a regular receipt")
+        data = file.read(RECEIPT_MAX + 1)
+    record = json.loads(data) if len(data) <= RECEIPT_MAX else None
+    # A receipt copied into another job's folder must not label that job's cards.
+    if (not isinstance(record, dict) or record.get("job_id") != folder.name
+            or not isinstance(record.get("versions"), list)):
+        raise ValueError("invalid receipt")
+    versions = {}
+    for row in record["versions"]:
+        if not isinstance(row, dict):
+            raise ValueError("invalid version")
+        n, card, at, state = (row.get(key) for key in ("n", "card_png_sha", "delivered_at", "state"))
+        if (type(n) is not int or n < 1 or n in versions
+                or type(state) is not str or state not in STATES
+                or not (card is None or type(card) is str and SHA.fullmatch(card))
+                or not (at is None or type(at) is str and aware(at))):
+            raise ValueError("invalid version")
+        versions[n] = (card, at, state)
+    return versions, *evidence_items(record)
+
+
+def load_receipts(root):
+    """Map each job folder to (versions, summary lines, bad evidence); None marks an unreadable receipt."""
+    jobs = {}
+    for folder in sorted(root.iterdir()):
+        if JOB.fullmatch(folder.name):
+            try:
+                jobs[folder.name] = read_receipt(folder)
+            except (OSError, ValueError, RecursionError):
+                jobs[folder.name] = None
+    return jobs
+
+
+def card_index(jobs):
+    """Full card PNG digest -> every (job, n, delivered_at, state) that froze exactly that card."""
+    cards = {}
+    for job, receipt in jobs.items():
+        if receipt is None:
+            continue
+        for n, (card, at, state) in sorted(receipt[0].items()):
+            if card is not None:
+                cards.setdefault(card, []).append((job, n, at, state))
+    return cards
+
+
+def receipt_boxes(jobs):
+    boxes = ['<div class="receipts">']
+    for job, receipt in jobs.items():
+        items, bad = (["receipt unreadable"], True) if receipt is None else receipt[1:]
+        boxes.append(f'<section class="receipt{" bad" if bad else ""}" data-job="{job}"><h2>Job {job}</h2>'
+                     f'<ul>{"".join(f"<li>{escape(item)}</li>" for item in items)}</ul></section>')
+    boxes.append("</div>")
+    return boxes
+
+
+def render(events, directory, jobs=None):
+    body, pictures, missing, ambiguous = [], {}, set(), {}
+    cards = None if jobs is None else card_index(jobs)
     messages_in = count = 0
     for event in events:
         inbound = event["direction"] == "in"
@@ -130,20 +236,31 @@ def render(events, directory):
             else:
                 count += 1
                 body.append(f'<img src="{uri}" alt="Chat picture">')
+            if cards is not None and not inbound:
+                # Exact full digest only; a shared card is labelled with every version and flagged.
+                matches = cards.get(sha, ())
+                for job, n, at, state in matches:
+                    body.append(f'<div class="version">{job}-{n} {state} · {escape(at or "not delivered")}</div>')
+                if len(matches) > 1:
+                    ambiguous.setdefault(sha, None)
+                    body.append(f'<div class="missing">card matches {len(matches)} versions</div>')
         body.append("</article>")
     counts = (f"<p>{messages_in} messages in · {len(events) - messages_in} messages out"
               f" · {count} pictures</p></header>\n<main>")
-    return "\n".join([HEAD, counts, *body, "</main></html>\n"]), sorted(missing)
+    head, boxes = HEAD, []
+    if jobs is not None:
+        head, boxes = HEAD.replace("</style>", RECEIPT_CSS + "</style>", 1), receipt_boxes(jobs)
+    return "\n".join([head, counts, *body, *boxes, "</main></html>\n"]), sorted(missing), list(ambiguous)
 
 
-def output_path(path, source, directory, force):
+def output_path(path, source, directory, force, receipts=None):
     parent = path.parent.resolve()
     for start in (path.absolute().parent, parent):
         for ancestor in (start, *start.parents):
             if os.path.lexists(ancestor / ".git"):
                 raise PageError("output inside git worktree")
     destination = parent / path.name
-    input_roots = (source.parent.resolve(), directory)
+    input_roots = (source.parent.resolve(), directory, *(() if receipts is None else (receipts,)))
     if (destination == source.resolve()
             or any(os.path.commonpath((destination, root)) == os.fspath(root) for root in input_roots)):
         raise PageError("out-inside-input")
@@ -178,20 +295,35 @@ def main(argv=None):
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--chat", help="only show events from this chat ID")
     parser.add_argument("--force", action="store_true", help="replace an existing output file")
+    parser.add_argument("--receipts", type=Path, metavar="DIR",
+                        help="copy of NPP job folders (<job>/receipt.json): label card versions and"
+                             " add a summary box per job")
     args = parser.parse_args(argv)
     try:
         events = read_events(args.export, args.chat)
         directory = args.attachments.resolve()
         if not directory.is_dir():
             raise PageError("attachment copy unavailable")
-        destination = output_path(args.out, args.export, directory, args.force)
-        page, missing = render(events, directory)
+        receipts = None if args.receipts is None else args.receipts.resolve()
+        if receipts is not None and not receipts.is_dir():
+            raise PageError("receipts unavailable")
+        destination = output_path(args.out, args.export, directory, args.force, receipts)
+        jobs = None if receipts is None else load_receipts(receipts)
+        page, missing, ambiguous = render(events, directory, jobs)
         write_page(destination, page, args.force)
     except PageError as error:
         print(f"FAIL {error}")
     except (OSError, RuntimeError, ValueError):
         print("FAIL could not create page")
     else:
+        for job, receipt in (jobs or {}).items():
+            if receipt is None:
+                print(f"NOTE bad-receipt {job}")
+        for job, receipt in (jobs or {}).items():
+            if receipt is not None and receipt[2]:
+                print(f"NOTE bad-evidence {job}")
+        for sha in ambiguous:
+            print(f"NOTE ambiguous-card {sha[:8]}")
         for sha in missing:
             print(f"NOTE missing-attachment {sha[:8]}")
         print(f"PASS npp_chat_page {len(events)} events")

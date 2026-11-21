@@ -4,12 +4,16 @@ import base64
 import hashlib
 from html.parser import HTMLParser
 import json
+import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 import sys
 import tempfile
 import unittest
+
+from hass.npp.evidence import Evidence
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/hass/npp_chat_page.py"
@@ -39,6 +43,33 @@ def event(id=1, **changes):
     return dict(id=id, utc="2000-01-01T00:00:00Z", chat=CHAT, sender=SENDER,
                 direction="in", kind="text", text=TEXT, attachments=[], disposition="queued",
                 provider_id=None, reply_to=None, draft_code=None) | changes
+
+
+# sha256 of the page HRM-01 (d69c1333, before --receipts existed) wrote for the C10 fixture.
+PAGE_BEFORE_RECEIPTS = "c67cf1b32b857072bb3e3ed4413e42ee51fde3db24622631bb91b63d3b1d1af4"
+
+
+def card(tag):
+    return PNG + tag  # Still a PNG by signature; each tag gives a distinct card digest.
+
+
+def version(n, card_sha, state, delivered_at=None):
+    # The row shape hass/npp/job.py write_receipts stores under "versions".
+    return dict(n=n, listing_sha="0" * 64, image_variant=None, image_sha256=None, change_id=None,
+                draft_hash=None, card_png_sha=card_sha, outbox_id=n, delivered_at=delivered_at,
+                state=state)
+
+
+def labels(page):
+    """Version labels of each message bubble, in page order."""
+    bubbles = page.split("</main>", 1)[0].split("<article")[1:]
+    return [re.findall(r'<div class="version">([^<]*)</div>', bubble) for bubble in bubbles]
+
+
+def boxes(page):
+    """Per-job receipt boxes as (job, bad, items), in page order."""
+    return [(job, bool(bad), re.findall(r"<li>([^<]*)</li>", items)) for bad, job, items in
+            re.findall(r'<section class="receipt( bad)?" data-job="([0-9a-f]+)">(.*?)</section>', page, re.S)]
 
 
 class NppChatPageTests(unittest.TestCase):
@@ -82,6 +113,19 @@ class NppChatPageTests(unittest.TestCase):
         sha = hashlib.sha256(data).hexdigest()
         (self.copy / filename.format(sha=sha)).write_bytes(data if contents is None else contents)
         return sha
+
+    def receipt(self, job, versions, **changes):
+        # Pass evidence=... to add that key; leave it out for a receipt written before HRM-03.
+        folder = self.receipts / job
+        folder.mkdir(parents=True, exist_ok=True)
+        record = dict(job_id=job, state="open", versions=versions) | changes
+        (folder / "receipt.json").write_text(json.dumps(record), encoding="utf-8")
+
+    @staticmethod
+    def tree(root):
+        return {path: (path.lstat().st_mtime_ns, os.readlink(path) if path.is_symlink()
+                       else path.read_bytes() if path.is_file() else None)
+                for path in (root, *root.rglob("*"))}
 
     def test_c1_page_order_and_escape(self):
         # A reader that trusts file order, drops a chat filter, or treats text as markup fails here.
@@ -246,6 +290,109 @@ class NppChatPageTests(unittest.TestCase):
                 self.assertEqual((result.returncode, result.stdout), (2, ""))
                 self.assertIn("usage: npp_chat_page", result.stderr)
                 self.assertFalse(self.out.exists())
+
+    def test_c8_version_labels(self):
+        # Only an exact, unambiguous-or-flagged full card digest on an outbound bubble earns a label:
+        # not a near digest, an inbound copy, a card-less version, or a receipt that fails its checks.
+        self.receipts = self.root / "receipts"
+        first, second, final, other, twin, near, orphan = (
+            self.attachment(card(tag.encode()), "card-{sha}.png") for tag in "1234567")
+        at = "2000-01-01T00:0{}:00+00:00".format
+        self.receipt("abcd", [version(4, None, "building"), version(3, final, "approved", at(3)),
+                              version(2, second, "superseded", at(2)), version(1, first, "superseded")])
+        self.receipt("beef", [version(1, other, "delivered", at(4))])
+        self.receipt("cafe", [version(1, twin, "superseded", at(5)), version(2, twin, "delivered", at(6))])
+        self.receipt("d00d", [version(1, near[:-1] + ("1" if near[-1] == "0" else "0"), "delivered", at(7))])
+        self.receipt("dead", [version(1, orphan, "delivered", at(8))], job_id="beef")  # Copied under another job.
+        self.receipt("0bad", [version(1, orphan, "sent", at(8))])
+        self.receipt("1bad", [version(1, orphan, "delivered", at(8)), version(1, orphan, "delivered", at(8))])
+        self.receipt("2bad", [version(1, orphan.upper(), "delivered", at(8))])
+        self.receipt("3bad", [version(1, orphan, "delivered", "2000-01-01T00:08:00")])  # No zone.
+        (self.receipts / "4bad").mkdir()  # A link out of the copy, even to a well-formed receipt.
+        outside = self.root / "outside-receipt.json"
+        outside.write_text(json.dumps(dict(job_id="4bad", versions=[version(1, orphan, "delivered", at(8))])),
+                           encoding="utf-8")
+        (self.receipts / "4bad" / "receipt.json").symlink_to(outside)
+        (self.receipts / "notes").mkdir()  # Not a job folder: ignored.
+        self.export_events(event(1, direction="out", attachments=[first]),
+                           event(2, direction="out", attachments=[second]),
+                           event(3, kind="photo", attachments=[second]),
+                           event(4, direction="out", attachments=[final, other]),
+                           event(5, direction="out", attachments=[twin]),
+                           event(6, direction="out", attachments=[near, orphan]))
+        before = self.tree(self.receipts)
+        result = self.run_cli("--receipts", str(self.receipts))
+        page = self.assert_pass(result, count=6)
+        self.assertEqual(labels(page), [
+            ["abcd-1 superseded · not delivered"],
+            ["abcd-2 superseded · 2000-01-01T00:02:00+00:00"],
+            [],
+            ["abcd-3 approved · 2000-01-01T00:03:00+00:00", "beef-1 delivered · 2000-01-01T00:04:00+00:00"],
+            ["cafe-1 superseded · 2000-01-01T00:05:00+00:00", "cafe-2 delivered · 2000-01-01T00:06:00+00:00"],
+            [],
+        ])
+        bubbles = page.split("<article")[1:]
+        self.assertIn("card matches 2 versions", bubbles[4])
+        self.assertEqual(page.count("card matches"), 1)
+        bad = [f"{n}bad" for n in range(5)] + ["dead"]
+        self.assertEqual(result.stdout.splitlines()[:-1],
+                         [f"NOTE bad-receipt {job}" for job in bad] + [f"NOTE ambiguous-card {twin[:8]}"])
+        self.assertEqual([(job, flag) for job, flag, _ in boxes(page)],
+                         [(job, job in bad) for job in sorted([*bad, "abcd", "beef", "cafe", "d00d"])])
+        self.assertTrue(all(items == ["receipt unreadable"] for job, flag, items in boxes(page) if flag))
+        self.assertEqual(self.tree(self.receipts), before)
+        for dest in (self.receipts / "page.html", self.receipts / "abcd" / "page.html"):
+            with self.subTest(destination=dest.relative_to(self.root)):
+                self.assert_fail(self.run_cli("--receipts", str(self.receipts), "--force", out=dest),
+                                 "out-inside-input")
+                self.assertEqual(self.tree(self.receipts), before)
+        self.assert_fail(self.run_cli("--receipts", str(self.root / "absent"), "--force"), "receipts unavailable")
+
+    def test_c9_evidence_box(self):
+        # A box shows validated evidence only; an invalid record is named, never partly shown.
+        self.receipts = self.root / "receipts"
+        full = Evidence()
+        for code in ("plain-photo", "no-research"):
+            full.fallback(code)
+        full.approval(2, "Mike", "2000-01-01T00:00:00Z", "chg-1", "a" * 64)
+        full.publish("chg-1", "b" * 40, "seen")
+        hidden = Evidence()
+        hidden.fallback("fixture-hidden")
+        hidden.publish("chg-9", None, "pending")
+        broken = hidden.doc()
+        broken["publish"]["live_verify"] = "<b>fixture-unvalidated</b>"
+        self.receipt("abcd", [], evidence=full.doc())
+        self.receipt("beef", [], evidence=Evidence().doc())
+        self.receipt("cafe", [], evidence=broken)
+        self.receipt("d00d", [])
+        self.receipt("e0e0", [], evidence=None)
+        result = self.run_cli("--receipts", str(self.receipts))
+        page = self.assert_pass(result)
+        self.assertEqual(result.stdout.splitlines(), ["NOTE bad-evidence cafe", "PASS npp_chat_page 1 events"])
+        self.assertEqual(boxes(page), [
+            ("abcd", False, ["fallbacks: no-research, plain-photo", "approval role: Mike",
+                             "publish change id: chg-1", "live_verify: seen"]),
+            ("beef", False, ["fallbacks: none", "approval role: none", "publish change id: none",
+                             "live_verify: none"]),
+            ("cafe", True, ["bad evidence: failed validation"]),
+            ("d00d", False, ["no evidence recorded"]),
+            ("e0e0", False, ["no evidence recorded"]),
+        ])
+        for unvalidated in ("fixture-hidden", "chg-9", "fixture-unvalidated", "pending"):
+            self.assertNotIn(unvalidated, page)
+
+    def test_c10_no_receipts_unchanged(self):
+        # Pinned to HRM-01's own bytes for this fixture, so any leak of receipt markup or CSS fails.
+        png = self.attachment(PNG, "card-{sha}.png")
+        jpg = self.attachment(JPEG)
+        self.export_events(event(1, kind="photo", attachments=[jpg]),
+                           event(2, direction="out", text="Fixture card\nReply yes abcd-1, or edit.",
+                                 attachments=[png, "0" * 64]),
+                           event(3, direction="out", text="Posted: https://example.invalid/card"))
+        result = self.run_cli()
+        self.assert_pass(result, count=3)
+        self.assertEqual(result.stdout, "NOTE missing-attachment 00000000\nPASS npp_chat_page 3 events\n")
+        self.assertEqual(hashlib.sha256(self.out.read_bytes()).hexdigest(), PAGE_BEFORE_RECEIPTS)
 
 
 if __name__ == "__main__":
